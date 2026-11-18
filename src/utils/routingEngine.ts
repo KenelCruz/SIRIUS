@@ -201,11 +201,13 @@ function buildOfflinePolyline(
 
 export async function fetchOptimalRoutesOSM(
   destLat: number,
-  destLon: number
+  destLon: number,
+  originLat: number = SANTO_DOMINGO_ORIGIN.lat,
+  originLon: number = SANTO_DOMINGO_ORIGIN.lon
 ): Promise<RouteAlternative[]> {
   const straightKm = Math.max(
     4,
-    haversineMeters(SANTO_DOMINGO_ORIGIN.lat, SANTO_DOMINGO_ORIGIN.lon, destLat, destLon) / 1000
+    haversineMeters(originLat, originLon, destLat, destLon) / 1000
   );
 
   // Offline / fallback routes
@@ -226,8 +228,8 @@ export async function fetchOptimalRoutesOSM(
       oneWayTollRD: econToll.oneWayTollRD,
       tollNote: econToll.tollNote,
       coordinates: buildOfflinePolyline(
-        SANTO_DOMINGO_ORIGIN.lat,
-        SANTO_DOMINGO_ORIGIN.lon,
+        originLat,
+        originLon,
         destLat,
         destLon,
         0.04
@@ -244,8 +246,8 @@ export async function fetchOptimalRoutesOSM(
       oneWayTollRD: fastToll.oneWayTollRD,
       tollNote: fastToll.tollNote,
       coordinates: buildOfflinePolyline(
-        SANTO_DOMINGO_ORIGIN.lat,
-        SANTO_DOMINGO_ORIGIN.lon,
+        originLat,
+        originLon,
         destLat,
         destLon,
         -0.09
@@ -261,7 +263,7 @@ export async function fetchOptimalRoutesOSM(
   try {
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), 4500);
-    const url = `https://router.project-osrm.org/route/v1/driving/${SANTO_DOMINGO_ORIGIN.lon},${SANTO_DOMINGO_ORIGIN.lat};${destLon},${destLat}?alternatives=true&overview=full&geometries=geojson`;
+    const url = `https://router.project-osrm.org/route/v1/driving/${originLon},${originLat};${destLon},${destLat}?alternatives=true&overview=full&geometries=geojson`;
     const res = await fetch(url, { signal: controller.signal });
     clearTimeout(timer);
 
@@ -285,8 +287,8 @@ export async function fetchOptimalRoutesOSM(
     const coords1: [number, number][] = r1
       ? (r1.geometry?.coordinates || []).map(([lon, lat]: [number, number]) => [lat, lon])
       : buildOfflinePolyline(
-          SANTO_DOMINGO_ORIGIN.lat,
-          SANTO_DOMINGO_ORIGIN.lon,
+          originLat,
+          originLon,
           destLat,
           destLon,
           -0.08

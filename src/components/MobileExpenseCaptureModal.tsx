@@ -1,21 +1,26 @@
-import React, { useRef, useState } from 'react';
+import React, { useMemo, useRef, useState } from 'react';
 import {
   Camera,
   CheckCircle2,
   Loader2,
   MapPin,
   Navigation,
+  Plus,
   Receipt,
   Sparkles,
+  Trash2,
   Utensils,
   X,
 } from 'lucide-react';
+import { completarRepartoConSinAsignar, validarRepartoViatico } from '../domain';
 import type {
-  ExpenseCategory,
-  ExpenseMethod,
-  SurveyProject,
-  ViaticoExpense,
-} from '../types/geodesy';
+  CategoriaViatico,
+  MetodoViatico,
+  Proyecto,
+  RepartoProyecto,
+  Ruta,
+  Viatico,
+} from '../types/domain';
 import {
   formatRD,
   formatSantoDomingoAST,
@@ -26,13 +31,21 @@ import {
 interface MobileExpenseCaptureModalProps {
   isOpen: boolean;
   onClose: () => void;
-  surveys: SurveyProject[];
-  defaultSurveyId: string;
+  proyectos: Proyecto[];
+  rutas: Ruta[];
+  defaultProyectoId?: string;
+  defaultRutaId?: string;
   isOnline: boolean;
-  onAddExpense: (expense: ViaticoExpense) => void;
+  sessionToken: string;
+  creadoPorUsuario: { id: string; nombre: string };
+  baseLat?: number;
+  baseLon?: number;
+  onAddExpense: (
+    expense: Omit<Viatico, 'id' | 'empresaId' | 'estadoAprobacion' | 'version' | 'updatedAt'>
+  ) => Promise<void>;
 }
 
-const CATEGORIES: ExpenseCategory[] = [
+const CATEGORIES: CategoriaViatico[] = [
   'Combustible',
   'Dieta',
   'Hospedaje',
@@ -43,7 +56,7 @@ const CATEGORIES: ExpenseCategory[] = [
 
 const QUICK_PRESETS: Array<{
   label: string;
-  category: ExpenseCategory;
+  category: CategoriaViatico;
   merchant: string;
   amountRD: number;
   notes: string;
@@ -114,28 +127,48 @@ async function compressImageToBase64(file: File): Promise<{ base64: string; mime
 export const MobileExpenseCaptureModal: React.FC<MobileExpenseCaptureModalProps> = ({
   isOpen,
   onClose,
-  surveys,
-  defaultSurveyId,
+  proyectos,
+  rutas,
+  defaultProyectoId,
+  defaultRutaId,
   isOnline,
+  sessionToken,
+  creadoPorUsuario,
+  baseLat = 18.4861,
+  baseLon = -69.9312,
   onAddExpense,
 }) => {
   const cameraInputRef = useRef<HTMLInputElement>(null);
   const [captureMode, setCaptureMode] = useState<'ocr' | 'gps' | 'quick'>('ocr');
-  const [surveyId, setSurveyId] = useState(defaultSurveyId || surveys[0]?.id || '');
+  const [rutaId, setRutaId] = useState(defaultRutaId || rutas[0]?.id || '');
 
-  const [category, setCategory] = useState<ExpenseCategory>('Combustible');
+  const initialProyectoId =
+    defaultProyectoId ||
+    rutas.find((r) => r.id === (defaultRutaId || rutas[0]?.id))?.proyectoId ||
+    proyectos[0]?.id ||
+    'sin_asignar';
+
+  const [category, setCategory] = useState<CategoriaViatico>('Combustible');
   const [merchant, setMerchant] = useState('');
   const [amountRD, setAmountRD] = useState<string>('');
   const [itbisRD, setItbisRD] = useState<string>('0');
   const [ncf, setNcf] = useState('');
-  const [dateIso, setDateIso] = useState('2026-11-17');
+  const [dateIso, setDateIso] = useState(new Date().toISOString().slice(0, 10));
   const [notes, setNotes] = useState('');
-  const [method, setMethod] = useState<ExpenseMethod>('OCR Móvil');
+  const [method, setMethod] = useState<MetodoViatico>('OCR Móvil');
+
+  // Reparto exacto por proyecto (puede dividirse entre varios proyectos o ir a sin_asignar)
+  const [repartoModo, setRepartoModo] = useState<'unico' | 'multiple' | 'sin_asignar'>('unico');
+  const [proyectoUnicoId, setProyectoUnicoId] = useState<string>(initialProyectoId);
+  const [repartosMultiples, setRepartosMultiples] = useState<RepartoProyecto[]>([
+    { proyectoId: initialProyectoId, montoRD: 0 },
+  ]);
 
   const [receiptPreview, setReceiptPreview] = useState<string | null>(null);
   const [pendingReceiptMime, setPendingReceiptMime] = useState<string | undefined>(undefined);
   const [needsOfflineOcr, setNeedsOfflineOcr] = useState(false);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
   const [ocrStatusMsg, setOcrStatusMsg] = useState<string | null>(null);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
@@ -148,9 +181,31 @@ export const MobileExpenseCaptureModal: React.FC<MobileExpenseCaptureModalProps>
   } | null>(null);
   const [distanceKm, setDistanceKm] = useState<number | undefined>(undefined);
 
+  const selectedRuta = useMemo(() => rutas.find((r) => r.id === rutaId), [rutas, rutaId]);
+  const montoNumerico = Number(amountRD) || 0;
+
+  const repartosCalculados = useMemo<RepartoProyecto[]>(() => {
+    if (repartoModo === 'sin_asignar') {
+      return [{ proyectoId: 'sin_asignar', montoRD: montoNumerico }];
+    }
+    if (repartoModo === 'unico') {
+      return [{ proyectoId: proyectoUnicoId || 'sin_asignar', montoRD: montoNumerico }];
+    }
+    return repartosMultiples;
+  }, [repartoModo, proyectoUnicoId, montoNumerico, repartosMultiples]);
+
+  const sumaMultipleRD = useMemo(
+    () => repartosMultiples.reduce((acc, r) => acc + (Number(r.montoRD) || 0), 0),
+    [repartosMultiples]
+  );
+
   if (!isOpen) return null;
 
-  const selectedSurvey = surveys.find((s) => s.id === surveyId) ?? surveys[0];
+  const syncAmountIntoUniqueSplit = (newMonto: number) => {
+    if (repartoModo === 'multiple' && repartosMultiples.length === 1) {
+      setRepartosMultiples([{ ...repartosMultiples[0], montoRD: newMonto }]);
+    }
+  };
 
   const handleReceiptSelected = async (file: File) => {
     setErrorMsg(null);
@@ -164,7 +219,7 @@ export const MobileExpenseCaptureModal: React.FC<MobileExpenseCaptureModalProps>
       if (!isOnline) {
         setNeedsOfflineOcr(true);
         setOcrStatusMsg(
-          'Sin conexión: foto guardada en la cola local. Puedes ingresar un estimado o sincronizar automáticamente cuando regrese la señal.'
+          'Sin conexión: foto guardada en la cola local. Se procesará al reconectar.'
         );
         if (!merchant) setMerchant('Comprobante pendiente de lectura IA');
         return;
@@ -173,11 +228,14 @@ export const MobileExpenseCaptureModal: React.FC<MobileExpenseCaptureModalProps>
       setIsAnalyzing(true);
       const res = await fetch('/api/expenses/analyze-receipt', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          'x-session-token': sessionToken,
+        },
         body: JSON.stringify({
           imageBase64: base64,
           mimeType,
-          surveyCode: selectedSurvey?.parcelCode,
+          surveyCode: selectedRuta?.codigoParcela,
         }),
       });
       const data = await res.json();
@@ -187,7 +245,10 @@ export const MobileExpenseCaptureModal: React.FC<MobileExpenseCaptureModalProps>
 
       const ex = data.extracted;
       if (ex.merchant) setMerchant(ex.merchant);
-      if (typeof ex.amountRD === 'number' && ex.amountRD > 0) setAmountRD(String(ex.amountRD));
+      if (typeof ex.amountRD === 'number' && ex.amountRD > 0) {
+        setAmountRD(String(ex.amountRD));
+        syncAmountIntoUniqueSplit(ex.amountRD);
+      }
       if (typeof ex.itbisRD === 'number') setItbisRD(String(ex.itbisRD));
       if (ex.ncf) setNcf(ex.ncf);
       if (ex.dateIso) setDateIso(ex.dateIso);
@@ -218,10 +279,8 @@ export const MobileExpenseCaptureModal: React.FC<MobileExpenseCaptureModalProps>
         northing: utm.northing,
       });
 
-      const baseLat = 18.4861;
-      const baseLon = -69.9312;
-      const targetLat = selectedSurvey?.centroid.lat ?? baseLat;
-      const targetLon = selectedSurvey?.centroid.lon ?? baseLon;
+      const targetLat = selectedRuta?.centroid.lat ?? baseLat;
+      const targetLon = selectedRuta?.centroid.lon ?? baseLon;
 
       const distMeters = Math.max(
         haversineMeters(baseLat, baseLon, lat, lon),
@@ -232,8 +291,9 @@ export const MobileExpenseCaptureModal: React.FC<MobileExpenseCaptureModalProps>
 
       setDistanceKm(km);
       setCategory('Combustible');
-      setMerchant(`Traslado GPS Ruta · ${selectedSurvey?.province || 'Campo'}`);
+      setMerchant(`Traslado GPS Ruta · ${selectedRuta?.provincia || 'Campo'}`);
       setAmountRD(String(fuelEstimate));
+      syncAmountIntoUniqueSplit(fuelEstimate);
       setItbisRD('0');
       setNotes(
         `Cálculo automático ${km} km @ RD$ 26.50/km · UTM ${utm.easting.toFixed(0)}E ${utm.northing.toFixed(0)}N${
@@ -247,8 +307,8 @@ export const MobileExpenseCaptureModal: React.FC<MobileExpenseCaptureModalProps>
     };
 
     if (!navigator.geolocation) {
-      if (selectedSurvey) {
-        applyPosition(selectedSurvey.centroid.lat, selectedSurvey.centroid.lon, true);
+      if (selectedRuta) {
+        applyPosition(selectedRuta.centroid.lat, selectedRuta.centroid.lon, true);
       } else {
         setErrorMsg('Geolocalización no disponible en este navegador.');
         setIsLocating(false);
@@ -257,12 +317,10 @@ export const MobileExpenseCaptureModal: React.FC<MobileExpenseCaptureModalProps>
     }
 
     navigator.geolocation.getCurrentPosition(
-      (pos) => {
-        applyPosition(pos.coords.latitude, pos.coords.longitude, false);
-      },
+      (pos) => applyPosition(pos.coords.latitude, pos.coords.longitude, false),
       () => {
-        if (selectedSurvey) {
-          applyPosition(selectedSurvey.centroid.lat, selectedSurvey.centroid.lon, true);
+        if (selectedRuta) {
+          applyPosition(selectedRuta.centroid.lat, selectedRuta.centroid.lon, true);
         } else {
           setErrorMsg('No se obtuvo permiso GPS del dispositivo.');
           setIsLocating(false);
@@ -277,61 +335,74 @@ export const MobileExpenseCaptureModal: React.FC<MobileExpenseCaptureModalProps>
     setCategory(preset.category);
     setMerchant(preset.merchant);
     setAmountRD(String(preset.amountRD));
+    syncAmountIntoUniqueSplit(preset.amountRD);
     setItbisRD('0');
     setNcf('');
     setNotes(preset.notes);
     setOcrStatusMsg(`Tarifa estándar aplicada: ${formatRD(preset.amountRD)}`);
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleCompletarConSinAsignar = () => {
+    const completado = completarRepartoConSinAsignar(montoNumerico, repartosMultiples);
+    setRepartosMultiples(completado);
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!selectedSurvey) {
-      setErrorMsg('Selecciona un levantamiento para imputar el viático.');
-      return;
-    }
+    setErrorMsg(null);
     const parsedAmount = Number(amountRD);
     if (Number.isNaN(parsedAmount) || parsedAmount < 0) {
       setErrorMsg('Ingresa un monto válido en RD$.');
       return;
     }
 
-    const expense: ViaticoExpense = {
-      id: `exp-${Date.now()}`,
-      surveyId: selectedSurvey.id,
-      parcelCode: selectedSurvey.parcelCode,
-      surveyor: selectedSurvey.surveyor,
-      category,
-      merchant: merchant.trim() || `${category} en Campo`,
-      amountRD: parsedAmount,
-      itbisRD: Number(itbisRD) || 0,
-      ncf: ncf.trim() || undefined,
-      dateIso,
-      timestampAST: formatSantoDomingoAST(new Date()),
-      method,
-      gpsCoords: gpsCoords ?? undefined,
-      distanceKm,
-      receiptThumbnail: receiptPreview ?? undefined,
-      pendingReceiptBase64: needsOfflineOcr ? receiptPreview ?? undefined : undefined,
-      pendingReceiptMime: needsOfflineOcr ? pendingReceiptMime : undefined,
-      syncStatus: needsOfflineOcr ? 'needs_ocr' : 'pending',
-      approved: false,
-      notes: notes.trim() || undefined,
-    };
+    const validacion = validarRepartoViatico(parsedAmount, repartosCalculados);
+    if (!validacion.valido) {
+      setErrorMsg(validacion.error || 'El reparto por proyecto debe igualar el monto total.');
+      return;
+    }
 
-    onAddExpense(expense);
-    setReceiptPreview(null);
-    setMerchant('');
-    setAmountRD('');
-    setNcf('');
-    setNotes('');
-    setOcrStatusMsg(null);
-    onClose();
+    setIsSaving(true);
+    try {
+      await onAddExpense({
+        creadoPorUsuarioId: creadoPorUsuario.id,
+        creadoPorNombre: creadoPorUsuario.nombre,
+        rutaId: rutaId || undefined,
+        fechaIso: dateIso,
+        timestampAST: formatSantoDomingoAST(new Date()),
+        categoria: category,
+        comercio: merchant.trim() || `${category} en Campo`,
+        montoRD: parsedAmount,
+        itbisRD: Number(itbisRD) || 0,
+        ncf: ncf.trim() || undefined,
+        metodo: method,
+        gpsCoords: gpsCoords ?? undefined,
+        distanceKm,
+        receiptThumbnail: receiptPreview ?? undefined,
+        pendingReceiptBase64: needsOfflineOcr ? receiptPreview ?? undefined : undefined,
+        pendingReceiptMime: needsOfflineOcr ? pendingReceiptMime : undefined,
+        repartos: repartosCalculados,
+        notas: notes.trim() || undefined,
+        syncStatus: needsOfflineOcr ? 'needs_ocr' : 'pending',
+      });
+
+      setReceiptPreview(null);
+      setMerchant('');
+      setAmountRD('');
+      setNcf('');
+      setNotes('');
+      setOcrStatusMsg(null);
+      onClose();
+    } catch (err: unknown) {
+      setErrorMsg(err instanceof Error ? err.message : 'No se pudo registrar el viático.');
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   return (
     <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-[#0F2942]/65 sm:p-4">
       <div className="w-full sm:max-w-xl rounded-t-2xl sm:rounded-md border border-[#CBD5E1] bg-white shadow-2xl max-h-[92vh] flex flex-col">
-        {/* Mobile grabber */}
         <div className="sm:hidden pt-2.5 pb-1 flex justify-center">
           <div className="h-1.5 w-10 rounded-full bg-[#CBD5E1]" />
         </div>
@@ -339,10 +410,10 @@ export const MobileExpenseCaptureModal: React.FC<MobileExpenseCaptureModalProps>
         <div className="flex items-center justify-between border-b border-[#E2E8F0] px-5 py-3.5">
           <div>
             <h2 className="text-base font-bold text-[#0D1C2F]">
-              Reporte Automático de Viático en Campo
+              Reportar Viático en Campo
             </h2>
             <p className="text-xs text-[#43474D]">
-              Captura móvil por cámara, ruta GPS o tarifa estándar de brigada.
+              Captura por cámara OCR, ruta GPS o tarifa estándar y reparto exacto a proyectos.
             </p>
           </div>
           <button
@@ -356,7 +427,7 @@ export const MobileExpenseCaptureModal: React.FC<MobileExpenseCaptureModalProps>
         </div>
 
         <form onSubmit={handleSubmit} className="overflow-y-auto p-5 space-y-4">
-          {/* Capture Mode Segmented Tabs */}
+          {/* Capture Mode Tabs */}
           <div className="grid grid-cols-3 gap-1.5 rounded-sm bg-[#F1F5F9] p-1">
             <button
               type="button"
@@ -396,25 +467,32 @@ export const MobileExpenseCaptureModal: React.FC<MobileExpenseCaptureModalProps>
             </button>
           </div>
 
-          {/* Survey Selector */}
+          {/* Ruta de referencia */}
           <div>
             <label className="block text-xs font-semibold text-[#334155] mb-1">
-              Levantamiento KMZ Asociado
+              Ruta de Campo de Referencia (opcional)
             </label>
             <select
-              value={surveyId}
-              onChange={(e) => setSurveyId(e.target.value)}
-              className="w-full rounded-sm border border-[#CBD5E1] bg-white px-3 py-2.5 text-xs text-[#0D1C2F] focus:border-[#0284C7] focus:outline-none min-h-[44px]"
+              value={rutaId}
+              onChange={(e) => {
+                const nextRutaId = e.target.value;
+                setRutaId(nextRutaId);
+                const r = rutas.find((x) => x.id === nextRutaId);
+                if (r && repartoModo === 'unico') {
+                  setProyectoUnicoId(r.proyectoId);
+                }
+              }}
+              className="w-full rounded-sm border border-[#CBD5E1] bg-white px-3 py-2.5 text-xs text-[#0D1C2F] min-h-[44px]"
             >
-              {surveys.map((srv) => (
-                <option key={srv.id} value={srv.id}>
-                  {srv.parcelCode} — {srv.title} ({srv.surveyor})
+              <option value="">Sin ruta específica (gasto general)</option>
+              {rutas.map((r) => (
+                <option key={r.id} value={r.id}>
+                  {r.codigoParcela} — {r.nombre} ({r.provincia})
                 </option>
               ))}
             </select>
           </div>
 
-          {/* Mode-specific trigger */}
           {captureMode === 'ocr' && (
             <div className="rounded-md border border-[#CBD5E1] bg-[#F8FAFC] p-4">
               <input
@@ -459,7 +537,7 @@ export const MobileExpenseCaptureModal: React.FC<MobileExpenseCaptureModalProps>
                 <Sparkles className="h-3.5 w-3.5 text-[#0284C7] shrink-0" />
                 {isOnline
                   ? 'Lectura automática con IA: extrae establecimiento, monto en RD$, ITBIS y NCF fiscal.'
-                  : 'Modo sin señal: la fotografía se encola localmente para procesamiento automático al reconectar.'}
+                  : 'Modo sin señal: la fotografía se encola localmente para OCR al reconectar.'}
               </p>
             </div>
           )}
@@ -485,7 +563,7 @@ export const MobileExpenseCaptureModal: React.FC<MobileExpenseCaptureModalProps>
                 )}
               </button>
               <p className="text-[11px] text-[#43474D]">
-                Calcula la distancia geodésica desde base hasta la parcela seleccionada a razón de RD$ 26.50/km.
+                Calcula la distancia geodésica desde base hasta la parcela a razón de RD$ 26.50/km.
               </p>
             </div>
           )}
@@ -521,13 +599,13 @@ export const MobileExpenseCaptureModal: React.FC<MobileExpenseCaptureModalProps>
             </div>
           )}
 
-          {/* Extracted / Editable Expense Fields */}
+          {/* Expense Fields */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
             <div>
               <label className="block font-semibold text-[#334155] mb-1">Categoría</label>
               <select
                 value={category}
-                onChange={(e) => setCategory(e.target.value as ExpenseCategory)}
+                onChange={(e) => setCategory(e.target.value as CategoriaViatico)}
                 className="w-full rounded-sm border border-[#CBD5E1] bg-white px-3 py-2 text-xs text-[#0D1C2F] min-h-[42px]"
               >
                 {CATEGORIES.map((c) => (
@@ -545,7 +623,10 @@ export const MobileExpenseCaptureModal: React.FC<MobileExpenseCaptureModalProps>
                 min={0}
                 required={!needsOfflineOcr}
                 value={amountRD}
-                onChange={(e) => setAmountRD(e.target.value)}
+                onChange={(e) => {
+                  setAmountRD(e.target.value);
+                  syncAmountIntoUniqueSplit(Number(e.target.value) || 0);
+                }}
                 placeholder="0.00"
                 className="w-full rounded-sm border border-[#CBD5E1] px-3 py-2 font-mono text-xs text-[#0D1C2F] min-h-[42px]"
               />
@@ -574,6 +655,17 @@ export const MobileExpenseCaptureModal: React.FC<MobileExpenseCaptureModalProps>
               />
             </div>
             <div>
+              <label className="block font-semibold text-[#334155] mb-1">ITBIS (RD$)</label>
+              <input
+                type="number"
+                step="0.01"
+                min={0}
+                value={itbisRD}
+                onChange={(e) => setItbisRD(e.target.value)}
+                className="w-full rounded-sm border border-[#CBD5E1] px-3 py-2 font-mono text-xs text-[#0D1C2F] min-h-[42px]"
+              />
+            </div>
+            <div>
               <label className="block font-semibold text-[#334155] mb-1">Fecha</label>
               <input
                 type="date"
@@ -583,16 +675,160 @@ export const MobileExpenseCaptureModal: React.FC<MobileExpenseCaptureModalProps>
                 className="w-full rounded-sm border border-[#CBD5E1] px-3 py-2 font-mono text-xs text-[#0D1C2F] min-h-[42px]"
               />
             </div>
-            <div className="sm:col-span-2">
-              <label className="block font-semibold text-[#334155] mb-1">Detalle / Observación</label>
+            <div>
+              <label className="block font-semibold text-[#334155] mb-1">Observación</label>
               <input
                 type="text"
                 value={notes}
                 onChange={(e) => setNotes(e.target.value)}
-                placeholder="Detalle de artículos, kilometraje o cuadrilla"
+                placeholder="Detalle de artículos o km"
                 className="w-full rounded-sm border border-[#CBD5E1] px-3 py-2 text-xs text-[#0D1C2F] min-h-[42px]"
               />
             </div>
+          </div>
+
+          {/* Exact Project Split Editor (F10) */}
+          <div className="rounded-md border border-[#CBD5E1] bg-[#F8FAFC] p-3.5 space-y-2.5 text-xs">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <span className="font-bold text-[#0F2942]">
+                Imputación Exacta a Proyectos (RD$)
+              </span>
+              <div className="inline-flex rounded-sm border border-[#CBD5E1] bg-white p-0.5">
+                {(
+                  [
+                    { id: 'unico', label: '1 Proyecto' },
+                    { id: 'multiple', label: 'Dividir' },
+                    { id: 'sin_asignar', label: 'Sin asignar' },
+                  ] as const
+                ).map((m) => (
+                  <button
+                    key={m.id}
+                    type="button"
+                    onClick={() => {
+                      setRepartoModo(m.id);
+                      if (m.id === 'multiple' && repartosMultiples.length === 0) {
+                        setRepartosMultiples([
+                          { proyectoId: proyectos[0]?.id || 'sin_asignar', montoRD: montoNumerico },
+                        ]);
+                      }
+                    }}
+                    className={`rounded-sm px-2 py-1 text-[11px] font-semibold ${
+                      repartoModo === m.id ? 'bg-[#0F2942] text-white' : 'text-[#43474D]'
+                    }`}
+                  >
+                    {m.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {repartoModo === 'unico' && (
+              <select
+                value={proyectoUnicoId}
+                onChange={(e) => setProyectoUnicoId(e.target.value)}
+                className="w-full rounded-sm border border-[#CBD5E1] bg-white px-3 py-2 text-xs text-[#0D1C2F]"
+              >
+                {proyectos.map((p) => (
+                  <option key={p.id} value={p.id}>
+                    {p.codigoContrato} — {p.nombre} ({formatRD(montoNumerico)})
+                  </option>
+                ))}
+                <option value="sin_asignar">Sin asignar ({formatRD(montoNumerico)})</option>
+              </select>
+            )}
+
+            {repartoModo === 'sin_asignar' && (
+              <p className="text-[11px] text-[#A16207]">
+                El gasto completo ({formatRD(montoNumerico)}) quedará en{' '}
+                <strong>Sin asignar</strong> para que Coordinación lo distribuya luego.
+              </p>
+            )}
+
+            {repartoModo === 'multiple' && (
+              <div className="space-y-2">
+                {repartosMultiples.map((linea, idx) => (
+                  <div key={`${linea.proyectoId}-${idx}`} className="flex items-center gap-2">
+                    <select
+                      value={linea.proyectoId}
+                      onChange={(e) => {
+                        const val = e.target.value;
+                        setRepartosMultiples((prev) =>
+                          prev.map((item, i) => (i === idx ? { ...item, proyectoId: val } : item))
+                        );
+                      }}
+                      className="flex-1 rounded-sm border border-[#CBD5E1] bg-white px-2.5 py-1.5 text-xs"
+                    >
+                      {proyectos.map((p) => (
+                        <option key={p.id} value={p.id}>
+                          {p.codigoContrato} — {p.nombre}
+                        </option>
+                      ))}
+                      <option value="sin_asignar">Sin asignar</option>
+                    </select>
+                    <input
+                      type="number"
+                      step="0.01"
+                      min={0}
+                      value={linea.montoRD}
+                      onChange={(e) => {
+                        const val = Number(e.target.value) || 0;
+                        setRepartosMultiples((prev) =>
+                          prev.map((item, i) => (i === idx ? { ...item, montoRD: val } : item))
+                        );
+                      }}
+                      className="w-28 rounded-sm border border-[#CBD5E1] bg-white px-2 py-1.5 font-mono text-xs"
+                    />
+                    {repartosMultiples.length > 1 && (
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setRepartosMultiples((prev) => prev.filter((_, i) => i !== idx))
+                        }
+                        className="rounded-sm p-1.5 text-[#DC2626] hover:bg-[#FEE2E2]"
+                      >
+                        <Trash2 className="h-3.5 w-3.5" />
+                      </button>
+                    )}
+                  </div>
+                ))}
+
+                <div className="flex flex-wrap items-center justify-between gap-2 pt-1">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const usado = new Set(repartosMultiples.map((r) => r.proyectoId));
+                      const libre = proyectos.find((p) => !usado.has(p.id))?.id || 'sin_asignar';
+                      const saldo = Math.max(0, Number((montoNumerico - sumaMultipleRD).toFixed(2)));
+                      setRepartosMultiples((prev) => [
+                        ...prev,
+                        { proyectoId: libre, montoRD: saldo },
+                      ]);
+                    }}
+                    className="inline-flex items-center gap-1 rounded-sm border border-[#CBD5E1] bg-white px-2.5 py-1 text-[11px] font-semibold text-[#0F2942] hover:bg-[#F1F5F9]"
+                  >
+                    <Plus className="h-3 w-3" />
+                    Añadir proyecto
+                  </button>
+
+                  <div className="flex items-center gap-2 text-[11px]">
+                    <span className="font-mono">
+                      Suma: <strong>{formatRD(sumaMultipleRD)}</strong> /{' '}
+                      {formatRD(montoNumerico)}
+                    </span>
+                    {Math.abs(montoNumerico - sumaMultipleRD) > 0.01 &&
+                      montoNumerico > sumaMultipleRD && (
+                        <button
+                          type="button"
+                          onClick={handleCompletarConSinAsignar}
+                          className="rounded-sm bg-[#FEF3C7] px-2 py-1 font-semibold text-[#A16207] hover:bg-[#FDE68A]"
+                        >
+                          Saldo a Sin asignar
+                        </button>
+                      )}
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
 
           <div className="flex flex-col-reverse sm:flex-row sm:justify-end gap-2.5 border-t border-[#E2E8F0] pt-4">
@@ -605,10 +841,15 @@ export const MobileExpenseCaptureModal: React.FC<MobileExpenseCaptureModalProps>
             </button>
             <button
               type="submit"
-              className="inline-flex items-center justify-center gap-2 rounded-sm bg-[#0F2942] px-5 py-2.5 text-xs font-semibold text-white hover:bg-[#0284C7] transition-colors min-h-[44px]"
+              disabled={isSaving}
+              className="inline-flex items-center justify-center gap-2 rounded-sm bg-[#0F2942] px-5 py-2.5 text-xs font-semibold text-white hover:bg-[#0284C7] disabled:opacity-50 transition-colors min-h-[44px]"
             >
               <Receipt className="h-4 w-4" />
-              {isOnline ? 'Guardar y Reportar Gasto' : 'Encolar Gasto Offline'}
+              {isSaving
+                ? 'Guardando...'
+                : isOnline
+                ? 'Guardar y Reportar Viático'
+                : 'Encolar Viático Offline'}
             </button>
           </div>
         </form>

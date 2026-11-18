@@ -1,0 +1,128 @@
+import type {
+  Asignacion,
+  BitacoraEntrada,
+  Cliente,
+  Cuadrilla,
+  Empresa,
+  EquipoGNSS,
+  EstadoAprobacionViatico,
+  EstadoEmpresaSnapshot,
+  EstadoServicio,
+  Personal,
+  Proyecto,
+  RepartoProyecto,
+  RolEmpresa,
+  Ruta,
+  Servicio,
+  SesionActiva,
+  Usuario,
+  Vehiculo,
+  Viatico,
+} from '../types/domain';
+import type { PayloadTransicionServicio } from '../domain/estados';
+
+export interface CuentaDemoInfo {
+  email: string;
+  passwordDemo: string;
+  nombre: string;
+  descripcion: string;
+}
+
+export interface RepositorioOperacion {
+  // F1: Autenticación, multiempresa y caché offline
+  listarCuentasDemo(): CuentaDemoInfo[];
+  iniciarSesion(email: string, password: string): Promise<SesionActiva>;
+  obtenerSesionGuardada(): SesionActiva | null;
+  cerrarSesion(): Promise<void>;
+  listarEmpresasDeUsuario(usuarioId: string): Promise<Array<{ empresa: Empresa; rol: RolEmpresa }>>;
+  cambiarEmpresaActiva(empresaId: string): Promise<SesionActiva>;
+
+  // Snapshot operativo de la empresa activa
+  cargarSnapshotEmpresa(empresaId: string): Promise<EstadoEmpresaSnapshot>;
+
+  // F2: Clientes y Proyectos
+  crearCliente(
+    empresaId: string,
+    datos: Omit<Cliente, 'id' | 'empresaId'>
+  ): Promise<Cliente>;
+  actualizarCliente(empresaId: string, cliente: Cliente): Promise<Cliente>;
+  crearProyecto(
+    empresaId: string,
+    datos: Omit<Proyecto, 'id' | 'empresaId' | 'estado' | 'fechaCreacion' | 'version' | 'updatedAt' | 'syncStatus'>
+  ): Promise<Proyecto>;
+  actualizarProyecto(empresaId: string, proyecto: Proyecto): Promise<Proyecto>;
+
+  // F3: Rutas desde KMZ/KML/GeoJSON
+  crearRuta(
+    empresaId: string,
+    datos: Omit<Ruta, 'id' | 'empresaId' | 'version' | 'updatedAt' | 'syncStatus'>
+  ): Promise<Ruta>;
+  actualizarRuta(empresaId: string, ruta: Ruta): Promise<Ruta>;
+
+  // F4, F7, F8: Servicios y Bitácora
+  crearServicio(
+    empresaId: string,
+    datos: Omit<Servicio, 'id' | 'empresaId' | 'version' | 'updatedAt' | 'syncStatus'>
+  ): Promise<Servicio>;
+  transicionarServicio(params: {
+    empresaId: string;
+    servicioId: string;
+    nuevoEstado: EstadoServicio;
+    payload?: PayloadTransicionServicio;
+  }): Promise<Servicio>;
+  agregarBitacora(
+    empresaId: string,
+    datos: Omit<BitacoraEntrada, 'id' | 'empresaId' | 'fechaAST' | 'syncStatus'>
+  ): Promise<BitacoraEntrada>;
+
+  // F5, F6: Asignaciones por rango de fechas y conflictos
+  guardarAsignacion(
+    empresaId: string,
+    datos: Omit<Asignacion, 'id' | 'empresaId' | 'version' | 'updatedAt' | 'syncStatus'> & {
+      id?: string;
+    }
+  ): Promise<Asignacion>;
+  eliminarAsignacion(empresaId: string, asignacionId: string): Promise<void>;
+
+  // F9, F10, F11: Viáticos y reparto exacto
+  registrarViatico(
+    empresaId: string,
+    datos: Omit<
+      Viatico,
+      'id' | 'empresaId' | 'estadoAprobacion' | 'version' | 'updatedAt'
+    >
+  ): Promise<Viatico>;
+  actualizarRepartoViatico(
+    empresaId: string,
+    viaticoId: string,
+    repartos: RepartoProyecto[]
+  ): Promise<Viatico>;
+  decidirViatico(params: {
+    empresaId: string;
+    viaticoId: string;
+    nuevoEstado: EstadoAprobacionViatico;
+    motivoRechazo?: string;
+  }): Promise<Viatico>;
+  eliminarViatico(empresaId: string, viaticoId: string): Promise<void>;
+
+  // Catálogos y Administración de Empresa / Usuarios
+  guardarPersonal(empresaId: string, item: Omit<Personal, 'id' | 'empresaId'> & { id?: string }): Promise<Personal>;
+  guardarVehiculo(empresaId: string, item: Omit<Vehiculo, 'id' | 'empresaId'> & { id?: string }): Promise<Vehiculo>;
+  guardarEquipo(empresaId: string, item: Omit<EquipoGNSS, 'id' | 'empresaId'> & { id?: string }): Promise<EquipoGNSS>;
+  guardarCuadrilla(empresaId: string, item: Omit<Cuadrilla, 'id' | 'empresaId'> & { id?: string }): Promise<Cuadrilla>;
+  actualizarEmpresa(empresa: Empresa): Promise<Empresa>;
+  guardarMembresiaUsuario(params: {
+    empresaId: string;
+    email: string;
+    nombre: string;
+    rol: RolEmpresa;
+    personalId?: string;
+    activo: boolean;
+  }): Promise<{ usuario: Usuario; rol: RolEmpresa }>;
+
+  // F15: Sincronización LWW y OCR pendiente
+  sincronizarConServidor(empresaId: string): Promise<{
+    snapshot: EstadoEmpresaSnapshot;
+    ocrProcesados: number;
+  }>;
+}

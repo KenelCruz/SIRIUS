@@ -15,15 +15,14 @@ import {
   UploadCloud,
 } from 'lucide-react';
 import type {
-  ExpenseCategory,
-  SurveyProject,
-  ViaticoExpense,
-} from '../types/geodesy';
-import {
-  formatRD,
-  formatSantoDomingoAST,
-  TAREA_IN_M2,
-} from '../utils/geodesy';
+  CategoriaViatico,
+  Proyecto,
+  RouteSummary,
+  Ruta,
+  Vehiculo,
+  Viatico,
+} from '../types/domain';
+import { formatRD, formatSantoDomingoAST, TAREA_IN_M2 } from '../utils/geodesy';
 import { parseKmzOrKmlFile, type ParsedKmzResult } from '../utils/kmzParser';
 import {
   computeRouteViaticos,
@@ -37,23 +36,27 @@ import {
 } from '../utils/routingEngine';
 
 interface RouteServicesCalculatorProps {
-  surveys: SurveyProject[];
-  selectedSurvey: SurveyProject | undefined;
-  onSelectSurvey: (surveyId: string) => void;
-  onApplyToSurvey: (payload: {
-    surveyId: string;
+  rutas: Ruta[];
+  proyectos: Proyecto[];
+  vehiculos: Vehiculo[];
+  selectedRuta: Ruta | undefined;
+  canEdit: boolean;
+  creadoPorUsuario: { id: string; nombre: string };
+  baseLat?: number;
+  baseLon?: number;
+  onSelectRuta: (rutaId: string) => void;
+  onApplyToRuta: (payload: {
+    rutaId: string;
+    proyectoId: string;
     budgetViaticosRD: number;
     contractValueRD: number;
-    selectedServices: string[];
-    routeSummary: NonNullable<SurveyProject['routeSummary']>;
-  }) => void;
-  onRegisterKmzFromCalculator: (parsed: ParsedKmzResult, payload: {
-    budgetViaticosRD: number;
-    contractValueRD: number;
-    selectedServices: string[];
-    routeSummary: NonNullable<SurveyProject['routeSummary']>;
-  }) => void;
-  onLogRouteExpenses: (items: ViaticoExpense[]) => void;
+    serviciosPropuestos: Array<{ tipoServicioId: string; nombre: string; cotizacionRD: number }>;
+    routeSummary: RouteSummary;
+  }) => Promise<void>;
+  onRegisterKmzFromCalculator: (parsed: ParsedKmzResult) => void;
+  onLogRouteExpenses: (
+    items: Array<Omit<Viatico, 'id' | 'empresaId' | 'estadoAprobacion' | 'version' | 'updatedAt'>>
+  ) => Promise<void>;
   onOpenExpenseModal?: () => void;
 }
 
@@ -81,10 +84,16 @@ const DOMINICAN_PROVINCES = [
 ];
 
 export const RouteServicesCalculator: React.FC<RouteServicesCalculatorProps> = ({
-  surveys,
-  selectedSurvey,
-  onSelectSurvey,
-  onApplyToSurvey,
+  rutas,
+  proyectos,
+  vehiculos,
+  selectedRuta,
+  canEdit,
+  creadoPorUsuario,
+  baseLat = SANTO_DOMINGO_ORIGIN.lat,
+  baseLon = SANTO_DOMINGO_ORIGIN.lon,
+  onSelectRuta,
+  onApplyToRuta,
   onRegisterKmzFromCalculator,
   onLogRouteExpenses,
   onOpenExpenseModal,
@@ -98,25 +107,29 @@ export const RouteServicesCalculator: React.FC<RouteServicesCalculatorProps> = (
   const [uploadedKmz, setUploadedKmz] = useState<ParsedKmzResult | null>(null);
   const [kmzError, setKmzError] = useState<string | null>(null);
 
-  // Additive Services State
+  // Servicios sumatorios
   const [selectedServiceIds, setSelectedServiceIds] = useState<string[]>(['rtk', 'deslinde']);
   const [corridorKm, setCorridorKm] = useState<number>(1);
   const [terrain, setTerrain] = useState<TerrainType>('Llano');
 
-  // Location & Area
-  const [province, setProvince] = useState<string>(selectedSurvey?.province || 'Santo Domingo');
+  // Ubicación y superficie
+  const [province, setProvince] = useState<string>(selectedRuta?.provincia || 'Santo Domingo');
   const [manualAreaM2, setManualAreaM2] = useState<number>(
-    Math.round(selectedSurvey?.totalAreaM2 || 2500)
+    Math.round(selectedRuta?.totalAreaM2 || 2500)
   );
 
-  // Vehicle & Fuel
-  const [vehicleId, setVehicleId] = useState<string>(VEHICLE_CATALOG[0].id);
+  // Vehículo y combustible (toma catálogo real de la empresa si existe)
+  const [vehiculoId, setVehiculoId] = useState<string>(
+    vehiculos[0]?.id || VEHICLE_CATALOG[0].id
+  );
   const [fuelPricePerGalRD, setFuelPricePerGalRD] = useState<number>(
-    VEHICLE_CATALOG[0].fuelPricePerGalRD
+    vehiculos[0]?.precioGalonRD || VEHICLE_CATALOG[0].fuelPricePerGalRD
   );
-  const [kmPerGal, setKmPerGal] = useState<number>(VEHICLE_CATALOG[0].kmPerGal);
+  const [kmPerGal, setKmPerGal] = useState<number>(
+    vehiculos[0]?.kmPorGal || VEHICLE_CATALOG[0].kmPerGal
+  );
 
-  // Route State
+  // Rutas OSRM
   const [routes, setRoutes] = useState<RouteAlternative[]>([]);
   const [selectedRouteId, setSelectedRouteId] = useState<'economica' | 'rapida'>('economica');
   const [distanceOverrideKm, setDistanceOverrideKm] = useState<number | null>(null);
@@ -125,40 +138,46 @@ export const RouteServicesCalculator: React.FC<RouteServicesCalculatorProps> = (
   const [mapStyle, setMapStyle] = useState<'osm' | 'topo'>('osm');
   const [isLoadingRoutes, setIsLoadingRoutes] = useState<boolean>(false);
 
-  const activeVehicle = useMemo(
-    () => VEHICLE_CATALOG.find((v) => v.id === vehicleId) ?? VEHICLE_CATALOG[0],
-    [vehicleId]
-  );
-
-  const activeCentroid = uploadedKmz?.centroid ?? selectedSurvey?.centroid ?? {
-    lat: 18.4861,
-    lon: -69.9312,
-    elev: 14,
-    easting: 401688,
-    northing: 2044250,
-    zone: '19Q',
-  };
-
-  const activeFeatures = uploadedKmz?.features ?? selectedSurvey?.features ?? [];
-
-  // Sync area & province when switching selected survey (unless custom KMZ uploaded)
-  useEffect(() => {
-    if (!uploadedKmz && selectedSurvey) {
-      setProvince(selectedSurvey.province);
-      setManualAreaM2(Math.round(selectedSurvey.totalAreaM2));
-      if (selectedSurvey.selectedServices && selectedSurvey.selectedServices.length > 0) {
-        setSelectedServiceIds(selectedSurvey.selectedServices);
-      }
+  const activeVehicle = useMemo(() => {
+    const vEmp = vehiculos.find((v) => v.id === vehiculoId);
+    if (vEmp) {
+      return {
+        id: vEmp.id,
+        label: `${vEmp.etiqueta} (${vEmp.placa})`,
+        fuelName: vEmp.tipoCombustible,
+        fuelPricePerGalRD: vEmp.precioGalonRD,
+        kmPerGal: vEmp.kmPorGal,
+        maintenancePerKmRD: vEmp.mantenimientoPorKmRD,
+      };
     }
-  }, [selectedSurvey, uploadedKmz]);
+    return VEHICLE_CATALOG.find((v) => v.id === vehiculoId) ?? VEHICLE_CATALOG[0];
+  }, [vehiculos, vehiculoId]);
 
-  // Fetch optimal OSM routes whenever destination centroid changes
+  const activeCentroid = uploadedKmz?.centroid ??
+    selectedRuta?.centroid ?? {
+      lat: baseLat,
+      lon: baseLon,
+      elev: 14,
+      easting: 401688,
+      northing: 2044250,
+      zone: '19Q',
+    };
+
+  const activeFeatures = uploadedKmz?.features ?? selectedRuta?.features ?? [];
+
+  useEffect(() => {
+    if (!uploadedKmz && selectedRuta) {
+      setProvince(selectedRuta.provincia);
+      setManualAreaM2(Math.round(selectedRuta.totalAreaM2));
+    }
+  }, [selectedRuta, uploadedKmz]);
+
   useEffect(() => {
     let active = true;
     setIsLoadingRoutes(true);
     setDistanceOverrideKm(null);
 
-    fetchOptimalRoutesOSM(activeCentroid.lat, activeCentroid.lon)
+    fetchOptimalRoutesOSM(activeCentroid.lat, activeCentroid.lon, baseLat, baseLon)
       .then((res) => {
         if (!active) return;
         setRoutes(res);
@@ -176,7 +195,7 @@ export const RouteServicesCalculator: React.FC<RouteServicesCalculatorProps> = (
     return () => {
       active = false;
     };
-  }, [activeCentroid.lat, activeCentroid.lon]);
+  }, [activeCentroid.lat, activeCentroid.lon, baseLat, baseLon]);
 
   const activeRoute = useMemo(
     () => routes.find((r) => r.id === selectedRouteId) ?? routes[0],
@@ -188,7 +207,6 @@ export const RouteServicesCalculator: React.FC<RouteServicesCalculatorProps> = (
       ? distanceOverrideKm
       : activeRoute?.distanceOneWayKm ?? 12;
 
-  // Calculate additive services cost
   const servicesCalculation = useMemo(() => {
     const terrainMult = TERRAIN_MULTIPLIER[terrain];
     const items = SERVICE_CATALOG.filter((s) => selectedServiceIds.includes(s.id)).map((svc) => {
@@ -211,7 +229,6 @@ export const RouteServicesCalculator: React.FC<RouteServicesCalculatorProps> = (
     return { items, totalServicesRD };
   }, [selectedServiceIds, corridorKm, terrain, manualAreaM2]);
 
-  // Calculate viáticos for BOTH route options for side-by-side comparison
   const routeComparison = useMemo(() => {
     return routes.map((r) => {
       const distKm =
@@ -267,6 +284,7 @@ export const RouteServicesCalculator: React.FC<RouteServicesCalculatorProps> = (
   }, [
     routeComparison,
     activeRoute?.id,
+    activeRoute?.oneWayTollRD,
     effectiveOneWayKm,
     includeTolls,
     includeLodging,
@@ -280,12 +298,11 @@ export const RouteServicesCalculator: React.FC<RouteServicesCalculatorProps> = (
 
   const grandTotalRD = servicesCalculation.totalServicesRD + activeBreakdown.totalViaticosRD;
 
-  // Initialize Leaflet Route Map
   useEffect(() => {
     if (!mapContainerRef.current || mapRef.current) return;
 
     const map = L.map(mapContainerRef.current, {
-      center: [SANTO_DOMINGO_ORIGIN.lat, SANTO_DOMINGO_ORIGIN.lon],
+      center: [baseLat, baseLon],
       zoom: 11,
       zoomControl: true,
     });
@@ -302,9 +319,8 @@ export const RouteServicesCalculator: React.FC<RouteServicesCalculatorProps> = (
       tileRef.current = null;
       overlayRef.current = null;
     };
-  }, []);
+  }, [baseLat, baseLon]);
 
-  // Tile layer switch
   useEffect(() => {
     const map = mapRef.current;
     if (!map) return;
@@ -324,7 +340,6 @@ export const RouteServicesCalculator: React.FC<RouteServicesCalculatorProps> = (
     }).addTo(map);
   }, [mapStyle]);
 
-  // Draw active + alternate route & KMZ polygon on Leaflet OSM
   useEffect(() => {
     const map = mapRef.current;
     const overlay = overlayRef.current;
@@ -332,7 +347,6 @@ export const RouteServicesCalculator: React.FC<RouteServicesCalculatorProps> = (
 
     overlay.clearLayers();
 
-    // Draw alternate route first (dashed blue/slate)
     routes.forEach((r) => {
       if (r.id === activeRoute?.id) return;
       L.polyline(r.coordinates, {
@@ -345,7 +359,6 @@ export const RouteServicesCalculator: React.FC<RouteServicesCalculatorProps> = (
         .addTo(overlay);
     });
 
-    // Draw active route (amber/gold solid)
     if (activeRoute) {
       L.polyline(activeRoute.coordinates, {
         color: '#D97706',
@@ -356,7 +369,6 @@ export const RouteServicesCalculator: React.FC<RouteServicesCalculatorProps> = (
         .addTo(overlay);
     }
 
-    // Draw destination KMZ polygon(s)
     activeFeatures.forEach((feat) => {
       if (feat.geometryType === 'Polygon' && feat.points.length >= 3) {
         L.polygon(
@@ -371,18 +383,16 @@ export const RouteServicesCalculator: React.FC<RouteServicesCalculatorProps> = (
       }
     });
 
-    // Origin marker
-    L.circleMarker([SANTO_DOMINGO_ORIGIN.lat, SANTO_DOMINGO_ORIGIN.lon], {
+    L.circleMarker([baseLat, baseLon], {
       radius: 7,
       color: '#FFFFFF',
       weight: 2,
       fillColor: '#0284C7',
       fillOpacity: 1,
     })
-      .bindPopup(`<strong>Origen:</strong> ${SANTO_DOMINGO_ORIGIN.label}`)
+      .bindPopup('<strong>Base Operativa</strong>')
       .addTo(overlay);
 
-    // Destination marker
     L.circleMarker([activeCentroid.lat, activeCentroid.lon], {
       radius: 7,
       color: '#FFFFFF',
@@ -392,7 +402,7 @@ export const RouteServicesCalculator: React.FC<RouteServicesCalculatorProps> = (
     })
       .bindPopup(
         `<strong>Destino KMZ:</strong> ${
-          uploadedKmz?.autoMeta.title || selectedSurvey?.title || 'Parcela'
+          uploadedKmz?.autoMeta.title || selectedRuta?.nombre || 'Parcela'
         }`
       )
       .addTo(overlay);
@@ -402,7 +412,17 @@ export const RouteServicesCalculator: React.FC<RouteServicesCalculatorProps> = (
       map.fitBounds(bounds, { padding: [36, 36], maxZoom: 15 });
     }
     setTimeout(() => map.invalidateSize(), 100);
-  }, [routes, activeRoute, activeFeatures, activeCentroid, effectiveOneWayKm, uploadedKmz, selectedSurvey]);
+  }, [
+    routes,
+    activeRoute,
+    activeFeatures,
+    activeCentroid,
+    effectiveOneWayKm,
+    uploadedKmz,
+    selectedRuta,
+    baseLat,
+    baseLon,
+  ]);
 
   const handleToggleService = (id: string) => {
     setSelectedServiceIds((prev) =>
@@ -411,7 +431,13 @@ export const RouteServicesCalculator: React.FC<RouteServicesCalculatorProps> = (
   };
 
   const handleVehicleChange = (newId: string) => {
-    setVehicleId(newId);
+    setVehiculoId(newId);
+    const vEmp = vehiculos.find((v) => v.id === newId);
+    if (vEmp) {
+      setFuelPricePerGalRD(vEmp.precioGalonRD);
+      setKmPerGal(vEmp.kmPorGal);
+      return;
+    }
     const preset = VEHICLE_CATALOG.find((v) => v.id === newId);
     if (preset) {
       setFuelPricePerGalRD(preset.fuelPricePerGalRD);
@@ -427,60 +453,64 @@ export const RouteServicesCalculator: React.FC<RouteServicesCalculatorProps> = (
       setProvince(parsed.autoMeta.province);
       setManualAreaM2(Math.round(parsed.totalAreaM2));
     } catch (err: unknown) {
-      setKmzError(err instanceof Error ? err.message : 'No se pudo leer el archivo KMZ/KML.');
+      setKmzError(
+        err instanceof Error ? err.message : 'No se pudo leer el archivo KMZ/KML/GeoJSON.'
+      );
     }
   };
 
-  const handleApplyCalculation = () => {
-    const summaryPayload = {
-      budgetViaticosRD: activeBreakdown.totalViaticosRD,
-      contractValueRD: grandTotalRD,
-      selectedServices: selectedServiceIds,
-      routeSummary: {
-        routeName: activeRoute?.name || 'Ruta Directa',
-        distanceOneWayKm: effectiveOneWayKm,
-        durationMin: activeRoute?.durationMin ?? Math.round(effectiveOneWayKm * 1.4),
-        tollsRD: activeBreakdown.tollsRD,
-        fuelRD: activeBreakdown.fuelRD,
-        vehicleLabel: activeVehicle.label,
-      },
-    };
-
+  const handleApplyCalculation = async () => {
     if (uploadedKmz) {
-      onRegisterKmzFromCalculator(uploadedKmz, summaryPayload);
+      onRegisterKmzFromCalculator(uploadedKmz);
       return;
     }
 
-    if (selectedSurvey) {
-      onApplyToSurvey({
-        surveyId: selectedSurvey.id,
-        ...summaryPayload,
+    if (selectedRuta) {
+      await onApplyToRuta({
+        rutaId: selectedRuta.id,
+        proyectoId: selectedRuta.proyectoId,
+        budgetViaticosRD: activeBreakdown.totalViaticosRD,
+        contractValueRD: grandTotalRD,
+        serviciosPropuestos: servicesCalculation.items.map((item) => ({
+          tipoServicioId: item.id,
+          nombre: item.name,
+          cotizacionRD: item.adjustedPriceRD,
+        })),
+        routeSummary: {
+          routeName: activeRoute?.name || 'Ruta Directa',
+          distanceOneWayKm: effectiveOneWayKm,
+          durationMin: activeRoute?.durationMin ?? Math.round(effectiveOneWayKm * 1.4),
+          tollsRD: activeBreakdown.tollsRD,
+          fuelRD: activeBreakdown.fuelRD,
+          vehicleLabel: activeVehicle.label,
+        },
       });
     }
   };
 
-  const handleLogAutomaticRouteExpenses = () => {
-    const target = selectedSurvey;
+  const handleLogAutomaticRouteExpenses = async () => {
+    const target = selectedRuta;
     if (!target) return;
     const now = new Date();
     const dateIso = now.toISOString().slice(0, 10);
     const tsAST = formatSantoDomingoAST(now);
 
-    const newItems: ViaticoExpense[] = [];
+    const newItems: Array<
+      Omit<Viatico, 'id' | 'empresaId' | 'estadoAprobacion' | 'version' | 'updatedAt'>
+    > = [];
 
     if (activeBreakdown.fuelRD > 0) {
       newItems.push({
-        id: `exp-rt-fuel-${Date.now()}`,
-        surveyId: target.id,
-        parcelCode: target.parcelCode,
-        surveyor: target.surveyor,
-        category: 'Combustible' as ExpenseCategory,
-        merchant: `Ruta ${activeRoute?.name || 'Campo'} (${activeVehicle.fuelName})`,
-        amountRD: activeBreakdown.fuelRD,
-        itbisRD: 0,
-        dateIso,
+        creadoPorUsuarioId: creadoPorUsuario.id,
+        creadoPorNombre: creadoPorUsuario.nombre,
+        rutaId: target.id,
+        fechaIso: dateIso,
         timestampAST: tsAST,
-        method: 'GPS Ruta',
+        categoria: 'Combustible' as CategoriaViatico,
+        comercio: `Ruta ${activeRoute?.name || 'Campo'} (${activeVehicle.fuelName})`,
+        montoRD: activeBreakdown.fuelRD,
+        itbisRD: 0,
+        metodo: 'GPS Ruta',
         distanceKm: activeBreakdown.roundTripKm,
         gpsCoords: {
           lat: activeCentroid.lat,
@@ -488,53 +518,57 @@ export const RouteServicesCalculator: React.FC<RouteServicesCalculatorProps> = (
           easting: activeCentroid.easting,
           northing: activeCentroid.northing,
         },
+        repartos: [{ proyectoId: target.proyectoId, montoRD: activeBreakdown.fuelRD }],
+        notas: `${activeBreakdown.roundTripKm} km ida y vuelta · ${activeBreakdown.gallonsNeeded} gal @ RD$ ${fuelPricePerGalRD}`,
         syncStatus: 'pending',
-        approved: false,
-        notes: `${activeBreakdown.roundTripKm} km ida y vuelta · ${activeBreakdown.gallonsNeeded} gal @ RD$ ${fuelPricePerGalRD}`,
       });
     }
 
     if (activeBreakdown.tollsRD > 0) {
       newItems.push({
-        id: `exp-rt-toll-${Date.now() + 1}`,
-        surveyId: target.id,
-        parcelCode: target.parcelCode,
-        surveyor: target.surveyor,
-        category: 'Peaje' as ExpenseCategory,
-        merchant: `RD Vial — ${activeRoute?.tollNote || 'Peajes Ruta'}`,
-        amountRD: activeBreakdown.tollsRD,
-        itbisRD: 0,
-        dateIso,
+        creadoPorUsuarioId: creadoPorUsuario.id,
+        creadoPorNombre: creadoPorUsuario.nombre,
+        rutaId: target.id,
+        fechaIso: dateIso,
         timestampAST: tsAST,
-        method: 'GPS Ruta',
+        categoria: 'Peaje' as CategoriaViatico,
+        comercio: `RD Vial — ${activeRoute?.tollNote || 'Peajes Ruta'}`,
+        montoRD: activeBreakdown.tollsRD,
+        itbisRD: 0,
+        metodo: 'GPS Ruta',
         distanceKm: activeBreakdown.roundTripKm,
+        gpsCoords: {
+          lat: activeCentroid.lat,
+          lon: activeCentroid.lon,
+          easting: activeCentroid.easting,
+          northing: activeCentroid.northing,
+        },
+        repartos: [{ proyectoId: target.proyectoId, montoRD: activeBreakdown.tollsRD }],
+        notas: `Peajes ida y vuelta (${activeRoute?.name || 'Ruta'})`,
         syncStatus: 'pending',
-        approved: false,
-        notes: `Peajes ida y vuelta (${activeRoute?.name})`,
       });
     }
 
     if (activeBreakdown.perDiemRD > 0) {
       newItems.push({
-        id: `exp-rt-diet-${Date.now() + 2}`,
-        surveyId: target.id,
-        parcelCode: target.parcelCode,
-        surveyor: target.surveyor,
-        category: 'Dieta' as ExpenseCategory,
-        merchant: `Dieta Cuadrilla (${activeBreakdown.fieldDays} día(s))`,
-        amountRD: activeBreakdown.perDiemRD,
-        itbisRD: 0,
-        dateIso,
+        creadoPorUsuarioId: creadoPorUsuario.id,
+        creadoPorNombre: creadoPorUsuario.nombre,
+        rutaId: target.id,
+        fechaIso: dateIso,
         timestampAST: tsAST,
-        method: 'Dieta Automática',
+        categoria: 'Dieta' as CategoriaViatico,
+        comercio: `Dieta Cuadrilla (${activeBreakdown.fieldDays} día(s))`,
+        montoRD: activeBreakdown.perDiemRD,
+        itbisRD: 0,
+        metodo: 'Dieta Automática',
+        repartos: [{ proyectoId: target.proyectoId, montoRD: activeBreakdown.perDiemRD }],
+        notas: `Cálculo automático para terreno ${terrain}`,
         syncStatus: 'pending',
-        approved: false,
-        notes: `Cálculo automático para terreno ${terrain}`,
       });
     }
 
     if (newItems.length > 0) {
-      onLogRouteExpenses(newItems);
+      await onLogRouteExpenses(newItems);
     }
   };
 
@@ -562,12 +596,11 @@ export const RouteServicesCalculator: React.FC<RouteServicesCalculatorProps> = (
 
   return (
     <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 items-start">
-      {/* LEFT CONFIGURATION COLUMN (4 cols on desktop) */}
+      {/* LEFT CONFIGURATION COLUMN */}
       <div className="lg:col-span-4 space-y-4">
-        {/* KMZ Loader or Existing Survey Selector */}
         <div className="rounded-md border border-[#CBD5E1] bg-white p-4 space-y-3">
           <div className="flex items-center justify-between">
-            <h2 className="text-xs font-bold text-[#0F2942]">Cargar Polígono KMZ</h2>
+            <h2 className="text-xs font-bold text-[#0F2942]">Cargar Polígono KMZ / GeoJSON</h2>
             <span className="text-[11px] font-medium text-[#0284C7]">Detección auto</span>
           </div>
 
@@ -584,7 +617,7 @@ export const RouteServicesCalculator: React.FC<RouteServicesCalculatorProps> = (
             <input
               ref={fileInputRef}
               type="file"
-              accept=".kmz,.kml"
+              accept=".kmz,.kml,.geojson,.json"
               className="hidden"
               onChange={(e) => {
                 const f = e.target.files?.[0];
@@ -593,12 +626,10 @@ export const RouteServicesCalculator: React.FC<RouteServicesCalculatorProps> = (
             />
             <UploadCloud className="mx-auto h-6 w-6 text-[#0284C7]" />
             <div className="mt-1.5 text-xs font-semibold text-[#0F2942]">
-              {uploadedKmz
-                ? uploadedKmz.fileName
-                : 'Arrastra tu archivo .KMZ o .KML aquí'}
+              {uploadedKmz ? uploadedKmz.fileName : 'Arrastra tu .KMZ, .KML o .GeoJSON'}
             </div>
             <div className="mt-0.5 text-[11px] text-[#43474D]">
-              O selecciona un proyecto abajo para recalcular ruta
+              O selecciona una ruta abajo para recalcular viáticos
             </div>
           </div>
 
@@ -610,14 +641,14 @@ export const RouteServicesCalculator: React.FC<RouteServicesCalculatorProps> = (
 
           <div>
             <label className="block text-[11px] font-semibold text-[#43474D] mb-1">
-              O calcular sobre levantamiento registrado:
+              O calcular sobre ruta registrada:
             </label>
             <select
-              value={uploadedKmz ? '__uploaded__' : selectedSurvey?.id ?? ''}
+              value={uploadedKmz ? '__uploaded__' : selectedRuta?.id ?? ''}
               onChange={(e) => {
                 if (e.target.value !== '__uploaded__') {
                   setUploadedKmz(null);
-                  onSelectSurvey(e.target.value);
+                  onSelectRuta(e.target.value);
                 }
               }}
               className="w-full rounded-sm border border-[#CBD5E1] bg-white px-2.5 py-2 text-xs text-[#0D1C2F]"
@@ -625,11 +656,14 @@ export const RouteServicesCalculator: React.FC<RouteServicesCalculatorProps> = (
               {uploadedKmz && (
                 <option value="__uploaded__">Archivo: {uploadedKmz.fileName}</option>
               )}
-              {surveys.map((s) => (
-                <option key={s.id} value={s.id}>
-                  {s.parcelCode} · {s.province}
-                </option>
-              ))}
+              {rutas.map((r) => {
+                const proy = proyectos.find((p) => p.id === r.proyectoId);
+                return (
+                  <option key={r.id} value={r.id}>
+                    {r.codigoParcela} · {r.provincia} ({proy?.codigoContrato || r.nombre})
+                  </option>
+                );
+              })}
             </select>
           </div>
         </div>
@@ -639,11 +673,12 @@ export const RouteServicesCalculator: React.FC<RouteServicesCalculatorProps> = (
           <div className="flex items-center justify-between gap-2">
             <h2 className="text-xs font-bold text-[#0F2942]">Tipo de Levantamiento / Servicio</h2>
             <span className="font-mono text-[11px] font-semibold text-[#0284C7]">
-              {selectedServiceIds.length} servicio{selectedServiceIds.length === 1 ? '' : 's'} activo{selectedServiceIds.length === 1 ? '' : 's'}
+              {selectedServiceIds.length} servicio{selectedServiceIds.length === 1 ? '' : 's'}{' '}
+              activo{selectedServiceIds.length === 1 ? '' : 's'}
             </span>
           </div>
           <p className="text-[11px] text-[#43474D]">
-            Selección múltiple sumatoria: marca uno o varios servicios para combinarlos en la misma jornada.
+            Selección múltiple sumatoria para combinar servicios en la misma ruta.
           </p>
 
           <div className="space-y-2 pt-1">
@@ -769,21 +804,27 @@ export const RouteServicesCalculator: React.FC<RouteServicesCalculatorProps> = (
         <div className="rounded-md border border-[#CBD5E1] bg-white p-4 space-y-3 text-xs">
           <div className="flex items-center gap-2 font-bold text-[#0F2942]">
             <Car className="h-4 w-4 text-[#0284C7]" />
-            <span>Vehículo y Combustible de Cuadrilla</span>
+            <span>Vehículo y Combustible</span>
           </div>
 
           <div>
-            <label className="block font-semibold text-[#43474D] mb-1">Unidad asignada</label>
+            <label className="block font-semibold text-[#43474D] mb-1">Unidad seleccionada</label>
             <select
-              value={vehicleId}
+              value={vehiculoId}
               onChange={(e) => handleVehicleChange(e.target.value)}
               className="w-full rounded-sm border border-[#CBD5E1] bg-white px-2.5 py-2 text-xs text-[#0D1C2F]"
             >
-              {VEHICLE_CATALOG.map((v) => (
-                <option key={v.id} value={v.id}>
-                  {v.label}
-                </option>
-              ))}
+              {vehiculos.length > 0
+                ? vehiculos.map((v) => (
+                    <option key={v.id} value={v.id}>
+                      {v.etiqueta} ({v.placa})
+                    </option>
+                  ))
+                : VEHICLE_CATALOG.map((v) => (
+                    <option key={v.id} value={v.id}>
+                      {v.label}
+                    </option>
+                  ))}
             </select>
           </div>
 
@@ -814,9 +855,8 @@ export const RouteServicesCalculator: React.FC<RouteServicesCalculatorProps> = (
         </div>
       </div>
 
-      {/* RIGHT ROUTE & ADDITIVE ESTIMATION COLUMN (8 cols on desktop) */}
+      {/* RIGHT ROUTE & ADDITIVE ESTIMATION COLUMN */}
       <div className="lg:col-span-8 space-y-4">
-        {/* Top Summary Strip */}
         <div className="grid grid-cols-1 sm:grid-cols-3 rounded-md border border-[#CBD5E1] bg-white overflow-hidden divide-y sm:divide-y-0 sm:divide-x divide-[#E2E8F0]">
           <div className="p-4">
             <div className="text-xs font-medium text-[#43474D]">Área Neta</div>
@@ -845,12 +885,11 @@ export const RouteServicesCalculator: React.FC<RouteServicesCalculatorProps> = (
               {formatRD(grandTotalRD)}
             </div>
             <div className="mt-0.5 text-[11px] text-[#93CCFF]">
-              Servicios + Viáticos · + 18% ITBIS opcional
+              Servicios + Viáticos · Moneda RD$
             </div>
           </div>
         </div>
 
-        {/* Optimal Routes Comparison & Map */}
         <div className="rounded-md border border-[#CBD5E1] bg-white p-4 space-y-4">
           <div className="flex flex-wrap items-center justify-between gap-2">
             <div>
@@ -859,7 +898,7 @@ export const RouteServicesCalculator: React.FC<RouteServicesCalculatorProps> = (
                 Cálculo de Rutas Óptimas y Viáticos (Ida y Vuelta)
               </h3>
               <p className="text-xs text-[#43474D]">
-                Compara rutas reales desde Santo Domingo (OpenStreetMap OSRM), peajes RD Vial y consumo por vehículo.
+                Compara rutas reales desde la base operativa (OSRM), peajes RD Vial y consumo por vehículo.
               </p>
             </div>
             <div className="font-mono text-xs font-semibold text-[#0284C7] tabular-nums">
@@ -871,7 +910,6 @@ export const RouteServicesCalculator: React.FC<RouteServicesCalculatorProps> = (
             </div>
           </div>
 
-          {/* 2 Route Comparison Cards */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
             {routeComparison.map(({ route, breakdown }) => {
               const isSelected = route.id === activeRoute?.id;
@@ -912,11 +950,10 @@ export const RouteServicesCalculator: React.FC<RouteServicesCalculatorProps> = (
             })}
           </div>
 
-          {/* OpenStreetMap Route Trace Map */}
           <div className="rounded-md border border-[#CBD5E1] overflow-hidden">
             <div className="flex flex-wrap items-center justify-between gap-2 bg-[#0F2942] px-3.5 py-2 text-white">
               <span className="text-xs font-semibold truncate">
-                Trazado de Ruta Seleccionada (Ida y Vuelta) · {activeRoute?.name || 'Corredor'}
+                Trazado de Ruta Seleccionada · {activeRoute?.name || 'Corredor'}
               </span>
               <div className="inline-flex rounded-sm bg-[#091A2C] p-0.5">
                 <button
@@ -962,12 +999,11 @@ export const RouteServicesCalculator: React.FC<RouteServicesCalculatorProps> = (
               <span className="font-mono text-[10px]">
                 {activeRoute?.source === 'osrm'
                   ? 'Red vial OpenStreetMap (OSRM)'
-                  : 'Cálculo local offline'}
+                  : 'Cálculo geodésico local'}
               </span>
             </div>
           </div>
 
-          {/* Options & Distance Override */}
           <div className="flex flex-wrap items-center justify-between gap-3 rounded-sm border border-[#E2E8F0] bg-[#F8FAFC] px-3.5 py-2.5 text-xs">
             <div className="flex flex-wrap items-center gap-4">
               <label className="inline-flex items-center gap-2 font-medium text-[#0D1C2F] cursor-pointer">
@@ -1004,7 +1040,6 @@ export const RouteServicesCalculator: React.FC<RouteServicesCalculatorProps> = (
             </div>
           </div>
 
-          {/* 4-Column Viáticos Breakdown */}
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
             <div className="rounded-sm border border-[#E2E8F0] bg-white p-3">
               <div className="text-[11px] font-medium text-[#43474D]">Combustible (ida y vuelta)</div>
@@ -1059,7 +1094,7 @@ export const RouteServicesCalculator: React.FC<RouteServicesCalculatorProps> = (
           )}
         </div>
 
-        {/* Additive Services Summary & Total */}
+        {/* Additive Services Summary & Actions */}
         <div className="rounded-md border border-[#CBD5E1] bg-white p-4 space-y-3">
           <div className="flex items-center justify-between border-b border-[#E2E8F0] pb-2.5">
             <h3 className="flex items-center gap-2 text-xs font-bold text-[#0F2942]">
@@ -1117,29 +1152,31 @@ export const RouteServicesCalculator: React.FC<RouteServicesCalculatorProps> = (
           </div>
 
           <div className="flex flex-col sm:flex-row flex-wrap gap-2.5 pt-2">
-            <button
-              type="button"
-              onClick={handleApplyCalculation}
-              className="flex-1 inline-flex items-center justify-center gap-2 rounded-sm bg-[#F59E0B] px-4 py-2.5 text-xs font-bold text-[#0F2942] hover:bg-[#D97706] hover:text-white transition-colors min-h-[44px]"
-            >
-              <Send className="h-4 w-4" />
-              {uploadedKmz
-                ? 'Crear Levantamiento con esta Ruta'
-                : 'Aplicar Presupuesto al Levantamiento'}
-            </button>
+            {canEdit && (
+              <button
+                type="button"
+                onClick={handleApplyCalculation}
+                className="flex-1 inline-flex items-center justify-center gap-2 rounded-sm bg-[#F59E0B] px-4 py-2.5 text-xs font-bold text-[#0F2942] hover:bg-[#D97706] hover:text-white transition-colors min-h-[44px]"
+              >
+                <Send className="h-4 w-4" />
+                {uploadedKmz
+                  ? 'Crear Ruta desde este KMZ'
+                  : 'Aplicar Presupuesto y Servicios a Ruta'}
+              </button>
+            )}
 
-            {selectedSurvey && !uploadedKmz && (
+            {selectedRuta && !uploadedKmz && (
               <button
                 type="button"
                 onClick={handleLogAutomaticRouteExpenses}
                 className="inline-flex items-center justify-center gap-2 rounded-sm bg-[#0284C7] px-4 py-2.5 text-xs font-semibold text-white hover:bg-[#006398] transition-colors min-h-[44px]"
               >
                 <Receipt className="h-4 w-4" />
-                Adjuntar Viáticos de Ruta
+                Registrar Viáticos de Ruta
               </button>
             )}
 
-            {selectedSurvey && !uploadedKmz && onOpenExpenseModal && (
+            {selectedRuta && !uploadedKmz && onOpenExpenseModal && (
               <button
                 type="button"
                 onClick={onOpenExpenseModal}

@@ -10,20 +10,21 @@ import {
   Legend,
   Cell,
 } from 'recharts';
-import type { SurveyProject, ViaticoExpense } from '../types/geodesy';
+import { calcularGastoPorProyecto } from '../domain';
+import type { Proyecto, Viatico } from '../types/domain';
 import { formatRD } from '../utils/geodesy';
 
 interface ViaticosComparisonChartProps {
-  surveys: SurveyProject[];
-  expenses: ViaticoExpense[];
-  onSelectSurvey?: (surveyId: string) => void;
+  proyectos: Proyecto[];
+  viaticos: Viatico[];
+  onSelectProyecto?: (proyectoId: string) => void;
 }
 
 interface ChartDatum {
   id: string;
   shortCode: string;
-  parcelCode: string;
-  title: string;
+  codigoContrato: string;
+  nombre: string;
   presupuesto: number;
   gastoReal: number;
   overBudget: boolean;
@@ -42,10 +43,10 @@ const CustomChartTooltip: React.FC<CustomTooltipProps> = ({ active, payload }) =
   const diff = item.presupuesto - item.gastoReal;
 
   return (
-    <div className="rounded-md border border-[#CBD5E1] bg-white p-3 shadow-lg text-xs min-w-[220px]">
-      <div className="font-mono text-[11px] font-bold text-[#0284C7]">{item.parcelCode}</div>
-      <div className="font-semibold text-[#0D1C2F] mt-0.5 truncate max-w-[240px]">
-        {item.title}
+    <div className="rounded-md border border-[#CBD5E1] bg-white p-3 shadow-lg text-xs min-w-[230px]">
+      <div className="font-mono text-[11px] font-bold text-[#0284C7]">{item.codigoContrato}</div>
+      <div className="font-semibold text-[#0D1C2F] mt-0.5 truncate max-w-[250px]">
+        {item.nombre}
       </div>
       <div className="mt-2 space-y-1 border-t border-[#E2E8F0] pt-2">
         <div className="flex items-center justify-between gap-4">
@@ -55,7 +56,7 @@ const CustomChartTooltip: React.FC<CustomTooltipProps> = ({ active, payload }) =
           </span>
         </div>
         <div className="flex items-center justify-between gap-4">
-          <span className="text-[#43474D]">Gasto Real:</span>
+          <span className="text-[#43474D]">Gasto Real (Repartido):</span>
           <span
             className={`font-mono font-bold tabular-nums ${
               item.overBudget ? 'text-[#DC2626]' : 'text-[#0284C7]'
@@ -80,33 +81,33 @@ const CustomChartTooltip: React.FC<CustomTooltipProps> = ({ active, payload }) =
 };
 
 export const ViaticosComparisonChart: React.FC<ViaticosComparisonChartProps> = ({
-  surveys,
-  expenses,
-  onSelectSurvey,
+  proyectos,
+  viaticos,
+  onSelectProyecto,
 }) => {
-  const data = useMemo<ChartDatum[]>(() => {
-    const spentMap: Record<string, number> = {};
-    for (const exp of expenses) {
-      spentMap[exp.surveyId] = (spentMap[exp.surveyId] || 0) + exp.amountRD;
-    }
+  const { data, sinAsignarRD } = useMemo(() => {
+    const gastosMap = calcularGastoPorProyecto(viaticos);
+    const sinAsignar = gastosMap['sin_asignar']?.totalEjecutadoRD || 0;
 
-    return surveys
-      .filter((s) => s.status !== 'COBRADO')
-      .map((s) => {
-        const gastoReal = Math.round(spentMap[s.id] || 0);
-        const presupuesto = Math.round(s.budgetViaticosRD);
-        const shortPart = s.parcelCode.split('-').slice(-1)[0] || s.parcelCode.slice(0, 8);
+    const list: ChartDatum[] = proyectos
+      .filter((p) => p.estado !== 'cobrado')
+      .map((p) => {
+        const gastoReal = Math.round(gastosMap[p.id]?.totalEjecutadoRD || 0);
+        const presupuesto = Math.round(p.presupuestoViaticosRD);
+        const shortPart = p.codigoContrato.split('-').slice(-1)[0] || p.codigoContrato.slice(0, 8);
         return {
-          id: s.id,
+          id: p.id,
           shortCode: `P-${shortPart}`,
-          parcelCode: s.parcelCode,
-          title: s.title,
+          codigoContrato: p.codigoContrato,
+          nombre: p.nombre,
           presupuesto,
           gastoReal,
           overBudget: gastoReal > presupuesto,
         };
       });
-  }, [surveys, expenses]);
+
+    return { data: list, sinAsignarRD: sinAsignar };
+  }, [proyectos, viaticos]);
 
   return (
     <div className="rounded-md border border-[#E2E8F0] bg-white p-4 flex flex-col justify-between h-full">
@@ -116,9 +117,14 @@ export const ViaticosComparisonChart: React.FC<ViaticosComparisonChartProps> = (
             Presupuesto Viáticos vs. Gasto Real (Proyectos Activos)
           </h2>
           <p className="text-[11px] text-[#43474D]">
-            Comparativa por parcela en RD$ · Haz clic en una barra para inspeccionar
+            Comparativa según reparto exacto en RD$ (excluye rechazados)
           </p>
         </div>
+        {sinAsignarRD > 0 && (
+          <div className="font-mono text-[11px] font-semibold text-[#D97706]">
+            Sin asignar: {formatRD(sinAsignarRD)}
+          </div>
+        )}
       </div>
 
       {data.length === 0 ? (
@@ -134,8 +140,8 @@ export const ViaticosComparisonChart: React.FC<ViaticosComparisonChartProps> = (
               barGap={4}
               onClick={(state) => {
                 const idx = state?.activeTooltipIndex;
-                if (typeof idx === 'number' && data[idx] && onSelectSurvey) {
-                  onSelectSurvey(data[idx].id);
+                if (typeof idx === 'number' && data[idx] && onSelectProyecto) {
+                  onSelectProyecto(data[idx].id);
                 }
               }}
             >
@@ -153,7 +159,7 @@ export const ViaticosComparisonChart: React.FC<ViaticosComparisonChartProps> = (
                 tick={{ fontSize: 11, fill: '#43474D', fontFamily: 'JetBrains Mono, monospace' }}
                 axisLine={false}
                 tickLine={false}
-                width={40}
+                width={42}
               />
               <Tooltip content={<CustomChartTooltip />} cursor={{ fill: '#F1F5F9' }} />
               <Legend
@@ -176,10 +182,7 @@ export const ViaticosComparisonChart: React.FC<ViaticosComparisonChartProps> = (
                 maxBarSize={26}
               >
                 {data.map((entry) => (
-                  <Cell
-                    key={entry.id}
-                    fill={entry.overBudget ? '#DC2626' : '#0284C7'}
-                  />
+                  <Cell key={entry.id} fill={entry.overBudget ? '#DC2626' : '#0284C7'} />
                 ))}
               </Bar>
             </BarChart>

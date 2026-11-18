@@ -1,11 +1,13 @@
+export * from './domain';
+
 export type WorkflowStatus =
-  | 'COTIZADO'
-  | 'APROBADO'
-  | 'PROGRAMADO'
-  | 'EN CAMPO'
-  | 'PROCESANDO'
-  | 'ENTREGADO'
-  | 'COBRADO';
+  | 'cotizado'
+  | 'aprobado'
+  | 'programado'
+  | 'en_campo'
+  | 'procesando'
+  | 'entregado'
+  | 'cobrado';
 
 export type AreaUnit = 'm2' | 'ha' | 'tareas';
 
@@ -23,7 +25,7 @@ export type ExpenseMethod =
   | 'Dieta Automática'
   | 'Manual';
 
-export type UserRole = 'Coordinador' | 'Topógrafo';
+export type UserRole = 'admin' | 'coordinador' | 'tecnico';
 
 export interface GeoPoint {
   lat: number;
@@ -43,71 +45,4 @@ export interface KmzFeature {
   points: GeoPoint[];
   areaM2: number;
   perimeterM: number;
-}
-
-export interface SurveyProject {
-  id: string;
-  parcelCode: string;
-  title: string;
-  client: string;
-  province: string;
-  surveyor: string;
-  equipmentSerial: string;
-  status: WorkflowStatus;
-  scheduledDate: string;
-  updatedAt: string;
-  budgetViaticosRD: number;
-  contractValueRD: number;
-  kmzFileName: string;
-  features: KmzFeature[];
-  centroid: GeoPoint;
-  totalAreaM2: number;
-  totalPerimeterM: number;
-  syncStatus: 'synced' | 'pending' | 'conflict';
-  notes?: string;
-  selectedServices?: string[];
-  routeSummary?: {
-    routeName: string;
-    distanceOneWayKm: number;
-    durationMin: number;
-    tollsRD: number;
-    fuelRD: number;
-    vehicleLabel: string;
-  };
-}
-
-export interface ViaticoExpense {
-  id: string;
-  surveyId: string;
-  parcelCode: string;
-  surveyor: string;
-  category: ExpenseCategory;
-  merchant: string;
-  amountRD: number;
-  itbisRD: number;
-  ncf?: string;
-  dateIso: string;
-  timestampAST: string;
-  method: ExpenseMethod;
-  gpsCoords?: {
-    lat: number;
-    lon: number;
-    easting: number;
-    northing: number;
-  };
-  distanceKm?: number;
-  receiptThumbnail?: string;
-  pendingReceiptBase64?: string;
-  pendingReceiptMime?: string;
-  syncStatus: 'synced' | 'pending' | 'needs_ocr';
-  approved: boolean;
-  notes?: string;
-}
-
-export interface ConflictDetail {
-  type: 'surveyor' | 'equipment' | 'spatial';
-  message: string;
-  conflictingSurveyCode: string;
-  conflictingSurveyTitle: string;
-  overlapPct?: number;
 }

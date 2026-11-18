@@ -405,15 +405,202 @@ export function parseKmlText(kmlXml: string, fileName: string): ParsedKmzResult 
   };
 }
 
+export function parseGeoJsonText(jsonText: string, fileName: string): ParsedKmzResult {
+  let geo: unknown;
+  try {
+    geo = JSON.parse(jsonText);
+  } catch {
+    throw new Error('El archivo GeoJSON no contiene JSON válido.');
+  }
+
+  const obj = geo as {
+    type?: string;
+    name?: string;
+    features?: Array<{
+      type?: string;
+      properties?: Record<string, unknown> | null;
+      geometry?: { type?: string; coordinates?: unknown } | null;
+    }>;
+    geometry?: { type?: string; coordinates?: unknown } | null;
+    properties?: Record<string, unknown> | null;
+  };
+
+  const rawList =
+    obj?.type === 'FeatureCollection' && Array.isArray(obj.features)
+      ? obj.features
+      : obj?.type === 'Feature'
+      ? [obj]
+      : obj?.type && obj.geometry === undefined
+      ? [{ type: 'Feature', properties: {}, geometry: obj as { type?: string; coordinates?: unknown } }]
+      : [];
+
+  if (rawList.length === 0) {
+    throw new Error('El GeoJSON no contiene un FeatureCollection, Feature o geometría válida.');
+  }
+
+  const features: KmzFeature[] = [];
+  const mergedAttributes: Record<string, string> = {};
+
+  const toPoints = (ring: unknown): GeoPoint[] => {
+    if (!Array.isArray(ring)) return [];
+    const pts: GeoPoint[] = [];
+    for (const coord of ring) {
+      if (Array.isArray(coord) && coord.length >= 2) {
+        const lon = Number(coord[0]);
+        const lat = Number(coord[1]);
+        const elev = coord.length >= 3 && Number.isFinite(Number(coord[2])) ? Number(coord[2]) : 18;
+        if (Number.isFinite(lat) && Number.isFinite(lon)) {
+          pts.push(latLonToUtm19N(lat, lon, elev));
+        }
+      }
+    }
+    return pts;
+  };
+
+  rawList.forEach((feat, idx) => {
+    const geom = feat?.geometry;
+    if (!geom || !geom.type) return;
+    const props: Record<string, string> = {};
+    if (feat.properties && typeof feat.properties === 'object') {
+      for (const [k, v] of Object.entries(feat.properties)) {
+        if (v !== null && v !== undefined && String(v).trim()) {
+          props[k] = String(v).trim();
+          mergedAttributes[k] = String(v).trim();
+        }
+      }
+    }
+    const baseName = props.name || props.nombre || props.title || `Geometría ${idx + 1}`;
+
+    if (geom.type === 'Polygon' && Array.isArray(geom.coordinates)) {
+      const points = toPoints(geom.coordinates[0]);
+      if (points.length >= 3) {
+        features.push({
+          id: `gj-${idx}-${Date.now()}`,
+          name: baseName,
+          attributes: Object.keys(props).length ? props : undefined,
+          geometryType: 'Polygon',
+          points,
+          areaM2: computePolygonAreaM2(points),
+          perimeterM: computePerimeterM(points, true),
+        });
+      }
+    } else if (geom.type === 'MultiPolygon' && Array.isArray(geom.coordinates)) {
+      geom.coordinates.forEach((poly, pIdx) => {
+        if (Array.isArray(poly)) {
+          const points = toPoints(poly[0]);
+          if (points.length >= 3) {
+            features.push({
+              id: `gj-${idx}-${pIdx}-${Date.now()}`,
+              name: `${baseName} (${pIdx + 1})`,
+              attributes: Object.keys(props).length ? props : undefined,
+              geometryType: 'Polygon',
+              points,
+              areaM2: computePolygonAreaM2(points),
+              perimeterM: computePerimeterM(points, true),
+            });
+          }
+        }
+      });
+    } else if (geom.type === 'LineString' && Array.isArray(geom.coordinates)) {
+      const points = toPoints(geom.coordinates);
+      if (points.length >= 2) {
+        features.push({
+          id: `gj-${idx}-${Date.now()}`,
+          name: baseName,
+          attributes: Object.keys(props).length ? props : undefined,
+          geometryType: 'LineString',
+          points,
+          areaM2: 0,
+          perimeterM: computePerimeterM(points, false),
+        });
+      }
+    } else if (geom.type === 'Point' && Array.isArray(geom.coordinates)) {
+      const points = toPoints([geom.coordinates]);
+      if (points.length >= 1) {
+        features.push({
+          id: `gj-${idx}-${Date.now()}`,
+          name: baseName,
+          attributes: Object.keys(props).length ? props : undefined,
+          geometryType: 'Point',
+          points,
+          areaM2: 0,
+          perimeterM: 0,
+        });
+      }
+    }
+  });
+
+  if (features.length === 0) {
+    throw new Error('No se encontraron polígonos, líneas o puntos válidos en el GeoJSON.');
+  }
+
+  const allPoints = features.flatMap((f) => f.points);
+  const centroid = computeCentroid(allPoints);
+  const totalAreaM2 = features.reduce((sum, f) => sum + f.areaM2, 0);
+  const totalPerimeterM = features.reduce((sum, f) => sum + f.perimeterM, 0);
+  const estimatedViaticos = estimateViaticosFromKmz(features, centroid);
+  const geoLoc = inferDominicanLocationFromCoords(centroid.lat, centroid.lon);
+  const scheduledDate =
+    extractDateFromText(fileName) ||
+    findAttributeByKeys(mergedAttributes, ['fecha', 'date']) ||
+    new Date().toISOString().slice(0, 10);
+  const cleanBase = fileName.replace(/\.(geojson|json)$/i, '').trim();
+  const title = obj?.name || features[0]?.name || cleanBase;
+  const province =
+    findAttributeByKeys(mergedAttributes, ['provincia', 'province']) || geoLoc.province;
+  const client =
+    findAttributeByKeys(mergedAttributes, ['cliente', 'propietario', 'owner']) || '';
+  const attrParcel = findAttributeByKeys(mergedAttributes, ['parcela', 'codigo', 'dc', 'lote']);
+  const coordSuffix = String(
+    Math.abs(Math.round((centroid.easting + centroid.northing) % 10000))
+  ).padStart(4, '0');
+  const parcelCode = attrParcel
+    ? attrParcel.toUpperCase()
+    : `${geoLoc.dcPrefix}-PARC-${scheduledDate.slice(0, 4)}-${coordSuffix}`;
+
+  return {
+    fileName,
+    documentName: title,
+    features,
+    centroid,
+    totalAreaM2,
+    totalPerimeterM,
+    autoMeta: {
+      title,
+      parcelCode,
+      client,
+      province,
+      municipality: findAttributeByKeys(mergedAttributes, ['municipio', 'ubicacion', 'sector']),
+      surveyor: findAttributeByKeys(mergedAttributes, ['agrimensor', 'tecnico']),
+      scheduledDate,
+      notes: `Geometría importada desde GeoJSON (${features.length} elemento(s)).`,
+      extractedFields: ['GeoJSON UTM 19N', 'Superficie y Perímetro', 'Presupuesto de Viáticos'],
+    },
+    estimatedViaticos,
+  };
+}
+
 export async function parseKmzOrKmlFile(file: File): Promise<ParsedKmzResult> {
   const lower = file.name.toLowerCase();
+  if (lower.endsWith('.geojson') || lower.endsWith('.json')) {
+    const text = await file.text();
+    return parseGeoJsonText(text, file.name);
+  }
   if (lower.endsWith('.kml')) {
     const kmlText = await file.text();
     return parseKmlText(kmlText, file.name);
   }
+  if (!lower.endsWith('.kmz')) {
+    throw new Error('Formato no soportado. Sube un archivo .kmz, .kml o .geojson.');
+  }
 
-  const buffer = await file.arrayBuffer();
-  const zip = await JSZip.loadAsync(buffer);
+  let zip: JSZip;
+  try {
+    const buffer = await file.arrayBuffer();
+    zip = await JSZip.loadAsync(buffer);
+  } catch {
+    throw new Error('El archivo .kmz está corrupto o no es un paquete ZIP válido.');
+  }
   const kmlEntryName = Object.keys(zip.files).find((name) => name.toLowerCase().endsWith('.kml'));
 
   if (!kmlEntryName) {

@@ -2,20 +2,31 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   ArrowLeft,
   ArrowRight,
+  Building2,
   Camera,
   Check,
   CheckCircle2,
   Download,
   FileUp,
-  MapPin,
   Receipt,
   Route,
   Sparkles,
   UploadCloud,
   X,
 } from 'lucide-react';
-import { EQUIPMENT_ROSTER, SURVEYOR_ROSTER } from '../data/initialData';
-import type { AreaUnit, SurveyProject, ViaticoExpense, WorkflowStatus } from '../types/geodesy';
+import type {
+  AreaUnit,
+  CategoriaViatico,
+  Cliente,
+  Cuadrilla,
+  EquipoGNSS,
+  EstadoServicio,
+  Proyecto,
+  Ruta,
+  Servicio,
+  Vehiculo,
+  Viatico,
+} from '../types/domain';
 import {
   formatArea,
   formatPerimeter,
@@ -44,21 +55,55 @@ import { KmzOsmViewer } from './KmzOsmViewer';
 interface KmzImportModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onCreateSurvey: (
-    survey: SurveyProject,
-    options?: {
-      initialExpenses?: ViaticoExpense[];
-      openMobileExpenseAfter?: boolean;
-    }
-  ) => void;
+  clientes: Cliente[];
+  proyectos: Proyecto[];
+  vehiculos: Vehiculo[];
+  cuadrillas: Cuadrilla[];
+  equipos: EquipoGNSS[];
+  defaultProyectoId?: string;
   preloadedKmz?: ParsedKmzResult | null;
+  creadoPorUsuario: { id: string; nombre: string };
+  onCrearClienteYProyectoRapido: (datos: {
+    clienteIdExistente?: string;
+    clienteNombre: string;
+    clienteRnc: string;
+    clienteContacto: string;
+    proyectoNombre: string;
+    codigoContrato: string;
+    presupuestoViaticosRD: number;
+    valorContratoRD: number;
+  }) => Promise<Proyecto>;
+  onCreateRutaCompleta: (payload: {
+    proyectoId: string;
+    ruta: Omit<Ruta, 'id' | 'empresaId' | 'version' | 'updatedAt' | 'syncStatus'>;
+    servicios: Array<Omit<Servicio, 'id' | 'empresaId' | 'rutaId' | 'version' | 'updatedAt' | 'syncStatus'>>;
+    asignacionOpcional?: {
+      fechaInicio: string;
+      fechaFin: string;
+      cuadrillaId: string;
+      vehiculoIds: string[];
+      equipoIds: string[];
+    };
+    viaticosIniciales?: Array<
+      Omit<Viatico, 'id' | 'empresaId' | 'estadoAprobacion' | 'version' | 'updatedAt'>
+    >;
+    openMobileExpenseAfter?: boolean;
+  }) => Promise<void>;
 }
 
 export const KmzImportModal: React.FC<KmzImportModalProps> = ({
   isOpen,
   onClose,
-  onCreateSurvey,
+  clientes,
+  proyectos,
+  vehiculos,
+  cuadrillas,
+  equipos,
+  defaultProyectoId,
   preloadedKmz = null,
+  creadoPorUsuario,
+  onCrearClienteYProyectoRapido,
+  onCreateRutaCompleta,
 }) => {
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -66,42 +111,73 @@ export const KmzImportModal: React.FC<KmzImportModalProps> = ({
   const [parsed, setParsed] = useState<ParsedKmzResult | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [isParsing, setIsParsing] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
   const [previewUnit, setPreviewUnit] = useState<AreaUnit>('tareas');
   const [osmLocationTag, setOsmLocationTag] = useState<string | null>(null);
 
-  // Step 1 Metadata
+  // Proyecto destino (o creación inline rápida F2+F3)
+  const [modoProyecto, setModoProyecto] = useState<'existente' | 'nuevo'>(
+    proyectos.length > 0 ? 'existente' : 'nuevo'
+  );
+  const [proyectoId, setProyectoId] = useState<string>(defaultProyectoId || proyectos[0]?.id || '');
+  const [clienteIdExistente, setClienteIdExistente] = useState<string>(clientes[0]?.id || '');
+  const [nuevoClienteNombre, setNuevoClienteNombre] = useState('');
+  const [nuevoClienteRnc, setNuevoClienteRnc] = useState('');
+  const [nuevoClienteContacto, setNuevoClienteContacto] = useState('');
+  const [nuevoProyectoNombre, setNuevoProyectoNombre] = useState('');
+  const [nuevoCodigoContrato, setNuevoCodigoContrato] = useState(
+    `AIA-${new Date().getFullYear()}-${String(Math.floor(100 + Math.random() * 899))}`
+  );
+
+  // Step 1 Metadata de Ruta
   const [parcelCode, setParcelCode] = useState('');
-  const [title, setTitle] = useState('');
-  const [client, setClient] = useState('');
+  const [nombreRuta, setNombreRuta] = useState('');
+  const [ubicacion, setUbicacion] = useState('');
   const [province, setProvince] = useState('');
-  const [scheduledDate, setScheduledDate] = useState('2026-11-17');
-  const [notes, setNotes] = useState('');
+  const [fechaPrevista, setFechaPrevista] = useState(new Date().toISOString().slice(0, 10));
 
   // Step 2 Services + Route Calculation
   const [selectedServiceIds, setSelectedServiceIds] = useState<string[]>(['rtk', 'deslinde']);
   const [corridorKm, setCorridorKm] = useState<number>(1);
   const [terrain, setTerrain] = useState<TerrainType>('Llano');
-  const [vehicleId, setVehicleId] = useState<string>(VEHICLE_CATALOG[0].id);
+  const [vehiculoId, setVehiculoId] = useState<string>(vehiculos[0]?.id || VEHICLE_CATALOG[0].id);
   const [fuelPricePerGalRD, setFuelPricePerGalRD] = useState<number>(
-    VEHICLE_CATALOG[0].fuelPricePerGalRD
+    vehiculos[0]?.precioGalonRD || VEHICLE_CATALOG[0].fuelPricePerGalRD
   );
-  const [kmPerGal, setKmPerGal] = useState<number>(VEHICLE_CATALOG[0].kmPerGal);
+  const [kmPerGal, setKmPerGal] = useState<number>(
+    vehiculos[0]?.kmPorGal || VEHICLE_CATALOG[0].kmPerGal
+  );
   const [routes, setRoutes] = useState<RouteAlternative[]>([]);
   const [selectedRouteId, setSelectedRouteId] = useState<'economica' | 'rapida'>('economica');
   const [includeTolls, setIncludeTolls] = useState(true);
   const [includeLodging, setIncludeLodging] = useState(false);
   const [isRouting, setIsRouting] = useState(false);
 
-  // Step 3 Assignment & Viáticos Attachment
-  const [surveyor, setSurveyor] = useState(SURVEYOR_ROSTER[0]);
-  const [equipmentSerial, setEquipmentSerial] = useState(EQUIPMENT_ROSTER[0]);
-  const [status, setStatus] = useState<WorkflowStatus>('PROGRAMADO');
+  // Step 3 Programación opcional & Viáticos iniciales
+  const [programarAhora, setProgramarAhora] = useState(true);
+  const [cuadrillaId, setCuadrillaId] = useState(cuadrillas[0]?.id || '');
+  const [equipoId, setEquipoId] = useState(
+    equipos.find((e) => e.estado === 'disponible')?.id || equipos[0]?.id || ''
+  );
+  const [fechaFinAsignacion, setFechaFinAsignacion] = useState(fechaPrevista);
+  const [estadoInicialServicio, setEstadoInicialServicio] = useState<EstadoServicio>('cotizado');
   const [attachRouteViaticos, setAttachRouteViaticos] = useState(true);
 
-  const activeVehicle = useMemo(
-    () => VEHICLE_CATALOG.find((v) => v.id === vehicleId) ?? VEHICLE_CATALOG[0],
-    [vehicleId]
-  );
+  const activeVehicleConfig = useMemo(() => {
+    const vEmpresa = vehiculos.find((v) => v.id === vehiculoId);
+    if (vEmpresa) {
+      return {
+        id: vEmpresa.id,
+        label: `${vEmpresa.etiqueta} (${vEmpresa.placa})`,
+        fuelName: vEmpresa.tipoCombustible,
+        fuelPricePerGalRD: vEmpresa.precioGalonRD,
+        kmPerGal: vEmpresa.kmPorGal,
+        maintenancePerKmRD: vEmpresa.mantenimientoPorKmRD,
+      };
+    }
+    const vFallback = VEHICLE_CATALOG.find((v) => v.id === vehiculoId) ?? VEHICLE_CATALOG[0];
+    return vFallback;
+  }, [vehiculos, vehiculoId]);
 
   const activeRoute = useMemo(
     () => routes.find((r) => r.id === selectedRouteId) ?? routes[0],
@@ -136,7 +212,7 @@ export const KmzImportModal: React.FC<KmzImportModalProps> = ({
       includeLodging,
       fuelPricePerGalRD,
       kmPerGal,
-      maintenancePerKmRD: activeVehicle.maintenancePerKmRD,
+      maintenancePerKmRD: activeVehicleConfig.maintenancePerKmRD,
       areaM2: parsed?.totalAreaM2 ?? 2500,
       terrain,
       serviceCount: selectedServiceIds.length,
@@ -149,7 +225,7 @@ export const KmzImportModal: React.FC<KmzImportModalProps> = ({
     includeLodging,
     fuelPricePerGalRD,
     kmPerGal,
-    activeVehicle.maintenancePerKmRD,
+    activeVehicleConfig.maintenancePerKmRD,
     terrain,
     selectedServiceIds.length,
   ]);
@@ -161,21 +237,19 @@ export const KmzImportModal: React.FC<KmzImportModalProps> = ({
     setOsmLocationTag(null);
 
     const meta = res.autoMeta;
-    setTitle(meta.title);
+    setNombreRuta(meta.title);
     setParcelCode(template?.parcelCode || meta.parcelCode);
     setProvince(template?.province || meta.province);
-    setClient(meta.client || (template ? 'Inversiones Territoriales Caribe SRL' : ''));
-    setScheduledDate(meta.scheduledDate);
-    setNotes(meta.municipality ? `Ubicación: ${meta.municipality} · ${meta.notes}` : meta.notes);
-
-    if (meta.surveyor) {
-      const matched = SURVEYOR_ROSTER.find((s) =>
-        s.toLowerCase().includes(meta.surveyor!.toLowerCase())
-      );
-      if (matched) setSurveyor(matched);
+    setUbicacion(meta.municipality ? `${meta.municipality}, ${meta.province}` : meta.province);
+    setFechaPrevista(meta.scheduledDate);
+    setFechaFinAsignacion(meta.scheduledDate);
+    if (!nuevoProyectoNombre) {
+      setNuevoProyectoNombre(meta.title);
+    }
+    if (!nuevoClienteNombre && meta.client) {
+      setNuevoClienteNombre(meta.client);
     }
 
-    // Fetch optimal OSRM routes for Step 2
     setIsRouting(true);
     fetchOptimalRoutesOSM(res.centroid.lat, res.centroid.lon)
       .then((r) => {
@@ -188,7 +262,6 @@ export const KmzImportModal: React.FC<KmzImportModalProps> = ({
       })
       .finally(() => setIsRouting(false));
 
-    // Enrich province/municipality from OpenStreetMap Nominatim
     const osmLoc = await reverseGeocodeOSM(res.centroid.lat, res.centroid.lon);
     if (osmLoc.source === 'osm') {
       if (!template && !res.autoMeta.extractedFields.includes('Provincia (KML)')) {
@@ -197,12 +270,16 @@ export const KmzImportModal: React.FC<KmzImportModalProps> = ({
       const locParts = [osmLoc.locality, osmLoc.municipality, osmLoc.province].filter(Boolean);
       const locLabel = locParts.join(', ');
       setOsmLocationTag(locLabel);
-      setNotes((prev) => {
-        if (prev.includes(locLabel)) return prev;
-        return prev ? `OSM: ${locLabel} · ${prev}` : `Ubicación OSM: ${locLabel}`;
-      });
+      setUbicacion(locLabel);
     }
   };
+
+  useEffect(() => {
+    if (isOpen && defaultProyectoId) {
+      setProyectoId(defaultProyectoId);
+      setModoProyecto('existente');
+    }
+  }, [isOpen, defaultProyectoId]);
 
   useEffect(() => {
     if (isOpen && preloadedKmz) {
@@ -221,7 +298,9 @@ export const KmzImportModal: React.FC<KmzImportModalProps> = ({
       const result = await parseKmzOrKmlFile(file);
       await applyParsedResult(result);
     } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : 'No se pudo procesar el archivo KMZ/KML.');
+      setError(
+        err instanceof Error ? err.message : 'No se pudo procesar el archivo KMZ/KML/GeoJSON.'
+      );
     } finally {
       setIsParsing(false);
     }
@@ -251,26 +330,28 @@ export const KmzImportModal: React.FC<KmzImportModalProps> = ({
     URL.revokeObjectURL(url);
   };
 
-  const buildInitialRouteExpenses = (surveyId: string, finalParcelCode: string): ViaticoExpense[] => {
+  const buildInitialRouteViaticos = (
+    targetProyectoId: string
+  ): Array<Omit<Viatico, 'id' | 'empresaId' | 'estadoAprobacion' | 'version' | 'updatedAt'>> => {
     if (!attachRouteViaticos || !parsed) return [];
     const now = new Date();
-    const dateIso = scheduledDate || now.toISOString().slice(0, 10);
+    const dateIso = fechaPrevista || now.toISOString().slice(0, 10);
     const tsAST = formatSantoDomingoAST(now);
-    const list: ViaticoExpense[] = [];
+    const list: Array<
+      Omit<Viatico, 'id' | 'empresaId' | 'estadoAprobacion' | 'version' | 'updatedAt'>
+    > = [];
 
     if (routeBreakdown.fuelRD > 0) {
       list.push({
-        id: `exp-init-fuel-${Date.now()}`,
-        surveyId,
-        parcelCode: finalParcelCode,
-        surveyor,
-        category: 'Combustible',
-        merchant: `Combustible Ruta · ${activeRoute?.name || 'Traslado Campo'}`,
-        amountRD: routeBreakdown.fuelRD,
-        itbisRD: 0,
-        dateIso,
+        creadoPorUsuarioId: creadoPorUsuario.id,
+        creadoPorNombre: creadoPorUsuario.nombre,
+        fechaIso: dateIso,
         timestampAST: tsAST,
-        method: 'GPS Ruta',
+        categoria: 'Combustible' as CategoriaViatico,
+        comercio: `Combustible Ruta · ${activeRoute?.name || 'Traslado Campo'}`,
+        montoRD: routeBreakdown.fuelRD,
+        itbisRD: 0,
+        metodo: 'GPS Ruta',
         distanceKm: routeBreakdown.roundTripKm,
         gpsCoords: {
           lat: parsed.centroid.lat,
@@ -278,103 +359,142 @@ export const KmzImportModal: React.FC<KmzImportModalProps> = ({
           easting: parsed.centroid.easting,
           northing: parsed.centroid.northing,
         },
+        repartos: [{ proyectoId: targetProyectoId, montoRD: routeBreakdown.fuelRD }],
+        notas: `${routeBreakdown.roundTripKm} km ida y vuelta (${routeBreakdown.gallonsNeeded} gal)`,
         syncStatus: 'pending',
-        approved: false,
-        notes: `${routeBreakdown.roundTripKm} km ida y vuelta (${routeBreakdown.gallonsNeeded} gal)`,
       });
     }
 
     if (routeBreakdown.tollsRD > 0) {
       list.push({
-        id: `exp-init-toll-${Date.now() + 1}`,
-        surveyId,
-        parcelCode: finalParcelCode,
-        surveyor,
-        category: 'Peaje',
-        merchant: `RD Vial — ${activeRoute?.tollNote || 'Peajes Ruta'}`,
-        amountRD: routeBreakdown.tollsRD,
-        itbisRD: 0,
-        dateIso,
+        creadoPorUsuarioId: creadoPorUsuario.id,
+        creadoPorNombre: creadoPorUsuario.nombre,
+        fechaIso: dateIso,
         timestampAST: tsAST,
-        method: 'GPS Ruta',
+        categoria: 'Peaje' as CategoriaViatico,
+        comercio: `RD Vial — ${activeRoute?.tollNote || 'Peajes Ruta'}`,
+        montoRD: routeBreakdown.tollsRD,
+        itbisRD: 0,
+        metodo: 'GPS Ruta',
         distanceKm: routeBreakdown.roundTripKm,
+        gpsCoords: {
+          lat: parsed.centroid.lat,
+          lon: parsed.centroid.lon,
+          easting: parsed.centroid.easting,
+          northing: parsed.centroid.northing,
+        },
+        repartos: [{ proyectoId: targetProyectoId, montoRD: routeBreakdown.tollsRD }],
+        notas: 'Peajes ida y vuelta',
         syncStatus: 'pending',
-        approved: false,
-        notes: `Peajes ida y vuelta`,
       });
     }
 
     if (routeBreakdown.perDiemRD > 0) {
       list.push({
-        id: `exp-init-diet-${Date.now() + 2}`,
-        surveyId,
-        parcelCode: finalParcelCode,
-        surveyor,
-        category: 'Dieta',
-        merchant: `Dieta Cuadrilla (${routeBreakdown.fieldDays} día(s))`,
-        amountRD: routeBreakdown.perDiemRD,
-        itbisRD: 0,
-        dateIso,
+        creadoPorUsuarioId: creadoPorUsuario.id,
+        creadoPorNombre: creadoPorUsuario.nombre,
+        fechaIso: dateIso,
         timestampAST: tsAST,
-        method: 'Dieta Automática',
+        categoria: 'Dieta' as CategoriaViatico,
+        comercio: `Dieta Cuadrilla (${routeBreakdown.fieldDays} día(s))`,
+        montoRD: routeBreakdown.perDiemRD,
+        itbisRD: 0,
+        metodo: 'Dieta Automática',
+        repartos: [{ proyectoId: targetProyectoId, montoRD: routeBreakdown.perDiemRD }],
+        notas: `Terreno ${terrain} · Servicios: ${selectedServiceIds.join(', ')}`,
         syncStatus: 'pending',
-        approved: false,
-        notes: `Terreno ${terrain} · Servicios: ${selectedServiceIds.join(', ')}`,
       });
     }
 
     return list;
   };
 
-  const finalizeSurvey = (openMobileExpenseAfter: boolean) => {
+  const finalizeRuta = async (openMobileExpenseAfter: boolean) => {
     if (!parsed) {
-      setError('Carga primero un archivo .KMZ o .KML.');
+      setError('Carga primero un archivo .KMZ, .KML o .GeoJSON.');
       setStep(1);
       return;
     }
 
-    const surveyId = `srv-${Date.now()}`;
-    const finalParcelCode = parcelCode.trim() || parsed.autoMeta.parcelCode;
+    setError(null);
+    setIsSaving(true);
+    try {
+      let targetProyectoId = proyectoId;
+      if (modoProyecto === 'nuevo' || !targetProyectoId) {
+        if (!nuevoProyectoNombre.trim()) {
+          throw new Error('Indica el nombre del nuevo proyecto.');
+        }
+        const creado = await onCrearClienteYProyectoRapido({
+          clienteIdExistente: clienteIdExistente || undefined,
+          clienteNombre: nuevoClienteNombre.trim() || 'Cliente por confirmar',
+          clienteRnc: nuevoClienteRnc.trim() || 'N/A',
+          clienteContacto: nuevoClienteContacto.trim() || 'Contacto principal',
+          proyectoNombre: nuevoProyectoNombre.trim(),
+          codigoContrato: nuevoCodigoContrato.trim() || `AIA-${Date.now().toString().slice(-4)}`,
+          presupuestoViaticosRD: routeBreakdown.totalViaticosRD,
+          valorContratoRD: totalContractRD,
+        });
+        targetProyectoId = creado.id;
+      }
 
-    const newSurvey: SurveyProject = {
-      id: surveyId,
-      parcelCode: finalParcelCode,
-      title: title.trim() || parsed.documentName,
-      client: client.trim() || 'Propietario por confirmar',
-      province: province.trim() || parsed.autoMeta.province,
-      surveyor,
-      equipmentSerial,
-      status,
-      scheduledDate,
-      updatedAt: new Date().toISOString(),
-      budgetViaticosRD: routeBreakdown.totalViaticosRD,
-      contractValueRD: totalContractRD,
-      kmzFileName: parsed.fileName,
-      features: parsed.features,
-      centroid: parsed.centroid,
-      totalAreaM2: parsed.totalAreaM2,
-      totalPerimeterM: parsed.totalPerimeterM,
-      syncStatus: 'pending',
-      notes: notes.trim() || undefined,
-      selectedServices: selectedServiceIds,
-      routeSummary: {
-        routeName: activeRoute?.name || 'Ruta Directa',
-        distanceOneWayKm: activeRoute?.distanceOneWayKm ?? parsed.estimatedViaticos.distanceFromBaseKm,
-        durationMin: activeRoute?.durationMin ?? 35,
-        tollsRD: routeBreakdown.tollsRD,
-        fuelRD: routeBreakdown.fuelRD,
-        vehicleLabel: activeVehicle.label,
-      },
-    };
+      const finalParcelCode = parcelCode.trim() || parsed.autoMeta.parcelCode;
+      const serviciosPayload: Array<
+        Omit<Servicio, 'id' | 'empresaId' | 'rutaId' | 'version' | 'updatedAt' | 'syncStatus'>
+      > = servicesSummary.items.map((item) => ({
+        tipoServicioId: item.id,
+        nombre: item.name,
+        cotizacionRD: item.totalRD,
+        estado: estadoInicialServicio,
+        notas: `${item.subtitle} · Terreno ${terrain}`,
+      }));
 
-    const initialExpenses = buildInitialRouteExpenses(surveyId, finalParcelCode);
-    onCreateSurvey(newSurvey, {
-      initialExpenses,
-      openMobileExpenseAfter,
-    });
-    setParsed(null);
-    setStep(1);
-    onClose();
+      await onCreateRutaCompleta({
+        proyectoId: targetProyectoId,
+        ruta: {
+          proyectoId: targetProyectoId,
+          nombre: nombreRuta.trim() || parsed.documentName,
+          codigoParcela: finalParcelCode,
+          ubicacion: ubicacion.trim() || province || 'República Dominicana',
+          provincia: province.trim() || parsed.autoMeta.province,
+          fechaPrevista,
+          kmzFileName: parsed.fileName,
+          features: parsed.features,
+          centroid: parsed.centroid,
+          totalAreaM2: parsed.totalAreaM2,
+          totalPerimeterM: parsed.totalPerimeterM,
+          routeSummary: {
+            routeName: activeRoute?.name || 'Ruta Directa',
+            distanceOneWayKm:
+              activeRoute?.distanceOneWayKm ?? parsed.estimatedViaticos.distanceFromBaseKm,
+            durationMin: activeRoute?.durationMin ?? 35,
+            tollsRD: routeBreakdown.tollsRD,
+            fuelRD: routeBreakdown.fuelRD,
+            vehicleLabel: activeVehicleConfig.label,
+          },
+        },
+        servicios: serviciosPayload,
+        asignacionOpcional:
+          programarAhora && cuadrillaId
+            ? {
+                fechaInicio: fechaPrevista,
+                fechaFin: fechaFinAsignacion >= fechaPrevista ? fechaFinAsignacion : fechaPrevista,
+                cuadrillaId,
+                vehiculoIds: vehiculoId && vehiculos.some((v) => v.id === vehiculoId) ? [vehiculoId] : [],
+                equipoIds: equipoId ? [equipoId] : [],
+              }
+            : undefined,
+        viaticosIniciales: buildInitialRouteViaticos(targetProyectoId),
+        openMobileExpenseAfter,
+      });
+
+      setParsed(null);
+      setStep(1);
+      onClose();
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'No se pudo guardar la ruta KMZ.');
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   return (
@@ -385,10 +505,10 @@ export const KmzImportModal: React.FC<KmzImportModalProps> = ({
           <div className="flex items-center justify-between gap-3">
             <div>
               <h2 className="text-base font-bold text-[#0D1C2F]">
-                Flujo de Levantamiento KMZ y Viáticos
+                Nueva Ruta desde Archivo KMZ / KML / GeoJSON
               </h2>
               <p className="text-xs text-[#43474D]">
-                Carga el polígono, suma servicios, calcula la ruta vial y adjunta los viáticos en 3 pasos.
+                Importa geometría, suma servicios al proyecto, calcula ruta OSM y adjunta viáticos.
               </p>
             </div>
             <button
@@ -404,9 +524,9 @@ export const KmzImportModal: React.FC<KmzImportModalProps> = ({
           <div className="grid grid-cols-3 gap-2">
             {(
               [
-                { num: 1, label: '1. Polígono KMZ' },
+                { num: 1, label: '1. Polígono y Proyecto' },
                 { num: 2, label: '2. Servicios y Ruta' },
-                { num: 3, label: '3. Brigada y Viáticos' },
+                { num: 3, label: '3. Cuadrilla y Viáticos' },
               ] as const
             ).map((item) => {
               const isActive = step === item.num;
@@ -441,9 +561,137 @@ export const KmzImportModal: React.FC<KmzImportModalProps> = ({
             </div>
           )}
 
-          {/* STEP 1: KMZ UPLOAD, AUTO-FILL & OSM PREVIEW */}
+          {/* STEP 1: KMZ/GeoJSON UPLOAD + PROYECTO TARGET */}
           {step === 1 && (
             <div className="space-y-4">
+              {/* Proyecto selector / inline creator */}
+              <div className="rounded-sm border border-[#CBD5E1] bg-[#F8FAFC] p-3.5 space-y-3 text-xs">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <span className="inline-flex items-center gap-1.5 font-bold text-[#0F2942]">
+                    <Building2 className="h-3.5 w-3.5 text-[#0284C7]" />
+                    Proyecto al que pertenece esta Ruta
+                  </span>
+                  <div className="inline-flex rounded-sm border border-[#CBD5E1] bg-white p-0.5">
+                    <button
+                      type="button"
+                      disabled={proyectos.length === 0}
+                      onClick={() => setModoProyecto('existente')}
+                      className={`rounded-sm px-2.5 py-1 text-[11px] font-semibold disabled:opacity-40 ${
+                        modoProyecto === 'existente'
+                          ? 'bg-[#0F2942] text-white'
+                          : 'text-[#43474D]'
+                      }`}
+                    >
+                      Proyecto existente
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setModoProyecto('nuevo')}
+                      className={`rounded-sm px-2.5 py-1 text-[11px] font-semibold ${
+                        modoProyecto === 'nuevo' ? 'bg-[#0F2942] text-white' : 'text-[#43474D]'
+                      }`}
+                    >
+                      + Nuevo proyecto
+                    </button>
+                  </div>
+                </div>
+
+                {modoProyecto === 'existente' ? (
+                  <select
+                    value={proyectoId}
+                    onChange={(e) => setProyectoId(e.target.value)}
+                    className="w-full rounded-sm border border-[#CBD5E1] bg-white px-3 py-2 text-xs text-[#0D1C2F]"
+                  >
+                    {proyectos.map((p) => (
+                      <option key={p.id} value={p.id}>
+                        {p.codigoContrato} — {p.nombre}
+                      </option>
+                    ))}
+                  </select>
+                ) : (
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                    <div>
+                      <label className="block font-semibold text-[#334155] mb-1">
+                        Nombre del Proyecto
+                      </label>
+                      <input
+                        type="text"
+                        value={nuevoProyectoNombre}
+                        onChange={(e) => setNuevoProyectoNombre(e.target.value)}
+                        placeholder="Ej. Deslinde Costa Este"
+                        className="w-full rounded-sm border border-[#CBD5E1] bg-white px-2.5 py-1.5 text-xs"
+                      />
+                    </div>
+                    <div>
+                      <label className="block font-semibold text-[#334155] mb-1">
+                        Código de Contrato
+                      </label>
+                      <input
+                        type="text"
+                        value={nuevoCodigoContrato}
+                        onChange={(e) => setNuevoCodigoContrato(e.target.value)}
+                        className="w-full rounded-sm border border-[#CBD5E1] bg-white px-2.5 py-1.5 font-mono text-xs"
+                      />
+                    </div>
+                    {clientes.length > 0 && (
+                      <div>
+                        <label className="block font-semibold text-[#334155] mb-1">
+                          Cliente existente (opcional)
+                        </label>
+                        <select
+                          value={clienteIdExistente}
+                          onChange={(e) => setClienteIdExistente(e.target.value)}
+                          className="w-full rounded-sm border border-[#CBD5E1] bg-white px-2.5 py-1.5 text-xs"
+                        >
+                          <option value="">-- Crear cliente nuevo --</option>
+                          {clientes.map((c) => (
+                            <option key={c.id} value={c.id}>
+                              {c.nombre} ({c.rnc})
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                    )}
+                    {!clienteIdExistente && (
+                      <>
+                        <div>
+                          <label className="block font-semibold text-[#334155] mb-1">
+                            Nombre Nuevo Cliente
+                          </label>
+                          <input
+                            type="text"
+                            value={nuevoClienteNombre}
+                            onChange={(e) => setNuevoClienteNombre(e.target.value)}
+                            placeholder="Razón social o propietario"
+                            className="w-full rounded-sm border border-[#CBD5E1] bg-white px-2.5 py-1.5 text-xs"
+                          />
+                        </div>
+                        <div>
+                          <label className="block font-semibold text-[#334155] mb-1">RNC / Cédula</label>
+                          <input
+                            type="text"
+                            value={nuevoClienteRnc}
+                            onChange={(e) => setNuevoClienteRnc(e.target.value)}
+                            placeholder="1-31-00000-0"
+                            className="w-full rounded-sm border border-[#CBD5E1] bg-white px-2.5 py-1.5 font-mono text-xs"
+                          />
+                        </div>
+                        <div>
+                          <label className="block font-semibold text-[#334155] mb-1">Contacto</label>
+                          <input
+                            type="text"
+                            value={nuevoClienteContacto}
+                            onChange={(e) => setNuevoClienteContacto(e.target.value)}
+                            placeholder="Nombre de contacto"
+                            className="w-full rounded-sm border border-[#CBD5E1] bg-white px-2.5 py-1.5 text-xs"
+                          />
+                        </div>
+                      </>
+                    )}
+                  </div>
+                )}
+              </div>
+
               <div
                 onDragOver={(e) => e.preventDefault()}
                 onDrop={(e) => {
@@ -457,7 +705,7 @@ export const KmzImportModal: React.FC<KmzImportModalProps> = ({
                 <input
                   ref={fileInputRef}
                   type="file"
-                  accept=".kmz,.kml"
+                  accept=".kmz,.kml,.geojson,.json"
                   className="hidden"
                   onChange={(e) => {
                     const f = e.target.files?.[0];
@@ -467,11 +715,11 @@ export const KmzImportModal: React.FC<KmzImportModalProps> = ({
                 <UploadCloud className="mx-auto h-7 w-7 text-[#0284C7]" />
                 <p className="mt-1.5 text-sm font-semibold text-[#0F2942]">
                   {isParsing
-                    ? 'Descomprimiendo KMZ, proyectando UTM 19N y consultando OpenStreetMap...'
-                    : 'Arrastra tu archivo .KMZ o .KML aquí, o haz clic para seleccionarlo'}
+                    ? 'Procesando geometría, proyectando UTM 19N y consultando OpenStreetMap...'
+                    : 'Arrastra tu archivo .KMZ, .KML o .GeoJSON aquí'}
                 </p>
                 <p className="mt-0.5 text-xs text-[#43474D]">
-                  Extrae polígonos, ExtendedData, fecha, provincia y área automáticamente
+                  Extrae polígonos/líneas, código parcelario, fecha, provincia y área automáticamente
                 </p>
               </div>
 
@@ -507,10 +755,11 @@ export const KmzImportModal: React.FC<KmzImportModalProps> = ({
                     <div className="flex items-center justify-between font-semibold text-[#15803D]">
                       <span className="inline-flex items-center gap-1.5">
                         <CheckCircle2 className="h-4 w-4" />
-                        KMZ procesado: {parsed.fileName}
+                        Archivo procesado: {parsed.fileName}
                       </span>
                       <span className="font-mono text-[11px]">
-                        {formatArea(parsed.totalAreaM2, 'tareas')} · {formatPerimeter(parsed.totalPerimeterM)}
+                        {formatArea(parsed.totalAreaM2, 'tareas')} ·{' '}
+                        {formatPerimeter(parsed.totalPerimeterM)}
                       </span>
                     </div>
                     <div className="flex items-center gap-1.5 text-[11px] text-[#166534]">
@@ -536,7 +785,9 @@ export const KmzImportModal: React.FC<KmzImportModalProps> = ({
 
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
                     <div>
-                      <label className="block font-semibold text-[#334155] mb-1">Código Catastral</label>
+                      <label className="block font-semibold text-[#334155] mb-1">
+                        Código Catastral / Parcela
+                      </label>
                       <input
                         type="text"
                         value={parcelCode}
@@ -545,21 +796,24 @@ export const KmzImportModal: React.FC<KmzImportModalProps> = ({
                       />
                     </div>
                     <div>
-                      <label className="block font-semibold text-[#334155] mb-1">Nombre del Levantamiento</label>
+                      <label className="block font-semibold text-[#334155] mb-1">
+                        Nombre de la Ruta / Locación
+                      </label>
                       <input
                         type="text"
-                        value={title}
-                        onChange={(e) => setTitle(e.target.value)}
+                        value={nombreRuta}
+                        onChange={(e) => setNombreRuta(e.target.value)}
                         className="w-full rounded-sm border border-[#CBD5E1] px-3 py-2 text-xs text-[#0D1C2F]"
                       />
                     </div>
                     <div>
-                      <label className="block font-semibold text-[#334155] mb-1">Cliente / Propietario</label>
+                      <label className="block font-semibold text-[#334155] mb-1">
+                        Ubicación / Sector
+                      </label>
                       <input
                         type="text"
-                        value={client}
-                        onChange={(e) => setClient(e.target.value)}
-                        placeholder="Extraído del KML o ingresar si no consta"
+                        value={ubicacion}
+                        onChange={(e) => setUbicacion(e.target.value)}
                         className="w-full rounded-sm border border-[#CBD5E1] px-3 py-2 text-xs text-[#0D1C2F]"
                       />
                     </div>
@@ -573,21 +827,17 @@ export const KmzImportModal: React.FC<KmzImportModalProps> = ({
                       />
                     </div>
                     <div>
-                      <label className="block font-semibold text-[#334155] mb-1">Fecha Programada</label>
+                      <label className="block font-semibold text-[#334155] mb-1">
+                        Fecha Prevista de Campo
+                      </label>
                       <input
                         type="date"
-                        value={scheduledDate}
-                        onChange={(e) => setScheduledDate(e.target.value)}
+                        value={fechaPrevista}
+                        onChange={(e) => {
+                          setFechaPrevista(e.target.value);
+                          setFechaFinAsignacion(e.target.value);
+                        }}
                         className="w-full rounded-sm border border-[#CBD5E1] px-3 py-2 font-mono text-xs text-[#0D1C2F]"
-                      />
-                    </div>
-                    <div>
-                      <label className="block font-semibold text-[#334155] mb-1">Notas de Campo</label>
-                      <input
-                        type="text"
-                        value={notes}
-                        onChange={(e) => setNotes(e.target.value)}
-                        className="w-full rounded-sm border border-[#CBD5E1] px-3 py-2 text-xs text-[#0D1C2F]"
                       />
                     </div>
                   </div>
@@ -640,7 +890,11 @@ export const KmzImportModal: React.FC<KmzImportModalProps> = ({
                           </span>
                           <div className="min-w-0">
                             <div className="text-xs font-bold">{svc.name}</div>
-                            <div className={`text-[11px] ${checked ? 'text-[#CBD5E1]' : 'text-[#43474D]'}`}>
+                            <div
+                              className={`text-[11px] ${
+                                checked ? 'text-[#CBD5E1]' : 'text-[#43474D]'
+                              }`}
+                            >
                               {svc.subtitle}
                             </div>
                           </div>
@@ -696,24 +950,39 @@ export const KmzImportModal: React.FC<KmzImportModalProps> = ({
                   </div>
                 </div>
                 <div>
-                  <label className="block font-bold text-[#0F2942] mb-1">Vehículo de Cuadrilla</label>
+                  <label className="block font-bold text-[#0F2942] mb-1">
+                    Vehículo de la Empresa
+                  </label>
                   <select
-                    value={vehicleId}
+                    value={vehiculoId}
                     onChange={(e) => {
-                      setVehicleId(e.target.value);
-                      const v = VEHICLE_CATALOG.find((x) => x.id === e.target.value);
-                      if (v) {
-                        setFuelPricePerGalRD(v.fuelPricePerGalRD);
-                        setKmPerGal(v.kmPerGal);
+                      const nextId = e.target.value;
+                      setVehiculoId(nextId);
+                      const vEmp = vehiculos.find((x) => x.id === nextId);
+                      if (vEmp) {
+                        setFuelPricePerGalRD(vEmp.precioGalonRD);
+                        setKmPerGal(vEmp.kmPorGal);
+                      } else {
+                        const vCat = VEHICLE_CATALOG.find((x) => x.id === nextId);
+                        if (vCat) {
+                          setFuelPricePerGalRD(vCat.fuelPricePerGalRD);
+                          setKmPerGal(vCat.kmPerGal);
+                        }
                       }
                     }}
                     className="w-full rounded-sm border border-[#CBD5E1] bg-white px-2.5 py-2 text-xs"
                   >
-                    {VEHICLE_CATALOG.map((v) => (
-                      <option key={v.id} value={v.id}>
-                        {v.label}
-                      </option>
-                    ))}
+                    {vehiculos.length > 0
+                      ? vehiculos.map((v) => (
+                          <option key={v.id} value={v.id}>
+                            {v.etiqueta} ({v.placa}){v.estado !== 'disponible' ? ` [${v.estado}]` : ''}
+                          </option>
+                        ))
+                      : VEHICLE_CATALOG.map((v) => (
+                          <option key={v.id} value={v.id}>
+                            {v.label}
+                          </option>
+                        ))}
                   </select>
                 </div>
               </div>
@@ -739,7 +1008,7 @@ export const KmzImportModal: React.FC<KmzImportModalProps> = ({
                       includeLodging,
                       fuelPricePerGalRD,
                       kmPerGal,
-                      maintenancePerKmRD: activeVehicle.maintenancePerKmRD,
+                      maintenancePerKmRD: activeVehicleConfig.maintenancePerKmRD,
                       areaM2: parsed.totalAreaM2,
                       terrain,
                       serviceCount: selectedServiceIds.length,
@@ -795,58 +1064,92 @@ export const KmzImportModal: React.FC<KmzImportModalProps> = ({
             </div>
           )}
 
-          {/* STEP 3: BRIGADE ASSIGNMENT & ATTACH VIATICOS */}
+          {/* STEP 3: BRIGADE SCHEDULING (OPTIONAL) & ATTACH VIATICOS */}
           {step === 3 && parsed && (
             <div className="space-y-4">
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs">
-                <div>
-                  <label className="block font-semibold text-[#334155] mb-1">Agrimensor Responsable</label>
-                  <select
-                    value={surveyor}
-                    onChange={(e) => setSurveyor(e.target.value)}
-                    className="w-full rounded-sm border border-[#CBD5E1] bg-white px-3 py-2 text-xs text-[#0D1C2F]"
-                  >
-                    {SURVEYOR_ROSTER.map((s) => (
-                      <option key={s} value={s}>
-                        {s}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-                <div>
-                  <label className="block font-semibold text-[#334155] mb-1">Equipo GNSS RTK</label>
-                  <select
-                    value={equipmentSerial}
-                    onChange={(e) => setEquipmentSerial(e.target.value)}
-                    className="w-full rounded-sm border border-[#CBD5E1] bg-white px-3 py-2 font-mono text-xs text-[#0D1C2F]"
-                  >
-                    {EQUIPMENT_ROSTER.map((eq) => (
-                      <option key={eq} value={eq}>
-                        {eq}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-                <div>
-                  <label className="block font-semibold text-[#334155] mb-1">Estado Inicial</label>
-                  <select
-                    value={status}
-                    onChange={(e) => setStatus(e.target.value as WorkflowStatus)}
-                    className="w-full rounded-sm border border-[#CBD5E1] bg-white px-3 py-2 text-xs text-[#0D1C2F]"
-                  >
-                    <option value="COTIZADO">COTIZADO</option>
-                    <option value="APROBADO">APROBADO</option>
-                    <option value="PROGRAMADO">PROGRAMADO</option>
-                    <option value="EN CAMPO">EN CAMPO</option>
-                  </select>
-                </div>
+              <div className="rounded-sm border border-[#CBD5E1] bg-white p-3.5 space-y-3 text-xs">
+                <label className="flex items-center gap-2 font-bold text-[#0F2942] cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={programarAhora}
+                    onChange={(e) => setProgramarAhora(e.target.checked)}
+                    className="accent-[#0F2942]"
+                  />
+                  Programar asignación de cuadrilla ahora (F5 con validación de rango y conflictos)
+                </label>
+
+                {programarAhora && (
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
+                    <div>
+                      <label className="block font-semibold text-[#334155] mb-1">
+                        Cuadrilla Asignada
+                      </label>
+                      <select
+                        value={cuadrillaId}
+                        onChange={(e) => setCuadrillaId(e.target.value)}
+                        className="w-full rounded-sm border border-[#CBD5E1] bg-white px-3 py-2 text-xs text-[#0D1C2F]"
+                      >
+                        {cuadrillas.map((c) => (
+                          <option key={c.id} value={c.id}>
+                            {c.nombre}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block font-semibold text-[#334155] mb-1">
+                        Equipo GNSS RTK
+                      </label>
+                      <select
+                        value={equipoId}
+                        onChange={(e) => setEquipoId(e.target.value)}
+                        className="w-full rounded-sm border border-[#CBD5E1] bg-white px-3 py-2 font-mono text-xs text-[#0D1C2F]"
+                      >
+                        <option value="">Sin equipo asignado</option>
+                        {equipos.map((eq) => (
+                          <option key={eq.id} value={eq.id}>
+                            {eq.nombre} ({eq.serial})
+                            {eq.estado !== 'disponible' ? ` [${eq.estado}]` : ''}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block font-semibold text-[#334155] mb-1">
+                        Fecha Fin de Campo
+                      </label>
+                      <input
+                        type="date"
+                        min={fechaPrevista}
+                        value={fechaFinAsignacion}
+                        onChange={(e) => setFechaFinAsignacion(e.target.value)}
+                        className="w-full rounded-sm border border-[#CBD5E1] px-3 py-2 font-mono text-xs"
+                      />
+                    </div>
+                    <div>
+                      <label className="block font-semibold text-[#334155] mb-1">
+                        Estado Inicial de los Servicios
+                      </label>
+                      <select
+                        value={estadoInicialServicio}
+                        onChange={(e) => setEstadoInicialServicio(e.target.value as EstadoServicio)}
+                        className="w-full rounded-sm border border-[#CBD5E1] bg-white px-3 py-2 text-xs text-[#0D1C2F]"
+                      >
+                        <option value="cotizado">Cotizado</option>
+                        <option value="aprobado">Aprobado</option>
+                        <option value="programado">Programado</option>
+                      </select>
+                    </div>
+                  </div>
+                )}
               </div>
 
               {/* Financial Summary */}
               <div className="rounded-md border border-[#CBD5E1] bg-[#F8FAFC] p-4 space-y-2 text-xs">
                 <div className="flex justify-between">
                   <span className="text-[#43474D]">
-                    Servicios Sumatorios ({servicesSummary.items.map((i) => i.name).join(' + ') || 'Ninguno'})
+                    Servicios Sumatorios (
+                    {servicesSummary.items.map((i) => i.name).join(' + ') || 'Ninguno'})
                   </span>
                   <span className="font-mono font-semibold tabular-nums">
                     {formatRD(servicesSummary.totalServicesRD)}
@@ -854,7 +1157,8 @@ export const KmzImportModal: React.FC<KmzImportModalProps> = ({
                 </div>
                 <div className="flex justify-between">
                   <span className="text-[#43474D]">
-                    Presupuesto Viáticos ({activeRoute?.name || 'Ruta'} · {routeBreakdown.roundTripKm} km)
+                    Viáticos de Ruta ({activeRoute?.name || 'Ruta'} · {routeBreakdown.roundTripKm}{' '}
+                    km)
                   </span>
                   <span className="font-mono font-semibold text-[#0284C7] tabular-nums">
                     {formatRD(routeBreakdown.totalViaticosRD)}
@@ -877,11 +1181,12 @@ export const KmzImportModal: React.FC<KmzImportModalProps> = ({
                   />
                   <div>
                     <div className="font-bold text-[#0F2942]">
-                      Adjuntar automáticamente viáticos iniciales de ruta al guardar
+                      Generar viáticos iniciales de ruta repartidos al proyecto
                     </div>
                     <p className="mt-0.5 text-[#334155]">
-                      Genera en el libro de viáticos: Combustible ({formatRD(routeBreakdown.fuelRD)}),
-                      Peajes ({formatRD(routeBreakdown.tollsRD)}) y Dieta ({formatRD(routeBreakdown.perDiemRD)}).
+                      Combustible ({formatRD(routeBreakdown.fuelRD)}), Peajes (
+                      {formatRD(routeBreakdown.tollsRD)}) y Dieta (
+                      {formatRD(routeBreakdown.perDiemRD)}) con método GPS Ruta.
                     </p>
                   </div>
                 </label>
@@ -920,33 +1225,37 @@ export const KmzImportModal: React.FC<KmzImportModalProps> = ({
                 disabled={!parsed}
                 onClick={() => {
                   if (!parsed) {
-                    setError('Carga primero un archivo .KMZ o .KML.');
+                    setError('Carga primero un archivo .KMZ, .KML o .GeoJSON.');
                     return;
                   }
                   setStep((s) => (s === 1 ? 2 : 3));
                 }}
                 className="inline-flex items-center gap-1.5 rounded-sm bg-[#0F2942] px-4 py-2 text-xs font-semibold text-white hover:bg-[#0284C7] disabled:opacity-40 transition-colors min-h-[40px]"
               >
-                <span>{step === 1 ? 'Continuar a Servicios y Ruta' : 'Continuar a Brigada y Viáticos'}</span>
+                <span>
+                  {step === 1 ? 'Continuar a Servicios y Ruta' : 'Continuar a Cuadrilla y Viáticos'}
+                </span>
                 <ArrowRight className="h-3.5 w-3.5" />
               </button>
             ) : (
               <>
                 <button
                   type="button"
-                  onClick={() => finalizeSurvey(false)}
-                  className="inline-flex items-center gap-1.5 rounded-sm bg-[#0F2942] px-4 py-2 text-xs font-semibold text-white hover:bg-[#0284C7] transition-colors min-h-[40px]"
+                  disabled={isSaving}
+                  onClick={() => finalizeRuta(false)}
+                  className="inline-flex items-center gap-1.5 rounded-sm bg-[#0F2942] px-4 py-2 text-xs font-semibold text-white hover:bg-[#0284C7] disabled:opacity-50 transition-colors min-h-[40px]"
                 >
                   <Receipt className="h-3.5 w-3.5" />
-                  Guardar Levantamiento
+                  {isSaving ? 'Guardando...' : 'Guardar Ruta KMZ'}
                 </button>
                 <button
                   type="button"
-                  onClick={() => finalizeSurvey(true)}
-                  className="inline-flex items-center gap-1.5 rounded-sm bg-[#0284C7] px-4 py-2 text-xs font-semibold text-white hover:bg-[#006398] transition-colors min-h-[40px]"
+                  disabled={isSaving}
+                  onClick={() => finalizeRuta(true)}
+                  className="inline-flex items-center gap-1.5 rounded-sm bg-[#0284C7] px-4 py-2 text-xs font-semibold text-white hover:bg-[#006398] disabled:opacity-50 transition-colors min-h-[40px]"
                 >
                   <Camera className="h-3.5 w-3.5" />
-                  Guardar y Adjuntar Recibo Móvil
+                  Guardar y Adjuntar Recibo
                 </button>
               </>
             )}

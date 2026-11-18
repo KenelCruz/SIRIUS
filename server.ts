@@ -10,7 +10,31 @@ const __dirname = path.dirname(__filename);
 
 const PORT = 3000;
 const DATA_DIR = path.resolve(__dirname, '.data');
-const DB_FILE = path.join(DATA_DIR, 'geomatrix-store.json');
+const DB_FILE = path.join(DATA_DIR, 'geomatrix-saas-store.json');
+
+interface VersionedRecord {
+  id: string;
+  version: number;
+  updatedAt: string;
+}
+
+function mergeLww<T extends VersionedRecord>(local: T[] = [], remote: T[] = []): T[] {
+  const map = new Map<string, T>();
+  for (const item of local) map.set(item.id, item);
+  for (const item of remote) {
+    const existing = map.get(item.id);
+    if (!existing) {
+      map.set(item.id, item);
+    } else if (item.version !== existing.version) {
+      map.set(item.id, item.version > existing.version ? item : existing);
+    } else {
+      const tNew = Date.parse(item.updatedAt) || 0;
+      const tOld = Date.parse(existing.updatedAt) || 0;
+      map.set(item.id, tNew >= tOld ? item : existing);
+    }
+  }
+  return Array.from(map.values());
+}
 
 function ensureDataStore() {
   if (!fs.existsSync(DATA_DIR)) {
@@ -19,25 +43,39 @@ function ensureDataStore() {
   if (!fs.existsSync(DB_FILE)) {
     fs.writeFileSync(
       DB_FILE,
-      JSON.stringify({ surveys: null, expenses: null, lastSyncedAt: null }, null, 2),
+      JSON.stringify({ empresas: {}, lastSyncedAt: null }, null, 2),
       'utf-8'
     );
   }
 }
 
-function readStore() {
+function readStore(): { empresas: Record<string, Record<string, unknown>>; lastSyncedAt: string | null } {
   ensureDataStore();
   try {
     const raw = fs.readFileSync(DB_FILE, 'utf-8');
-    return JSON.parse(raw);
+    const parsed = JSON.parse(raw);
+    return {
+      empresas: parsed?.empresas && typeof parsed.empresas === 'object' ? parsed.empresas : {},
+      lastSyncedAt: parsed?.lastSyncedAt || null,
+    };
   } catch {
-    return { surveys: null, expenses: null, lastSyncedAt: null };
+    return { empresas: {}, lastSyncedAt: null };
   }
 }
 
 function writeStore(data: unknown) {
   ensureDataStore();
   fs.writeFileSync(DB_FILE, JSON.stringify(data, null, 2), 'utf-8');
+}
+
+function requireSession(req: express.Request, res: express.Response, next: express.NextFunction) {
+  const token =
+    req.header('x-session-token') ||
+    req.header('authorization')?.replace(/^Bearer\s+/i, '').trim();
+  if (!token || !token.startsWith('aia-session-')) {
+    return res.status(401).json({ error: 'Sesión no autenticada o token inválido.' });
+  }
+  next();
 }
 
 function getGeminiClient() {
@@ -59,37 +97,71 @@ async function startServer() {
   const app = express();
   app.use(express.json({ limit: '15mb' }));
 
-  // Health endpoint
   app.get('/api/health', (_req, res) => {
     res.json({ ok: true, timestamp: new Date().toISOString() });
   });
 
-  // Get synced operational state
-  app.get('/api/state', (_req, res) => {
+  app.get('/api/state', requireSession, (req, res) => {
+    const empresaId = String(req.query.empresaId || '').trim();
+    if (!empresaId) {
+      return res.status(400).json({ error: 'Se requiere empresaId.' });
+    }
     const store = readStore();
-    res.json(store);
-  });
-
-  // Sync offline queue & workspace state
-  app.post('/api/sync', (req, res) => {
-    const { surveys, expenses } = req.body ?? {};
-    const store = readStore();
-    const updated = {
-      surveys: Array.isArray(surveys) ? surveys : store.surveys,
-      expenses: Array.isArray(expenses) ? expenses : store.expenses,
-      lastSyncedAt: new Date().toISOString(),
-    };
-    writeStore(updated);
     res.json({
-      synced: true,
-      lastSyncedAt: updated.lastSyncedAt,
-      surveyCount: Array.isArray(updated.surveys) ? updated.surveys.length : 0,
-      expenseCount: Array.isArray(updated.expenses) ? updated.expenses.length : 0,
+      empresaId,
+      snapshot: store.empresas[empresaId] ?? null,
+      lastSyncedAt: store.lastSyncedAt,
     });
   });
 
-  // Automatic mobile receipt extraction with Gemini Vision
-  app.post('/api/expenses/analyze-receipt', async (req, res) => {
+  app.post('/api/sync', requireSession, (req, res) => {
+    const { empresaId, snapshot } = req.body ?? {};
+    if (!empresaId || typeof empresaId !== 'string' || !snapshot || typeof snapshot !== 'object') {
+      return res.status(400).json({ error: 'Payload inválido: se requiere empresaId y snapshot.' });
+    }
+
+    const store = readStore();
+    const existing = (store.empresas[empresaId] ?? {}) as Record<string, unknown>;
+    const nowIso = new Date().toISOString();
+
+    const merged = {
+      ...snapshot,
+      proyectos: mergeLww(
+        (existing.proyectos as VersionedRecord[]) || [],
+        (snapshot.proyectos as VersionedRecord[]) || []
+      ),
+      rutas: mergeLww(
+        (existing.rutas as VersionedRecord[]) || [],
+        (snapshot.rutas as VersionedRecord[]) || []
+      ),
+      servicios: mergeLww(
+        (existing.servicios as VersionedRecord[]) || [],
+        (snapshot.servicios as VersionedRecord[]) || []
+      ),
+      asignaciones: mergeLww(
+        (existing.asignaciones as VersionedRecord[]) || [],
+        (snapshot.asignaciones as VersionedRecord[]) || []
+      ),
+      viaticos: mergeLww(
+        (existing.viaticos as VersionedRecord[]) || [],
+        (snapshot.viaticos as VersionedRecord[]) || []
+      ),
+      lastSyncedAt: nowIso,
+    };
+
+    store.empresas[empresaId] = merged;
+    store.lastSyncedAt = nowIso;
+    writeStore(store);
+
+    res.json({
+      synced: true,
+      empresaId,
+      lastSyncedAt: nowIso,
+      snapshot: merged,
+    });
+  });
+
+  app.post('/api/expenses/analyze-receipt', requireSession, async (req, res) => {
     try {
       const { imageBase64, mimeType, surveyCode } = req.body ?? {};
       if (!imageBase64 || typeof imageBase64 !== 'string') {
@@ -104,7 +176,8 @@ async function startServer() {
       }
 
       const cleanBase64 = imageBase64.includes(',') ? imageBase64.split(',')[1] : imageBase64;
-      const safeMime = typeof mimeType === 'string' && mimeType.startsWith('image/') ? mimeType : 'image/jpeg';
+      const safeMime =
+        typeof mimeType === 'string' && mimeType.startsWith('image/') ? mimeType : 'image/jpeg';
 
       const prompt = `Analiza este comprobante de gasto o factura de campo en República Dominicana${
         surveyCode ? ` asociado al levantamiento ${surveyCode}` : ''
@@ -163,7 +236,16 @@ async function startServer() {
                 description: 'Nivel de legibilidad: alta, media, o baja.',
               },
             },
-            required: ['merchant', 'amountRD', 'itbisRD', 'ncf', 'category', 'dateIso', 'notes', 'confidence'],
+            required: [
+              'merchant',
+              'amountRD',
+              'itbisRD',
+              'ncf',
+              'category',
+              'dateIso',
+              'notes',
+              'confidence',
+            ],
           },
         },
       });

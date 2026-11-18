@@ -50,7 +50,7 @@ export const OfflineSyncBanner: React.FC<OfflineSyncBannerProps> = ({
           {!isOnline
             ? `Modo Sin Conexión — ${pendingCount} ${
                 pendingCount === 1 ? 'modificación local pendiente' : 'modificaciones locales pendientes'
-              } de sincronización`
+              } en caché`
             : `${pendingCount} ${
                 pendingCount === 1 ? 'registro local pendiente' : 'registros locales pendientes'
               } por respaldar en servidor`}
@@ -63,7 +63,7 @@ export const OfflineSyncBanner: React.FC<OfflineSyncBannerProps> = ({
         className="inline-flex items-center gap-1.5 rounded-sm border border-[#7991AF]/40 bg-[#1E3A8A]/60 px-3 py-1 text-xs font-semibold text-white hover:bg-[#0284C7] disabled:opacity-50 transition-colors whitespace-nowrap shrink-0"
       >
         <RefreshCw className={`h-3.5 w-3.5 ${isSyncing ? 'animate-spin' : ''}`} />
-        {isSyncing ? 'Sincronizando...' : 'Forzar Reintento'}
+        {isSyncing ? 'Sincronizando...' : 'Sincronizar ahora'}
       </button>
     </div>
   );
