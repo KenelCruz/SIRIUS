@@ -1,0 +1,6 @@
+{
+  "name": "GeoMatrix RD — Levantamientos KMZ y Viáticos",
+  "description": "Plataforma PWA de operaciones geodésicas para gestionar levantamientos desde archivos KMZ y reportar viáticos automáticamente desde el móvil.",
+  "requestFramePermissions": ["camera", "geolocation"],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
