@@ -46,9 +46,4 @@ npm run build   # Build de producción Vite
 npm run dev     # Servidor Express + Vite en puerto 3000
 ```
 
-## Supuestos pendientes de validación
 
-1. **Un técnico no puede estar en dos rutas el mismo día (salvo misma ruta)**: Implementado en `src/domain/conflictos.ts` (`detectarConflictosAsignacion`). Si dos cuadrillas distintas comparten a un mismo técnico y se asignan a rutas diferentes con rangos de fechas solapados, se marca como conflicto bloqueante con opción de override auditado; si la asignación pertenece a la misma `rutaId`, se permite.
-2. **El reparto de viáticos es por monto exacto, no por porcentaje**: Implementado en `src/domain/viaticos.ts` (`validarRepartoViatico`). La suma exacta en `RD$` de las líneas asignadas a proyectos (más `sin_asignar` cuando aplique) debe igualar el monto total del comprobante.
-3. **Ventana de "Hoy" para el técnico (hoy + próximos 3 días)**: Implementado en `src/domain/tecnico.ts` (`DIAS_VENTANA_HOY_TECNICO = 3`). Muestra servicios en estado `programado` o `en_campo` cuyas asignaciones caigan entre hoy (AST) y los próximos 3 días, además de servicios actualmente `en_campo`.
-4. **Estados visibles en "Mi agenda" del técnico**: Implementado en `src/domain/tecnico.ts` (`ESTADOS_VISIBLES_AGENDA_TECNICO`). Muestra asignaciones de rutas con servicios en estado operativo activo o en curso (`aprobado`, `programado`, `en_campo`, `procesando`, `entregado`) o sin servicios creados aún; excluye rutas únicamente `cotizado` o completamente `cobrado`.
