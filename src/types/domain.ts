@@ -309,3 +309,70 @@ export interface EstadoEmpresaSnapshot {
   historial: HistorialEvento[];
   lastSyncedAt?: string;
 }
+
+// Tipos proyectados estrictamente para el rol Técnico (el compilador impide exponer presupuestos, contratos, tarifas o personal ajeno)
+export type EmpresaTecnico = Pick<
+  Empresa,
+  'id' | 'nombre' | 'rnc' | 'telefono' | 'direccionBase' | 'baseLat' | 'baseLon'
+>;
+
+export type ProyectoTecnico = Omit<Proyecto, 'presupuestoViaticosRD' | 'valorContratoRD'>;
+
+export type ServicioTecnico = Omit<
+  Servicio,
+  'cotizacionRD' | 'montoCobradoRD' | 'fechaPago'
+>;
+
+export type VehiculoTecnico = Pick<
+  Vehiculo,
+  'id' | 'empresaId' | 'etiqueta' | 'placa' | 'estado'
+>;
+
+export type RouteSummaryTecnico = Omit<RouteSummary, 'tollsRD' | 'fuelRD'>;
+
+export type RutaTecnico = Omit<Ruta, 'routeSummary'> & {
+  routeSummary?: RouteSummaryTecnico;
+};
+
+export interface SnapshotTecnico {
+  empresa: EmpresaTecnico;
+  personal: Personal[];
+  vehiculos: VehiculoTecnico[];
+  equipos: EquipoGNSS[];
+  cuadrillas: Cuadrilla[];
+  clientes: Cliente[];
+  proyectos: ProyectoTecnico[];
+  rutas: RutaTecnico[];
+  servicios: ServicioTecnico[];
+  bitacoras: BitacoraEntrada[];
+  asignaciones: Asignacion[];
+  viaticos: Viatico[];
+  lastSyncedAt?: string;
+}
+
+export type ProyeccionSnapshotPorRol =
+  | {
+      rol: 'admin' | 'coordinador';
+      snapshot: EstadoEmpresaSnapshot;
+    }
+  | {
+      rol: 'tecnico';
+      snapshot: SnapshotTecnico;
+    };
+
+export interface ConteoPendientesPorTipo {
+  servicios: number;
+  bitacoras: number;
+  viaticos: number;
+  proyectos: number;
+  rutas: number;
+  asignaciones: number;
+  total: number;
+}
+
+export interface AvisoSobrescrituraLWW {
+  entidadTipo: 'proyecto' | 'ruta' | 'servicio' | 'asignacion' | 'viatico';
+  entidadId: string;
+  descripcion: string;
+  fecha: string;
+}

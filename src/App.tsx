@@ -11,6 +11,7 @@ import {
   Layers,
   LogOut,
   Plus,
+  PlusCircle,
   Receipt,
   Route,
   Users,
@@ -24,37 +25,39 @@ import { CatalogosView } from './components/CatalogosView';
 import { KmzImportModal } from './components/KmzImportModal';
 import { KmzOsmViewer } from './components/KmzOsmViewer';
 import { MobileExpenseCaptureModal } from './components/MobileExpenseCaptureModal';
-import { OfflineSyncBanner } from './components/OfflineSyncBanner';
+import { DemoBanner, OfflineSyncBanner } from './components/OfflineSyncBanner';
 import { ProyectosView } from './components/ProyectosView';
 import { PWAInstallButton } from './components/PWAInstallButton';
 import { ResourceConflictModal } from './components/ResourceConflictModal';
 import { RouteServicesCalculator } from './components/RouteServicesCalculator';
+import { TecnicoAgendaView } from './components/tecnico/TecnicoAgendaView';
+import { TecnicoBitacoraModal } from './components/tecnico/TecnicoBitacoraModal';
+import { TecnicoHoyView } from './components/tecnico/TecnicoHoyView';
+import { TecnicoReportarSelectorModal } from './components/tecnico/TecnicoReportarSelectorModal';
+import { TecnicoRutaDetalleView } from './components/tecnico/TecnicoRutaDetalleView';
+import { TecnicoRutasView } from './components/tecnico/TecnicoRutasView';
+import { TecnicoTransicionModal } from './components/tecnico/TecnicoTransicionModal';
+import { TecnicoViaticosView } from './components/tecnico/TecnicoViaticosView';
 import { ViaticosView } from './components/ViaticosView';
-import { repositorioOperacion } from './data/LocalRepositorioOperacion';
 import {
   detectarConflictosAsignacion,
-  filtrarRutasParaUsuario,
-  filtrarServiciosParaUsuario,
-  filtrarViaticosParaUsuario,
   obtenerRutasAsignadasAUsuario,
   puedeCrearOEditarOperacion,
   puedeVerAuditoria,
 } from './domain';
 import { useOnlineStatus } from './hooks/useOnlineStatus';
+import { useOperacionEmpresa } from './hooks/useOperacionEmpresa';
 import type {
   AreaUnit,
   ConflictDetail,
-  Empresa,
-  EstadoEmpresaSnapshot,
   GeoPoint,
   OverrideConflicto,
-  RolEmpresa,
-  SesionActiva,
+  Viatico,
 } from './types/domain';
 import { formatRD, latLonToUtm19N } from './utils/geodesy';
 import { parseKmzOrKmlFile, type ParsedKmzResult } from './utils/kmzParser';
 
-type ActiveTab =
+type AdminTab =
   | 'proyectos'
   | 'agenda'
   | 'rutas'
@@ -63,20 +66,39 @@ type ActiveTab =
   | 'catalogos'
   | 'auditoria';
 
+type TecnicoTab = 'hoy' | 'rutas_tecnico' | 'ruta_detalle' | 'agenda_tecnico' | 'viaticos_tecnico';
+
 export default function App() {
   const isOnline = useOnlineStatus();
   const viewerFileInputRef = useRef<HTMLInputElement>(null);
 
-  const [sesion, setSesion] = useState<SesionActiva | null>(() =>
-    repositorioOperacion.obtenerSesionGuardada()
-  );
-  const [empresasDisponibles, setEmpresasDisponibles] = useState<
-    Array<{ empresa: Empresa; rol: RolEmpresa }>
-  >([]);
-  const [requiereElegirEmpresa, setRequiereElegirEmpresa] = useState(false);
-  const [snapshot, setSnapshot] = useState<EstadoEmpresaSnapshot | null>(null);
+  const {
+    sesion,
+    empresasDisponibles,
+    requiereElegirEmpresa,
+    proyeccion,
+    isLoadingSnapshot,
+    errorSnapshot,
+    isSyncing,
+    avisosLww,
+    pendingCounts,
+    hasConflict,
+    isDemoActivo,
+    cuentasDemo,
+    iniciarSesion,
+    entrarConCacheOffline,
+    seleccionarEmpresa,
+    cerrarSesion,
+    refrescar,
+    sincronizarAhora,
+    descartarAvisosLww,
+    actions,
+  } = useOperacionEmpresa(isOnline);
 
-  const [activeTab, setActiveTab] = useState<ActiveTab>('proyectos');
+  const [adminTab, setAdminTab] = useState<AdminTab>('proyectos');
+  const [tecnicoTab, setTecnicoTab] = useState<TecnicoTab>('hoy');
+  const [tecnicoRutaDetalleId, setTecnicoRutaDetalleId] = useState<string>('');
+
   const [selectedRutaId, setSelectedRutaId] = useState<string>('');
   const [areaUnit, setAreaUnit] = useState<AreaUnit>('tareas');
 
@@ -84,13 +106,24 @@ export default function App() {
   const [preloadedKmzForModal, setPreloadedKmzForModal] = useState<ParsedKmzResult | null>(null);
   const [defaultProyectoModal, setDefaultProyectoModal] = useState<string | undefined>(undefined);
   const [isKmzModalOpen, setIsKmzModalOpen] = useState(false);
+
   const [isExpenseModalOpen, setIsExpenseModalOpen] = useState(false);
+  const [editingViatico, setEditingViatico] = useState<Viatico | null>(null);
   const [expenseDefaultProyectoId, setExpenseDefaultProyectoId] = useState<string | undefined>(
     undefined
   );
   const [expenseDefaultRutaId, setExpenseDefaultRutaId] = useState<string | undefined>(undefined);
 
-  // Conflicto diferido al crear asignación opcional desde el wizard KMZ
+  // Modales exclusivos de campo para técnico
+  const [isReportarSelectorOpen, setIsReportarSelectorOpen] = useState(false);
+  const [isBitacoraModalOpen, setIsBitacoraModalOpen] = useState(false);
+  const [bitacoraDefaultServicioId, setBitacoraDefaultServicioId] = useState<string | undefined>(
+    undefined
+  );
+  const [transicionServicioId, setTransicionServicioId] = useState<string | null>(null);
+  const [tecnicoSuccessBanner, setTecnicoSuccessBanner] = useState<string | null>(null);
+
+  // Conflicto diferido al crear asignación opcional desde el wizard KMZ (admin/coordinador)
   const [pendingKmzAsig, setPendingKmzAsig] = useState<{
     rutaId: string;
     fechaInicio: string;
@@ -103,7 +136,6 @@ export default function App() {
 
   const [liveGpsPoint, setLiveGpsPoint] = useState<GeoPoint | null>(null);
   const [isCapturingGps, setIsCapturingGps] = useState(false);
-  const [isSyncing, setIsSyncing] = useState(false);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
 
   const showToast = (msg: string) => {
@@ -113,157 +145,106 @@ export default function App() {
     }, 4500);
   };
 
-  const refrescarSnapshot = async (empresaId: string) => {
-    const snap = await repositorioOperacion.cargarSnapshotEmpresa(empresaId);
-    setSnapshot(snap);
-    setSelectedRutaId((prev) =>
-      prev && snap.rutas.some((r) => r.id === prev) ? prev : snap.rutas[0]?.id || ''
-    );
+  const showTecnicoSuccess = (msg: string) => {
+    setTecnicoSuccessBanner(msg);
+    showToast(msg);
+    setTimeout(() => {
+      setTecnicoSuccessBanner((prev) => (prev === msg ? null : prev));
+    }, 5000);
   };
 
-  // Cargar empresas y snapshot si ya había sesión guardada (incluye arranque offline con caché)
+  // Al iniciar sesión, cambiar de empresa o restaurar rol técnico, siempre abrir en 'hoy' (o 'proyectos' para admin/coordinador)
   useEffect(() => {
     if (!sesion) return;
-    let active = true;
-    (async () => {
-      const lista = await repositorioOperacion.listarEmpresasDeUsuario(sesion.usuario.id);
-      if (!active) return;
-      setEmpresasDisponibles(lista);
-      await refrescarSnapshot(sesion.empresaActivaId);
-    })();
-    return () => {
-      active = false;
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [sesion?.usuario.id, sesion?.empresaActivaId]);
+    if (sesion.rolActivo === 'tecnico') {
+      setTecnicoTab('hoy');
+      setTecnicoRutaDetalleId('');
+    } else {
+      setAdminTab('proyectos');
+    }
+  }, [sesion?.usuario.id, sesion?.empresaActivaId, sesion?.rolActivo]);
+
+  // Mantener ruta activa seleccionada al actualizar snapshot
+  useEffect(() => {
+    if (!proyeccion) return;
+    const rutas = proyeccion.snapshot.rutas;
+    setSelectedRutaId((prev) =>
+      prev && rutas.some((r) => r.id === prev) ? prev : rutas[0]?.id || ''
+    );
+  }, [proyeccion]);
 
   const handleLogin = async (email: string, password: string) => {
-    const nuevaSesion = await repositorioOperacion.iniciarSesion(email, password);
-    const lista = await repositorioOperacion.listarEmpresasDeUsuario(nuevaSesion.usuario.id);
-    setEmpresasDisponibles(lista);
-    setSesion(nuevaSesion);
-    if (lista.length > 1) {
-      setRequiereElegirEmpresa(true);
+    const nuevaSesion = await iniciarSesion(email, password);
+    if (nuevaSesion.rolActivo === 'tecnico') {
+      setTecnicoTab('hoy');
     } else {
-      setRequiereElegirEmpresa(false);
-      await refrescarSnapshot(nuevaSesion.empresaActivaId);
+      setAdminTab('proyectos');
     }
   };
 
   const handleEntrarConCacheOffline = async () => {
-    const guardada = repositorioOperacion.obtenerSesionGuardada();
+    const guardada = await entrarConCacheOffline();
     if (!guardada) return;
-    setSesion(guardada);
-    setRequiereElegirEmpresa(false);
-    await refrescarSnapshot(guardada.empresaActivaId);
+    if (guardada.rolActivo === 'tecnico') {
+      setTecnicoTab('hoy');
+    } else {
+      setAdminTab('proyectos');
+    }
     showToast('Sesión restaurada desde caché offline.');
   };
 
   const handleSeleccionarEmpresa = async (empresaId: string) => {
-    const actualizada = await repositorioOperacion.cambiarEmpresaActiva(empresaId);
-    setSesion(actualizada);
-    setRequiereElegirEmpresa(false);
-    await refrescarSnapshot(empresaId);
-    setActiveTab('proyectos');
+    const actualizada = await seleccionarEmpresa(empresaId);
+    if (actualizada.rolActivo === 'tecnico') {
+      setTecnicoTab('hoy');
+    } else {
+      setAdminTab('proyectos');
+    }
   };
 
   const handleCerrarSesion = async () => {
-    await repositorioOperacion.cerrarSesion();
-    setSesion(null);
-    setSnapshot(null);
-    setEmpresasDisponibles([]);
-    setRequiereElegirEmpresa(false);
+    await cerrarSesion();
+    setSelectedRutaId('');
+    setTecnicoRutaDetalleId('');
+    setStandaloneKmz(null);
   };
 
-  // Permisos y alcance por rol (F1, F12-F14)
-  const rol = sesion?.rolActivo ?? 'tecnico';
-  const canEdit = puedeCrearOEditarOperacion(rol);
-  const canAudit = puedeVerAuditoria(rol);
+  const handleSyncNow = async () => {
+    try {
+      const res = await sincronizarAhora();
+      if (!res) return;
+      const extraOcr =
+        res.ocrProcesados > 0 ? ` (${res.ocrProcesados} recibo(s) OCR procesados)` : '';
+      const extraLww =
+        res.sobrescritosLocales.length > 0
+          ? ` · ${res.sobrescritosLocales.length} cambio(s) local(es) actualizado(s) por versión más reciente`
+          : '';
+      showToast(`Sincronización completada${extraOcr}${extraLww}.`);
+    } catch (err: unknown) {
+      showToast(err instanceof Error ? err.message : 'No se pudo completar la sincronización.');
+    }
+  };
 
-  const rutasAsignadasIds = useMemo(() => {
-    if (!sesion || !snapshot) return new Set<string>();
-    const mem = sesion.membresias.find((m) => m.empresaId === snapshot.empresa.id);
+  const rutasAsignadasAdminIds = useMemo(() => {
+    if (!sesion || !proyeccion || proyeccion.rol === 'tecnico') return new Set<string>();
+    const snap = proyeccion.snapshot;
+    const mem = sesion.membresias.find((m) => m.empresaId === snap.empresa.id);
     return obtenerRutasAsignadasAUsuario({
       usuarioId: sesion.usuario.id,
       personalIdMembresia: mem?.personalId,
-      personal: snapshot.personal,
-      cuadrillas: snapshot.cuadrillas,
-      asignaciones: snapshot.asignaciones,
+      personal: snap.personal,
+      cuadrillas: snap.cuadrillas,
+      asignaciones: snap.asignaciones,
     });
-  }, [sesion, snapshot]);
+  }, [sesion, proyeccion]);
 
-  const rutasVisibles = useMemo(() => {
-    if (!snapshot) return [];
-    return filtrarRutasParaUsuario(rol, snapshot.rutas, rutasAsignadasIds);
-  }, [rol, snapshot, rutasAsignadasIds]);
-
-  const serviciosVisibles = useMemo(() => {
-    if (!snapshot) return [];
-    return filtrarServiciosParaUsuario(rol, snapshot.servicios, rutasAsignadasIds);
-  }, [rol, snapshot, rutasAsignadasIds]);
-
-  const viaticosVisibles = useMemo(() => {
-    if (!snapshot || !sesion) return [];
-    return filtrarViaticosParaUsuario(rol, snapshot.viaticos, sesion.usuario.id);
-  }, [rol, snapshot, sesion]);
-
-  const selectedRuta = useMemo(
-    () => rutasVisibles.find((r) => r.id === selectedRutaId) ?? rutasVisibles[0],
-    [rutasVisibles, selectedRutaId]
-  );
-
-  // Sync counts
-  const pendingCount = useMemo(() => {
-    if (!snapshot) return 0;
-    return (
-      snapshot.proyectos.filter((x) => x.syncStatus !== 'synced').length +
-      snapshot.rutas.filter((x) => x.syncStatus !== 'synced').length +
-      snapshot.servicios.filter((x) => x.syncStatus !== 'synced').length +
-      snapshot.asignaciones.filter((x) => x.syncStatus !== 'synced').length +
-      snapshot.viaticos.filter((x) => x.syncStatus !== 'synced').length +
-      snapshot.bitacoras.filter((x) => x.syncStatus !== 'synced').length
-    );
-  }, [snapshot]);
-
-  const hasConflict = useMemo(() => {
-    if (!snapshot) return false;
-    return (
-      snapshot.proyectos.some((x) => x.syncStatus === 'conflict') ||
-      snapshot.rutas.some((x) => x.syncStatus === 'conflict') ||
-      snapshot.servicios.some((x) => x.syncStatus === 'conflict') ||
-      snapshot.asignaciones.some((x) => x.syncStatus === 'conflict') ||
-      snapshot.viaticos.some((x) => x.syncStatus === 'conflict')
-    );
-  }, [snapshot]);
-
-  const handleSyncNow = async () => {
-    if (!isOnline || isSyncing || !snapshot) return;
-    setIsSyncing(true);
-    try {
-      const res = await repositorioOperacion.sincronizarConServidor(snapshot.empresa.id);
-      setSnapshot(res.snapshot);
-      const extra = res.ocrProcesados > 0 ? ` (${res.ocrProcesados} recibo(s) OCR procesados)` : '';
-      showToast(`Sincronización LWW completada con servidor${extra}.`);
-    } catch (err: unknown) {
-      showToast(err instanceof Error ? err.message : 'No se pudo completar la sincronización.');
-    } finally {
-      setIsSyncing(false);
-    }
-  };
-
-  useEffect(() => {
-    if (isOnline && pendingCount > 0 && snapshot && sesion) {
-      handleSyncNow();
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isOnline]);
-
-  // Mostrar AuthGate si no hay sesión o si eligió cambiar/seleccionar empresa
-  if (!sesion || requiereElegirEmpresa || !snapshot) {
+  // Mostrar AuthGate si no hay sesión o si debe elegir empresa o aún no cargó proyección
+  if (!sesion || requiereElegirEmpresa || !proyeccion) {
     return (
       <AuthGate
         isOnline={isOnline}
-        cuentasDemo={repositorioOperacion.listarCuentasDemo()}
+        isDemoActivo={isDemoActivo}
+        cuentasDemo={cuentasDemo}
         sesionGuardada={sesion}
         empresasDisponibles={empresasDisponibles}
         onLogin={handleLogin}
@@ -274,23 +255,16 @@ export default function App() {
     );
   }
 
-  const empresaId = snapshot.empresa.id;
+  const rol = proyeccion.rol;
+  const empresaNombre = proyeccion.snapshot.empresa.nombre;
+  const empresaId = proyeccion.snapshot.empresa.id;
 
-  const handleOpenKmzInViewer = async (file: File) => {
-    try {
-      const parsed = await parseKmzOrKmlFile(file);
-      setStandaloneKmz(parsed);
-      setActiveTab('map');
-      showToast(`Visualizando ${parsed.fileName} en OpenStreetMap.`);
-    } catch (err: unknown) {
-      showToast(
-        err instanceof Error ? err.message : 'No se pudo abrir el archivo KMZ/KML/GeoJSON.'
-      );
-    }
-  };
+  const selectedRutaGeneral =
+    proyeccion.snapshot.rutas.find((r) => r.id === selectedRutaId) ??
+    proyeccion.snapshot.rutas[0];
 
-  const handleCaptureLiveGps = () => {
-    const activeCentroid = standaloneKmz?.centroid ?? selectedRuta?.centroid;
+  const handleCaptureLiveGps = (fallbackCentroid?: GeoPoint) => {
+    const activeCentroid = fallbackCentroid ?? standaloneKmz?.centroid ?? selectedRutaGeneral?.centroid;
     setIsCapturingGps(true);
     if (!navigator.geolocation) {
       if (activeCentroid) {
@@ -330,7 +304,517 @@ export default function App() {
     );
   };
 
-  const navItems: Array<{ id: ActiveTab; label: string; shortLabel: string; icon: React.FC<{ className?: string }> }> = [
+  const abrirModalViatico = (opts?: { rutaId?: string; proyectoId?: string; editar?: Viatico }) => {
+    if (opts?.editar) {
+      setEditingViatico(opts.editar);
+      setExpenseDefaultRutaId(opts.editar.rutaId);
+      setExpenseDefaultProyectoId(opts.editar.repartos[0]?.proyectoId);
+    } else {
+      setEditingViatico(null);
+      const rutaObj = opts?.rutaId
+        ? proyeccion.snapshot.rutas.find((r) => r.id === opts.rutaId)
+        : selectedRutaGeneral;
+      setExpenseDefaultRutaId(opts?.rutaId ?? rutaObj?.id);
+      setExpenseDefaultProyectoId(opts?.proyectoId ?? rutaObj?.proyectoId);
+    }
+    setIsExpenseModalOpen(true);
+  };
+
+  // ============================================================================
+  // RENDERIZADO ESTRICTO PARA ROL TÉCNICO (recibe únicamente SnapshotTecnico)
+  // ============================================================================
+  if (proyeccion.rol === 'tecnico') {
+    const snapTecnico = proyeccion.snapshot;
+    const servicioEnTransicion = transicionServicioId
+      ? snapTecnico.servicios.find((s) => s.id === transicionServicioId) ?? null
+      : null;
+    const rutaServicioTransicion = servicioEnTransicion
+      ? snapTecnico.rutas.find((r) => r.id === servicioEnTransicion.rutaId)
+      : undefined;
+    const asignacionesServicioTransicion = servicioEnTransicion
+      ? snapTecnico.asignaciones.filter((a) => a.rutaId === servicioEnTransicion.rutaId)
+      : [];
+    const bitacorasServicioTransicion = servicioEnTransicion
+      ? snapTecnico.bitacoras.filter((b) => b.servicioId === servicioEnTransicion.id).length
+      : 0;
+
+    const rutaActivaDetalle =
+      tecnicoTab === 'ruta_detalle'
+        ? snapTecnico.rutas.find((r) => r.id === tecnicoRutaDetalleId)
+        : snapTecnico.rutas[0];
+
+    const abrirDetalleRuta = (rId: string) => {
+      setTecnicoRutaDetalleId(rId);
+      setSelectedRutaId(rId);
+      setTecnicoTab('ruta_detalle');
+    };
+
+    const tecnicoSidebarItems: Array<{
+      id: Exclude<TecnicoTab, 'ruta_detalle'>;
+      label: string;
+      icon: React.FC<{ className?: string }>;
+    }> = [
+      { id: 'hoy', label: 'Hoy en Campo', icon: Compass },
+      { id: 'rutas_tecnico', label: 'Mis Rutas', icon: Route },
+      { id: 'agenda_tecnico', label: 'Mi Agenda Semanal', icon: CalendarDays },
+      { id: 'viaticos_tecnico', label: 'Mis Viáticos', icon: Receipt },
+    ];
+
+    return (
+      <div className="min-h-screen flex flex-col bg-[#F8FAFC] text-[#0D1C2F]">
+        <DemoBanner visible={isDemoActivo} />
+        <OfflineSyncBanner
+          isOnline={isOnline}
+          pendingCount={pendingCounts.total}
+          pendingCounts={pendingCounts}
+          hasConflict={hasConflict}
+          isSyncing={isSyncing}
+          avisosLww={avisosLww}
+          onDescartarAvisosLww={descartarAvisosLww}
+          onSyncNow={handleSyncNow}
+        />
+
+        <div className="flex flex-1 min-h-0">
+          {/* Desktop Sidebar Técnico (únicamente vistas permitidas) */}
+          <aside className="hidden lg:flex lg:w-64 lg:flex-col bg-[#0F2942] text-white shrink-0">
+            <div className="px-5 py-5 border-b border-[#1E3A5F] space-y-3">
+              <div className="flex items-center gap-2.5">
+                <div className="flex h-8 w-8 items-center justify-center rounded-sm bg-[#0284C7] text-white">
+                  <Compass className="h-4 w-4" />
+                </div>
+                <div className="min-w-0">
+                  <div className="text-base font-bold tracking-tight truncate">SIRIUS</div>
+                  <div className="text-[10px] leading-tight text-[#CBD5E1] line-clamp-2">
+                    Módulo de Campo · Técnico
+                  </div>
+                  <div className="mt-0.5 text-[11px] font-medium text-[#93CCFF] truncate">
+                    {empresaNombre}
+                  </div>
+                </div>
+              </div>
+
+              {empresasDisponibles.length > 1 && (
+                <div className="flex items-center gap-1.5 rounded-sm bg-[#091A2C] px-2.5 py-1.5">
+                  <Building2 className="h-3.5 w-3.5 text-[#93CCFF] shrink-0" />
+                  <select
+                    value={empresaId}
+                    onChange={(e) => handleSeleccionarEmpresa(e.target.value)}
+                    aria-label="Cambiar empresa activa"
+                    className="w-full bg-transparent text-xs font-semibold text-white focus:outline-none"
+                  >
+                    {empresasDisponibles.map((item) => (
+                      <option
+                        key={item.empresa.id}
+                        value={item.empresa.id}
+                        className="text-[#0D1C2F]"
+                      >
+                        {item.empresa.nombre} ({item.rol})
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
+            </div>
+
+            <nav className="flex-1 p-3 space-y-1">
+              {tecnicoSidebarItems.map((item) => {
+                const Icon = item.icon;
+                const active =
+                  tecnicoTab === item.id ||
+                  (item.id === 'rutas_tecnico' && tecnicoTab === 'ruta_detalle');
+                return (
+                  <button
+                    key={item.id}
+                    type="button"
+                    onClick={() => setTecnicoTab(item.id)}
+                    className={`w-full flex items-center gap-3 rounded-sm px-3 py-2.5 text-xs font-semibold transition-colors whitespace-nowrap ${
+                      active
+                        ? 'bg-[#0284C7] text-white'
+                        : 'text-[#CBD5E1] hover:bg-[#1E3A5F] hover:text-white'
+                    }`}
+                  >
+                    <Icon className="h-4 w-4 shrink-0" />
+                    <span>{item.label}</span>
+                  </button>
+                );
+              })}
+            </nav>
+
+            <div className="p-4 border-t border-[#1E3A5F] space-y-3">
+              <div className="rounded-sm bg-[#091A2C] p-2.5 text-xs">
+                <div className="font-bold text-white truncate">{sesion.usuario.nombre}</div>
+                <div className="mt-0.5 flex items-center justify-between text-[11px] text-[#93CCFF]">
+                  <span className="font-mono uppercase">TÉCNICO</span>
+                  <button
+                    type="button"
+                    onClick={handleCerrarSesion}
+                    className="inline-flex items-center gap-1 text-[#CBD5E1] hover:text-white"
+                  >
+                    <LogOut className="h-3 w-3" />
+                    Salir
+                  </button>
+                </div>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => setIsReportarSelectorOpen(true)}
+                className="w-full flex items-center justify-center gap-2 rounded-sm bg-[#0284C7] px-3 py-2.5 text-xs font-semibold text-white hover:bg-[#006398] transition-colors"
+              >
+                <PlusCircle className="h-4 w-4" />
+                Reportar en Campo
+              </button>
+            </div>
+          </aside>
+
+          {/* Main Viewport Técnico */}
+          <div className="flex-1 flex flex-col min-w-0 pb-20 lg:pb-0">
+            <header className="sticky top-0 z-30 flex items-center justify-between gap-3 border-b border-[#CBD5E1] bg-white/95 backdrop-blur px-4 sm:px-6 h-14">
+              <div className="flex items-center gap-2.5 min-w-0">
+                <div className="lg:hidden flex h-8 w-8 items-center justify-center rounded-sm bg-[#0F2942] text-white shrink-0">
+                  <Compass className="h-4 w-4" />
+                </div>
+                <div className="min-w-0">
+                  <h1 className="text-sm sm:text-base font-bold text-[#0D1C2F] truncate">
+                    {tecnicoTab === 'hoy' && 'Hoy en Campo'}
+                    {tecnicoTab === 'rutas_tecnico' && 'Mis Rutas Asignadas'}
+                    {tecnicoTab === 'ruta_detalle' && 'Detalle y Mapa de Ruta'}
+                    {tecnicoTab === 'agenda_tecnico' && 'Mi Agenda Semanal'}
+                    {tecnicoTab === 'viaticos_tecnico' && 'Mis Viáticos'}
+                  </h1>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-2 shrink-0">
+                <div
+                  className={`inline-flex items-center gap-1 text-xs font-medium whitespace-nowrap ${
+                    isOnline ? 'text-[#15803D]' : 'text-[#D97706]'
+                  }`}
+                >
+                  {isOnline ? <Wifi className="h-3.5 w-3.5" /> : <WifiOff className="h-3.5 w-3.5" />}
+                  <span className="hidden sm:inline">{isOnline ? 'Conectado' : 'Offline'}</span>
+                </div>
+
+                <PWAInstallButton />
+
+                <button
+                  type="button"
+                  onClick={() => setIsReportarSelectorOpen(true)}
+                  className="inline-flex items-center gap-1.5 rounded-sm bg-[#0284C7] px-3 py-2 text-xs font-semibold text-white hover:bg-[#006398] min-h-[38px]"
+                >
+                  <PlusCircle className="h-4 w-4" />
+                  <span className="hidden sm:inline">Reportar</span>
+                </button>
+              </div>
+            </header>
+
+            <main className="flex-1 p-3 sm:p-6 space-y-4 max-w-[1080px] w-full mx-auto pb-24 lg:pb-8">
+              {/* Mobile Session Strip */}
+              <div className="flex lg:hidden items-center justify-between gap-2 rounded-md border border-[#E2E8F0] bg-white px-3 py-2 text-xs">
+                <div className="min-w-0">
+                  <div className="font-bold text-[#0F2942] truncate">{empresaNombre}</div>
+                  <div className="font-mono text-[11px] text-[#43474D]">
+                    {sesion.usuario.nombre} · TÉCNICO
+                  </div>
+                </div>
+                <div className="flex items-center gap-2 shrink-0">
+                  {empresasDisponibles.length > 1 && (
+                    <select
+                      value={empresaId}
+                      onChange={(e) => handleSeleccionarEmpresa(e.target.value)}
+                      aria-label="Cambiar empresa activa"
+                      className="rounded-sm border border-[#CBD5E1] bg-white px-2 py-1 text-[11px] font-semibold text-[#0F2942] max-w-[140px]"
+                    >
+                      {empresasDisponibles.map((item) => (
+                        <option key={item.empresa.id} value={item.empresa.id}>
+                          {item.empresa.nombre}
+                        </option>
+                      ))}
+                    </select>
+                  )}
+                  <button
+                    type="button"
+                    onClick={handleCerrarSesion}
+                    className="rounded-sm border border-[#CBD5E1] p-1.5 text-[#334155]"
+                    aria-label="Cerrar sesión"
+                  >
+                    <LogOut className="h-3.5 w-3.5" />
+                  </button>
+                </div>
+              </div>
+
+              {tecnicoTab === 'hoy' && (
+                <TecnicoHoyView
+                  snapshot={snapTecnico}
+                  isLoading={isLoadingSnapshot}
+                  error={errorSnapshot}
+                  isOnline={isOnline}
+                  successBanner={tecnicoSuccessBanner}
+                  onRetry={() => refrescar()}
+                  onAbrirDetalleRuta={abrirDetalleRuta}
+                  onAbrirTransicion={(srvId) => setTransicionServicioId(srvId)}
+                  onAbrirBitacora={(srvId) => {
+                    setBitacoraDefaultServicioId(srvId);
+                    setIsBitacoraModalOpen(true);
+                  }}
+                  onReportarViatico={(rId, pId) => abrirModalViatico({ rutaId: rId, proyectoId: pId })}
+                  onAbrirAgenda={() => setTecnicoTab('agenda_tecnico')}
+                  onVerMisRutas={() => setTecnicoTab('rutas_tecnico')}
+                />
+              )}
+
+              {tecnicoTab === 'rutas_tecnico' && (
+                <TecnicoRutasView
+                  snapshot={snapTecnico}
+                  isLoading={isLoadingSnapshot}
+                  error={errorSnapshot}
+                  isOnline={isOnline}
+                  areaUnit={areaUnit}
+                  onRetry={() => refrescar()}
+                  onAbrirDetalleRuta={abrirDetalleRuta}
+                  onAbrirAgenda={() => setTecnicoTab('agenda_tecnico')}
+                />
+              )}
+
+              {tecnicoTab === 'ruta_detalle' && (
+                <TecnicoRutaDetalleView
+                  snapshot={snapTecnico}
+                  rutaId={tecnicoRutaDetalleId || snapTecnico.rutas[0]?.id || ''}
+                  areaUnit={areaUnit}
+                  onChangeAreaUnit={setAreaUnit}
+                  liveGpsPoint={liveGpsPoint}
+                  isCapturingGps={isCapturingGps}
+                  onCaptureLiveGps={() => handleCaptureLiveGps(rutaActivaDetalle?.centroid)}
+                  isOnline={isOnline}
+                  successBanner={tecnicoSuccessBanner}
+                  onVolver={() => setTecnicoTab('rutas_tecnico')}
+                  onAbrirTransicion={(srvId) => setTransicionServicioId(srvId)}
+                  onAbrirBitacora={(srvId) => {
+                    setBitacoraDefaultServicioId(srvId);
+                    setIsBitacoraModalOpen(true);
+                  }}
+                  onReportarViatico={(rId, pId) => abrirModalViatico({ rutaId: rId, proyectoId: pId })}
+                />
+              )}
+
+              {tecnicoTab === 'agenda_tecnico' && (
+                <TecnicoAgendaView
+                  snapshot={snapTecnico}
+                  isLoading={isLoadingSnapshot}
+                  error={errorSnapshot}
+                  isOnline={isOnline}
+                  onRetry={() => refrescar()}
+                  onVolverHoy={() => setTecnicoTab('hoy')}
+                  onAbrirDetalleRuta={abrirDetalleRuta}
+                />
+              )}
+
+              {tecnicoTab === 'viaticos_tecnico' && (
+                <TecnicoViaticosView
+                  snapshot={snapTecnico}
+                  usuarioId={sesion.usuario.id}
+                  isLoading={isLoadingSnapshot}
+                  error={errorSnapshot}
+                  isOnline={isOnline}
+                  successBanner={tecnicoSuccessBanner}
+                  onRetry={() => refrescar()}
+                  onNuevoViatico={() =>
+                    abrirModalViatico({
+                      rutaId: rutaActivaDetalle?.id,
+                      proyectoId: rutaActivaDetalle?.proyectoId,
+                    })
+                  }
+                  onEditarViatico={(v) => abrirModalViatico({ editar: v })}
+                  onEliminarViatico={async (vId) => {
+                    await actions.eliminarViatico(vId);
+                    showTecnicoSuccess('Viático pendiente eliminado.');
+                  }}
+                />
+              )}
+            </main>
+          </div>
+        </div>
+
+        {/* Navegación móvil estricta de 4 botones para Técnico */}
+        <nav
+          aria-label="Navegación principal técnico"
+          className="fixed bottom-0 inset-x-0 z-40 grid grid-cols-4 border-t border-[#CBD5E1] bg-white lg:hidden shadow-[0_-2px_10px_rgba(15,41,66,0.08)]"
+        >
+          <button
+            type="button"
+            onClick={() => setTecnicoTab('hoy')}
+            className={`flex flex-col items-center justify-center gap-0.5 py-2 text-[11px] font-semibold min-h-[56px] ${
+              tecnicoTab === 'hoy' || tecnicoTab === 'agenda_tecnico'
+                ? 'text-[#0284C7] bg-[#F8FAFC]'
+                : 'text-[#43474D]'
+            }`}
+          >
+            <Compass className="h-4 w-4" />
+            <span>Hoy</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setTecnicoTab('rutas_tecnico')}
+            className={`flex flex-col items-center justify-center gap-0.5 py-2 text-[11px] font-semibold min-h-[56px] ${
+              tecnicoTab === 'rutas_tecnico' || tecnicoTab === 'ruta_detalle'
+                ? 'text-[#0284C7] bg-[#F8FAFC]'
+                : 'text-[#43474D]'
+            }`}
+          >
+            <Route className="h-4 w-4" />
+            <span>Mis rutas</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setIsReportarSelectorOpen(true)}
+            className="flex flex-col items-center justify-center gap-0.5 py-2 text-[11px] font-bold text-[#0F2942] bg-[#EFF6FF] border-x border-[#E2E8F0] min-h-[56px]"
+          >
+            <PlusCircle className="h-5 w-5 text-[#0284C7]" />
+            <span>Reportar</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setTecnicoTab('viaticos_tecnico')}
+            className={`flex flex-col items-center justify-center gap-0.5 py-2 text-[11px] font-semibold min-h-[56px] ${
+              tecnicoTab === 'viaticos_tecnico'
+                ? 'text-[#0284C7] bg-[#F8FAFC]'
+                : 'text-[#43474D]'
+            }`}
+          >
+            <Receipt className="h-4 w-4" />
+            <span>Mis viáticos</span>
+          </button>
+        </nav>
+
+        {/* Modales de campo para Técnico */}
+        <TecnicoReportarSelectorModal
+          isOpen={isReportarSelectorOpen}
+          onClose={() => setIsReportarSelectorOpen(false)}
+          onElegirViatico={() =>
+            abrirModalViatico({
+              rutaId: rutaActivaDetalle?.id,
+              proyectoId: rutaActivaDetalle?.proyectoId,
+            })
+          }
+          onElegirBitacora={() => {
+            const srvPreferido = rutaActivaDetalle
+              ? snapTecnico.servicios.find((s) => s.rutaId === rutaActivaDetalle.id)?.id
+              : undefined;
+            setBitacoraDefaultServicioId(srvPreferido);
+            setIsBitacoraModalOpen(true);
+          }}
+        />
+
+        <TecnicoBitacoraModal
+          isOpen={isBitacoraModalOpen}
+          onClose={() => setIsBitacoraModalOpen(false)}
+          snapshot={snapTecnico}
+          usuarioActual={sesion.usuario}
+          defaultServicioId={bitacoraDefaultServicioId}
+          isOnline={isOnline}
+          onAgregarBitacora={async (datos) => {
+            await actions.agregarBitacora(datos);
+            showTecnicoSuccess(
+              isOnline
+                ? 'Entrada agregada a la bitácora.'
+                : 'Bitácora guardada en cola offline.'
+            );
+          }}
+        />
+
+        <TecnicoTransicionModal
+          isOpen={Boolean(servicioEnTransicion)}
+          onClose={() => setTransicionServicioId(null)}
+          servicio={servicioEnTransicion}
+          ruta={rutaServicioTransicion}
+          asignacionesRuta={asignacionesServicioTransicion}
+          bitacoraCount={bitacorasServicioTransicion}
+          isOnline={isOnline}
+          onConfirmarTransicion={async (params) => {
+            await actions.transicionarServicio(params);
+            showTecnicoSuccess(
+              params.nuevoEstado === 'en_campo'
+                ? 'Servicio iniciado en campo.'
+                : 'Servicio cerrado a Procesando.'
+            );
+          }}
+          onAbrirBitacora={(srvId) => {
+            setBitacoraDefaultServicioId(srvId);
+            setIsBitacoraModalOpen(true);
+          }}
+        />
+
+        <MobileExpenseCaptureModal
+          isOpen={isExpenseModalOpen}
+          onClose={() => {
+            setIsExpenseModalOpen(false);
+            setEditingViatico(null);
+          }}
+          proyectos={snapTecnico.proyectos}
+          rutas={snapTecnico.rutas}
+          defaultProyectoId={expenseDefaultProyectoId}
+          defaultRutaId={expenseDefaultRutaId}
+          editingViatico={editingViatico}
+          isOnline={isOnline}
+          sessionToken={sesion.token}
+          creadoPorUsuario={sesion.usuario}
+          baseLat={snapTecnico.empresa.baseLat}
+          baseLon={snapTecnico.empresa.baseLon}
+          onAddExpense={async (expense) => {
+            await actions.registrarViatico(expense);
+            showTecnicoSuccess(
+              isOnline
+                ? `Viático de ${formatRD(expense.montoRD)} registrado.`
+                : `Viático guardado en cola offline (${formatRD(expense.montoRD)}).`
+            );
+          }}
+          onEditExpense={async (viaticoId, expense) => {
+            await actions.editarViatico(viaticoId, expense);
+            showTecnicoSuccess('Viático pendiente actualizado.');
+          }}
+        />
+
+        {toastMessage && (
+          <div className="fixed bottom-20 lg:bottom-5 right-4 z-50 flex items-center gap-2 rounded-sm border border-[#0F2942] bg-[#0F2942] px-4 py-2.5 text-xs font-medium text-white shadow-lg max-w-sm">
+            <CheckCircle2 className="h-4 w-4 text-[#86EFAC] shrink-0" />
+            <span>{toastMessage}</span>
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  // ============================================================================
+  // RENDERIZADO ADMIN / COORDINADOR (preserva todas las vistas existentes)
+  // ============================================================================
+  const snapshot = proyeccion.snapshot;
+  const canEdit = puedeCrearOEditarOperacion(rol);
+  const canAudit = puedeVerAuditoria(rol);
+  const selectedRuta =
+    snapshot.rutas.find((r) => r.id === selectedRutaId) ?? snapshot.rutas[0];
+
+  const handleOpenKmzInViewer = async (file: File) => {
+    try {
+      const parsed = await parseKmzOrKmlFile(file);
+      setStandaloneKmz(parsed);
+      setAdminTab('map');
+      showToast(`Visualizando ${parsed.fileName} en OpenStreetMap.`);
+    } catch (err: unknown) {
+      showToast(
+        err instanceof Error ? err.message : 'No se pudo abrir el archivo KMZ/KML/GeoJSON.'
+      );
+    }
+  };
+
+  const navItems: Array<{
+    id: AdminTab;
+    label: string;
+    shortLabel: string;
+    icon: React.FC<{ className?: string }>;
+  }> = [
     { id: 'proyectos', label: 'Proyectos y Rutas', shortLabel: 'Proyectos', icon: FolderKanban },
     { id: 'agenda', label: 'Agenda y Cuadrillas', shortLabel: 'Agenda', icon: CalendarDays },
     { id: 'rutas', label: 'Rutas y Servicios', shortLabel: 'Rutas', icon: Route },
@@ -342,7 +826,6 @@ export default function App() {
       : []),
   ];
 
-  // Datos activos para el visor OSM
   const viewerFeatures = standaloneKmz?.features ?? selectedRuta?.features ?? [];
   const viewerCentroid =
     standaloneKmz?.centroid ??
@@ -356,11 +839,15 @@ export default function App() {
 
   return (
     <div className="min-h-screen flex flex-col bg-[#F8FAFC] text-[#0D1C2F]">
+      <DemoBanner visible={isDemoActivo} />
       <OfflineSyncBanner
         isOnline={isOnline}
-        pendingCount={pendingCount}
+        pendingCount={pendingCounts.total}
+        pendingCounts={pendingCounts}
         hasConflict={hasConflict}
         isSyncing={isSyncing}
+        avisosLww={avisosLww}
+        onDescartarAvisosLww={descartarAvisosLww}
         onSyncNow={handleSyncNow}
       />
 
@@ -410,12 +897,12 @@ export default function App() {
           <nav className="flex-1 p-3 space-y-1">
             {navItems.map((item) => {
               const Icon = item.icon;
-              const active = activeTab === item.id;
+              const active = adminTab === item.id;
               return (
                 <button
                   key={item.id}
                   type="button"
-                  onClick={() => setActiveTab(item.id)}
+                  onClick={() => setAdminTab(item.id)}
                   className={`w-full flex items-center gap-3 rounded-sm px-3 py-2.5 text-xs font-semibold transition-colors whitespace-nowrap ${
                     active
                       ? 'bg-[#0284C7] text-white'
@@ -448,11 +935,7 @@ export default function App() {
 
             <button
               type="button"
-              onClick={() => {
-                setExpenseDefaultProyectoId(selectedRuta?.proyectoId);
-                setExpenseDefaultRutaId(selectedRuta?.id);
-                setIsExpenseModalOpen(true);
-              }}
+              onClick={() => abrirModalViatico()}
               className="w-full flex items-center justify-center gap-2 rounded-sm border border-[#5BB8FE]/40 bg-[#1E3A8A]/70 px-3 py-2.5 text-xs font-semibold text-white hover:bg-[#0284C7] transition-colors"
             >
               <Camera className="h-3.5 w-3.5" />
@@ -463,7 +946,6 @@ export default function App() {
 
         {/* Main Viewport */}
         <div className="flex-1 flex flex-col min-w-0 pb-20 lg:pb-0">
-          {/* Top Utility Header */}
           <header className="sticky top-0 z-30 flex items-center justify-between gap-4 border-b border-[#CBD5E1] bg-white/95 backdrop-blur px-4 sm:px-6 h-14">
             <div className="flex items-center gap-3 min-w-0">
               <div className="lg:hidden flex h-8 w-8 items-center justify-center rounded-sm bg-[#0F2942] text-white shrink-0">
@@ -471,13 +953,13 @@ export default function App() {
               </div>
               <div className="min-w-0">
                 <h1 className="text-sm sm:text-base font-bold text-[#0D1C2F] truncate">
-                  {activeTab === 'proyectos' && `${snapshot.empresa.nombre} · Proyectos y Rutas`}
-                  {activeTab === 'agenda' && 'Agenda de Cuadrillas y Conflictos'}
-                  {activeTab === 'rutas' && 'Cálculo de Rutas y Servicios Sumatorios'}
-                  {activeTab === 'map' && 'Visualizador KMZ / GeoJSON · OpenStreetMap'}
-                  {activeTab === 'viaticos' && 'Control de Viáticos y Reparto por Proyecto'}
-                  {activeTab === 'catalogos' && 'Catálogos, Flota y Equipos GNSS'}
-                  {activeTab === 'auditoria' && 'Auditoría Operativa (F16)'}
+                  {adminTab === 'proyectos' && `${snapshot.empresa.nombre} · Proyectos y Rutas`}
+                  {adminTab === 'agenda' && 'Agenda de Cuadrillas y Conflictos'}
+                  {adminTab === 'rutas' && 'Cálculo de Rutas y Servicios Sumatorios'}
+                  {adminTab === 'map' && 'Visualizador KMZ / GeoJSON · OpenStreetMap'}
+                  {adminTab === 'viaticos' && 'Control de Viáticos y Reparto por Proyecto'}
+                  {adminTab === 'catalogos' && 'Catálogos, Flota y Equipos GNSS'}
+                  {adminTab === 'auditoria' && 'Auditoría Operativa (F16)'}
                 </h1>
               </div>
             </div>
@@ -494,7 +976,7 @@ export default function App() {
 
               <PWAInstallButton />
 
-              {canEdit ? (
+              {canEdit && (
                 <button
                   type="button"
                   onClick={() => {
@@ -508,26 +990,11 @@ export default function App() {
                   <span className="hidden sm:inline">Nueva Ruta KMZ</span>
                   <span className="sm:hidden">KMZ</span>
                 </button>
-              ) : (
-                <button
-                  type="button"
-                  onClick={() => {
-                    setExpenseDefaultProyectoId(selectedRuta?.proyectoId);
-                    setExpenseDefaultRutaId(selectedRuta?.id);
-                    setIsExpenseModalOpen(true);
-                  }}
-                  className="inline-flex items-center gap-1.5 rounded-sm bg-[#0284C7] px-3.5 py-2 text-xs font-semibold text-white hover:bg-[#006398] transition-colors whitespace-nowrap shrink-0 min-h-[38px]"
-                >
-                  <Camera className="h-4 w-4" />
-                  <span>Reportar Gasto</span>
-                </button>
               )}
             </div>
           </header>
 
-          {/* Content Body */}
           <main className="flex-1 p-3 sm:p-6 space-y-5 max-w-[1440px] w-full mx-auto pb-24 lg:pb-8">
-            {/* Mobile Company & Session Strip */}
             <div className="flex lg:hidden items-center justify-between gap-2 rounded-md border border-[#E2E8F0] bg-white px-3 py-2 text-xs">
               <div className="min-w-0">
                 <div className="font-bold text-[#0F2942] truncate">{snapshot.empresa.nombre}</div>
@@ -537,13 +1004,18 @@ export default function App() {
               </div>
               <div className="flex items-center gap-2 shrink-0">
                 {empresasDisponibles.length > 1 && (
-                  <button
-                    type="button"
-                    onClick={() => setRequiereElegirEmpresa(true)}
-                    className="rounded-sm border border-[#CBD5E1] px-2.5 py-1.5 text-[11px] font-semibold"
+                  <select
+                    value={empresaId}
+                    onChange={(e) => handleSeleccionarEmpresa(e.target.value)}
+                    aria-label="Cambiar empresa activa"
+                    className="rounded-sm border border-[#CBD5E1] bg-white px-2 py-1.5 text-[11px] font-semibold text-[#0F2942] max-w-[140px]"
                   >
-                    Empresa
-                  </button>
+                    {empresasDisponibles.map((item) => (
+                      <option key={item.empresa.id} value={item.empresa.id}>
+                        {item.empresa.nombre}
+                      </option>
+                    ))}
+                  </select>
                 )}
                 <button
                   type="button"
@@ -556,28 +1028,26 @@ export default function App() {
               </div>
             </div>
 
-            {activeTab === 'proyectos' && (
+            {adminTab === 'proyectos' && (
               <ProyectosView
                 rol={rol}
                 usuarioActual={sesion.usuario}
                 clientes={snapshot.clientes}
                 proyectos={snapshot.proyectos}
-                rutas={rutasVisibles}
-                servicios={serviciosVisibles}
+                rutas={snapshot.rutas}
+                servicios={snapshot.servicios}
                 bitacoras={snapshot.bitacoras}
-                viaticos={viaticosVisibles}
-                rutasAsignadasIds={rutasAsignadasIds}
+                viaticos={snapshot.viaticos}
+                rutasAsignadasIds={rutasAsignadasAdminIds}
                 areaUnit={areaUnit}
-                pendingSyncCount={pendingCount}
+                pendingSyncCount={pendingCounts.total}
                 onChangeAreaUnit={setAreaUnit}
                 onCrearCliente={async (datos) => {
-                  await repositorioOperacion.crearCliente(empresaId, datos);
-                  await refrescarSnapshot(empresaId);
+                  await actions.crearCliente(datos);
                   showToast(`Cliente "${datos.nombre}" registrado.`);
                 }}
                 onCrearProyecto={async (datos) => {
-                  await repositorioOperacion.crearProyecto(empresaId, datos);
-                  await refrescarSnapshot(empresaId);
+                  await actions.crearProyecto(datos);
                   showToast(`Proyecto "${datos.nombre}" creado en estado Cotizado.`);
                 }}
                 onAbrirNuevaRutaKmz={(proyId) => {
@@ -586,55 +1056,44 @@ export default function App() {
                   setIsKmzModalOpen(true);
                 }}
                 onAgregarServicioARuta={async (datos) => {
-                  await repositorioOperacion.crearServicio(empresaId, datos);
-                  await refrescarSnapshot(empresaId);
+                  await actions.crearServicio(datos);
                   showToast(`Servicio "${datos.nombre}" agregado.`);
                 }}
                 onTransicionarServicio={async (params) => {
-                  await repositorioOperacion.transicionarServicio({
-                    empresaId,
-                    servicioId: params.servicioId,
-                    nuevoEstado: params.nuevoEstado,
-                    payload: params.payload,
-                  });
-                  await refrescarSnapshot(empresaId);
+                  await actions.transicionarServicio(params);
                   showToast(`Estado actualizado a "${params.nuevoEstado}".`);
                 }}
                 onAgregarBitacora={async (datos) => {
-                  await repositorioOperacion.agregarBitacora(empresaId, datos);
-                  await refrescarSnapshot(empresaId);
+                  await actions.agregarBitacora(datos);
                   showToast('Entrada agregada a la bitácora.');
                 }}
                 onVerRutaEnMapa={(rId) => {
                   setStandaloneKmz(null);
                   setSelectedRutaId(rId);
-                  setActiveTab('map');
+                  setAdminTab('map');
                 }}
                 onCalcularRuta={(rId) => {
                   setSelectedRutaId(rId);
-                  setActiveTab('rutas');
+                  setAdminTab('rutas');
                 }}
-                onReportarViaticoEnRuta={(rId, pId) => {
-                  setExpenseDefaultRutaId(rId);
-                  setExpenseDefaultProyectoId(pId);
-                  setIsExpenseModalOpen(true);
-                }}
+                onReportarViaticoEnRuta={(rId, pId) =>
+                  abrirModalViatico({ rutaId: rId, proyectoId: pId })
+                }
               />
             )}
 
-            {activeTab === 'agenda' && (
+            {adminTab === 'agenda' && (
               <AgendaView
                 rol={rol}
                 usuarioActual={sesion.usuario}
-                rutas={rutasVisibles}
+                rutas={snapshot.rutas}
                 cuadrillas={snapshot.cuadrillas}
                 personal={snapshot.personal}
                 vehiculos={snapshot.vehiculos}
                 equipos={snapshot.equipos}
                 asignaciones={snapshot.asignaciones}
                 onGuardarAsignacion={async (datos) => {
-                  await repositorioOperacion.guardarAsignacion(empresaId, datos);
-                  await refrescarSnapshot(empresaId);
+                  await actions.guardarAsignacion(datos);
                   showToast(
                     datos.overrideConflicto
                       ? 'Asignación guardada con excepción auditada.'
@@ -642,16 +1101,15 @@ export default function App() {
                   );
                 }}
                 onEliminarAsignacion={async (asigId) => {
-                  await repositorioOperacion.eliminarAsignacion(empresaId, asigId);
-                  await refrescarSnapshot(empresaId);
+                  await actions.eliminarAsignacion(asigId);
                   showToast('Asignación eliminada.');
                 }}
               />
             )}
 
-            {activeTab === 'rutas' && (
+            {adminTab === 'rutas' && (
               <RouteServicesCalculator
-                rutas={rutasVisibles}
+                rutas={snapshot.rutas}
                 proyectos={snapshot.proyectos}
                 vehiculos={snapshot.vehiculos}
                 selectedRuta={selectedRuta}
@@ -672,13 +1130,13 @@ export default function App() {
                   const rutaObj = snapshot.rutas.find((r) => r.id === rutaId);
                   const proyObj = snapshot.proyectos.find((p) => p.id === proyectoId);
                   if (rutaObj) {
-                    await repositorioOperacion.actualizarRuta(empresaId, {
+                    await actions.actualizarRuta({
                       ...rutaObj,
                       routeSummary,
                     });
                   }
                   if (proyObj) {
-                    await repositorioOperacion.actualizarProyecto(empresaId, {
+                    await actions.actualizarProyecto({
                       ...proyObj,
                       presupuestoViaticosRD: budgetViaticosRD,
                       valorContratoRD: contractValueRD,
@@ -689,7 +1147,7 @@ export default function App() {
                       (s) => s.rutaId === rutaId && s.tipoServicioId === sp.tipoServicioId
                     );
                     if (!existe) {
-                      await repositorioOperacion.crearServicio(empresaId, {
+                      await actions.crearServicio({
                         rutaId,
                         tipoServicioId: sp.tipoServicioId,
                         nombre: sp.nombre,
@@ -698,7 +1156,6 @@ export default function App() {
                       });
                     }
                   }
-                  await refrescarSnapshot(empresaId);
                   showToast(
                     `Presupuesto (${formatRD(budgetViaticosRD)}) y servicios aplicados a la ruta.`
                   );
@@ -709,21 +1166,21 @@ export default function App() {
                 }}
                 onLogRouteExpenses={async (items) => {
                   for (const item of items) {
-                    await repositorioOperacion.registrarViatico(empresaId, item);
+                    await actions.registrarViatico(item);
                   }
-                  await refrescarSnapshot(empresaId);
-                  setActiveTab('viaticos');
+                  setAdminTab('viaticos');
                   showToast(`${items.length} viático(s) de ruta registrados en el libro.`);
                 }}
-                onOpenExpenseModal={() => {
-                  setExpenseDefaultRutaId(selectedRuta?.id);
-                  setExpenseDefaultProyectoId(selectedRuta?.proyectoId);
-                  setIsExpenseModalOpen(true);
-                }}
+                onOpenExpenseModal={() =>
+                  abrirModalViatico({
+                    rutaId: selectedRuta?.id,
+                    proyectoId: selectedRuta?.proyectoId,
+                  })
+                }
               />
             )}
 
-            {activeTab === 'map' && (
+            {adminTab === 'map' && (
               <section className="space-y-4">
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 rounded-md border border-[#CBD5E1] bg-white p-4">
                   <div className="flex flex-wrap items-center gap-2.5 flex-1 min-w-0">
@@ -742,7 +1199,7 @@ export default function App() {
                           Vista previa: {standaloneKmz.fileName}
                         </option>
                       )}
-                      {rutasVisibles.map((r) => (
+                      {snapshot.rutas.map((r) => (
                         <option key={r.id} value={r.id}>
                           {r.codigoParcela} — {r.nombre} ({r.provincia})
                         </option>
@@ -786,7 +1243,7 @@ export default function App() {
 
                   <button
                     type="button"
-                    onClick={handleCaptureLiveGps}
+                    onClick={() => handleCaptureLiveGps()}
                     disabled={isCapturingGps}
                     className="inline-flex items-center justify-center gap-1.5 rounded-sm bg-[#0284C7] px-3.5 py-2 text-xs font-semibold text-white hover:bg-[#006398] disabled:opacity-60 min-h-[40px] shrink-0"
                   >
@@ -809,42 +1266,28 @@ export default function App() {
               </section>
             )}
 
-            {activeTab === 'viaticos' && (
+            {adminTab === 'viaticos' && (
               <ViaticosView
                 rol={rol}
-                viaticos={viaticosVisibles}
+                viaticos={snapshot.viaticos}
                 proyectos={snapshot.proyectos}
-                onAbrirModalNuevo={() => {
-                  setExpenseDefaultProyectoId(selectedRuta?.proyectoId);
-                  setExpenseDefaultRutaId(selectedRuta?.id);
-                  setIsExpenseModalOpen(true);
-                }}
+                onAbrirModalNuevo={() => abrirModalViatico()}
                 onDecidirViatico={async (params) => {
-                  await repositorioOperacion.decidirViatico({
-                    empresaId,
-                    ...params,
-                  });
-                  await refrescarSnapshot(empresaId);
+                  await actions.decidirViatico(params);
                   showToast(`Viático marcado como ${params.nuevoEstado}.`);
                 }}
                 onActualizarReparto={async (viaticoId, repartos) => {
-                  await repositorioOperacion.actualizarRepartoViatico(
-                    empresaId,
-                    viaticoId,
-                    repartos
-                  );
-                  await refrescarSnapshot(empresaId);
+                  await actions.actualizarRepartoViatico(viaticoId, repartos);
                   showToast('Reparto exacto por proyecto actualizado.');
                 }}
                 onEliminarViatico={async (viaticoId) => {
-                  await repositorioOperacion.eliminarViatico(empresaId, viaticoId);
-                  await refrescarSnapshot(empresaId);
+                  await actions.eliminarViatico(viaticoId);
                   showToast('Viático eliminado.');
                 }}
               />
             )}
 
-            {activeTab === 'catalogos' && (
+            {adminTab === 'catalogos' && (
               <CatalogosView
                 rol={rol}
                 empresa={snapshot.empresa}
@@ -856,47 +1299,37 @@ export default function App() {
                 equipos={snapshot.equipos}
                 cuadrillas={snapshot.cuadrillas}
                 onCrearCliente={async (datos) => {
-                  await repositorioOperacion.crearCliente(empresaId, datos);
-                  await refrescarSnapshot(empresaId);
+                  await actions.crearCliente(datos);
                 }}
                 onGuardarPersonal={async (item) => {
-                  await repositorioOperacion.guardarPersonal(empresaId, item);
-                  await refrescarSnapshot(empresaId);
+                  await actions.guardarPersonal(item);
                 }}
                 onGuardarVehiculo={async (item) => {
-                  await repositorioOperacion.guardarVehiculo(empresaId, item);
-                  await refrescarSnapshot(empresaId);
+                  await actions.guardarVehiculo(item);
                 }}
                 onGuardarEquipo={async (item) => {
-                  await repositorioOperacion.guardarEquipo(empresaId, item);
-                  await refrescarSnapshot(empresaId);
+                  await actions.guardarEquipo(item);
                 }}
                 onGuardarCuadrilla={async (item) => {
-                  await repositorioOperacion.guardarCuadrilla(empresaId, item);
-                  await refrescarSnapshot(empresaId);
+                  await actions.guardarCuadrilla(item);
                 }}
                 onActualizarEmpresa={async (emp) => {
-                  await repositorioOperacion.actualizarEmpresa(emp);
-                  await refrescarSnapshot(empresaId);
+                  await actions.actualizarEmpresa(emp);
                 }}
                 onGuardarMembresiaUsuario={async (params) => {
-                  await repositorioOperacion.guardarMembresiaUsuario({
-                    empresaId,
-                    ...params,
-                  });
-                  await refrescarSnapshot(empresaId);
+                  await actions.guardarMembresiaUsuario(params);
                 }}
               />
             )}
 
-            {activeTab === 'auditoria' && canAudit && (
+            {adminTab === 'auditoria' && canAudit && (
               <AuditoriaView historial={snapshot.historial} />
             )}
           </main>
         </div>
       </div>
 
-      {/* Mobile Sticky 5-Button Navigation Bar */}
+      {/* Mobile Sticky 5-Button Navigation Bar para Admin / Coordinador */}
       <nav className="fixed bottom-0 inset-x-0 z-40 grid grid-cols-5 border-t border-[#CBD5E1] bg-white lg:hidden shadow-[0_-2px_10px_rgba(15,41,66,0.08)]">
         {[
           { id: 'proyectos' as const, label: 'Proyectos', icon: FolderKanban },
@@ -906,12 +1339,12 @@ export default function App() {
           { id: 'catalogos' as const, label: 'Equipos', icon: Users },
         ].map((item) => {
           const Icon = item.icon;
-          const active = activeTab === item.id;
+          const active = adminTab === item.id;
           return (
             <button
               key={item.id}
               type="button"
-              onClick={() => setActiveTab(item.id)}
+              onClick={() => setAdminTab(item.id)}
               className={`flex flex-col items-center justify-center gap-0.5 py-2 text-[11px] font-semibold min-h-[54px] ${
                 active ? 'text-[#0284C7] bg-[#F8FAFC]' : 'text-[#43474D]'
               }`}
@@ -923,7 +1356,7 @@ export default function App() {
         })}
       </nav>
 
-      {/* Modales */}
+      {/* Modales Admin / Coordinador */}
       <KmzImportModal
         isOpen={isKmzModalOpen}
         onClose={() => {
@@ -944,14 +1377,14 @@ export default function App() {
         onCrearClienteYProyectoRapido={async (datos) => {
           let cliId = datos.clienteIdExistente;
           if (!cliId) {
-            const nuevoCli = await repositorioOperacion.crearCliente(empresaId, {
+            const nuevoCli = await actions.crearCliente({
               nombre: datos.clienteNombre,
               rnc: datos.clienteRnc,
               contacto: datos.clienteContacto,
             });
             cliId = nuevoCli.id;
           }
-          return repositorioOperacion.crearProyecto(empresaId, {
+          return actions.crearProyecto({
             clienteId: cliId,
             nombre: datos.proyectoNombre,
             codigoContrato: datos.codigoContrato,
@@ -967,16 +1400,16 @@ export default function App() {
           viaticosIniciales,
           openMobileExpenseAfter,
         }) => {
-          const nuevaRuta = await repositorioOperacion.crearRuta(empresaId, ruta);
+          const nuevaRuta = await actions.crearRuta(ruta);
           for (const srv of servicios) {
-            await repositorioOperacion.crearServicio(empresaId, {
+            await actions.crearServicio({
               ...srv,
               rutaId: nuevaRuta.id,
             });
           }
           if (viaticosIniciales && viaticosIniciales.length > 0) {
             for (const via of viaticosIniciales) {
-              await repositorioOperacion.registrarViatico(empresaId, {
+              await actions.registrarViatico({
                 ...via,
                 rutaId: nuevaRuta.id,
               });
@@ -984,7 +1417,7 @@ export default function App() {
           }
 
           if (asignacionOpcional) {
-            const snapActual = await repositorioOperacion.cargarSnapshotEmpresa(empresaId);
+            const snapActual = await actions.cargarSnapshotParaValidacion();
             const conflictos = detectarConflictosAsignacion({
               candidata: {
                 id: `asig-kmz-${Date.now()}`,
@@ -1006,25 +1439,22 @@ export default function App() {
               });
               setKmzAsigConflictos(conflictos);
             } else {
-              await repositorioOperacion.guardarAsignacion(empresaId, {
+              await actions.guardarAsignacion({
                 rutaId: nuevaRuta.id,
                 ...asignacionOpcional,
               });
             }
           }
 
-          await refrescarSnapshot(empresaId);
           setSelectedRutaId(nuevaRuta.id);
           setStandaloneKmz(null);
           setPreloadedKmzForModal(null);
 
           if (openMobileExpenseAfter) {
-            setExpenseDefaultRutaId(nuevaRuta.id);
-            setExpenseDefaultProyectoId(proyectoId);
-            setIsExpenseModalOpen(true);
+            abrirModalViatico({ rutaId: nuevaRuta.id, proyectoId });
             showToast(`Ruta ${nuevaRuta.codigoParcela} creada. Adjunta tu comprobante móvil.`);
           } else {
-            setActiveTab('proyectos');
+            setAdminTab('proyectos');
             showToast(`Ruta ${nuevaRuta.codigoParcela} y servicios registrados.`);
           }
         }}
@@ -1032,24 +1462,31 @@ export default function App() {
 
       <MobileExpenseCaptureModal
         isOpen={isExpenseModalOpen}
-        onClose={() => setIsExpenseModalOpen(false)}
+        onClose={() => {
+          setIsExpenseModalOpen(false);
+          setEditingViatico(null);
+        }}
         proyectos={snapshot.proyectos}
-        rutas={rutasVisibles}
+        rutas={snapshot.rutas}
         defaultProyectoId={expenseDefaultProyectoId}
         defaultRutaId={expenseDefaultRutaId}
+        editingViatico={editingViatico}
         isOnline={isOnline}
         sessionToken={sesion.token}
         creadoPorUsuario={sesion.usuario}
         baseLat={snapshot.empresa.baseLat}
         baseLon={snapshot.empresa.baseLon}
         onAddExpense={async (expense) => {
-          await repositorioOperacion.registrarViatico(empresaId, expense);
-          await refrescarSnapshot(empresaId);
+          await actions.registrarViatico(expense);
           showToast(
             isOnline
               ? `Viático de ${formatRD(expense.montoRD)} registrado.`
               : `Viático guardado en cola offline (${formatRD(expense.montoRD)}).`
           );
+        }}
+        onEditExpense={async (viaticoId, expense) => {
+          await actions.editarViatico(viaticoId, expense);
+          showToast('Viático actualizado.');
         }}
       />
 
@@ -1069,11 +1506,10 @@ export default function App() {
                 fecha: new Date().toISOString().slice(0, 10),
               }
             : undefined;
-          await repositorioOperacion.guardarAsignacion(empresaId, {
+          await actions.guardarAsignacion({
             ...pendingKmzAsig,
             overrideConflicto,
           });
-          await refrescarSnapshot(empresaId);
           setPendingKmzAsig(null);
           setKmzAsigConflictos([]);
           showToast('Asignación de ruta guardada con excepción auditada.');

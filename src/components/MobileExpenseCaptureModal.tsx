@@ -1,4 +1,4 @@
-import React, { useMemo, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   Camera,
   CheckCircle2,
@@ -28,21 +28,46 @@ import {
   latLonToUtm19N,
 } from '../utils/geodesy';
 
+export type ProyectoSelectorItem = Pick<Proyecto, 'id' | 'nombre' | 'codigoContrato'>;
+export type RutaSelectorItem = Pick<
+  Ruta,
+  'id' | 'proyectoId' | 'codigoParcela' | 'nombre' | 'provincia' | 'centroid'
+>;
+
+export type ViaticoPayload = Omit<
+  Viatico,
+  'id' | 'empresaId' | 'estadoAprobacion' | 'version' | 'updatedAt'
+>;
+
+export type ViaticoEdicionPayload = Omit<
+  Viatico,
+  | 'id'
+  | 'empresaId'
+  | 'creadoPorUsuarioId'
+  | 'creadoPorNombre'
+  | 'estadoAprobacion'
+  | 'motivoRechazo'
+  | 'aprobadoPorUsuarioId'
+  | 'aprobadoEn'
+  | 'version'
+  | 'updatedAt'
+>;
+
 interface MobileExpenseCaptureModalProps {
   isOpen: boolean;
   onClose: () => void;
-  proyectos: Proyecto[];
-  rutas: Ruta[];
+  proyectos: ProyectoSelectorItem[];
+  rutas: RutaSelectorItem[];
   defaultProyectoId?: string;
   defaultRutaId?: string;
+  editingViatico?: Viatico | null;
   isOnline: boolean;
   sessionToken: string;
   creadoPorUsuario: { id: string; nombre: string };
   baseLat?: number;
   baseLon?: number;
-  onAddExpense: (
-    expense: Omit<Viatico, 'id' | 'empresaId' | 'estadoAprobacion' | 'version' | 'updatedAt'>
-  ) => Promise<void>;
+  onAddExpense: (expense: ViaticoPayload) => Promise<void>;
+  onEditExpense?: (viaticoId: string, expense: ViaticoEdicionPayload) => Promise<void>;
 }
 
 const CATEGORIES: CategoriaViatico[] = [
@@ -131,22 +156,24 @@ export const MobileExpenseCaptureModal: React.FC<MobileExpenseCaptureModalProps>
   rutas,
   defaultProyectoId,
   defaultRutaId,
+  editingViatico = null,
   isOnline,
   sessionToken,
   creadoPorUsuario,
   baseLat = 18.4861,
   baseLon = -69.9312,
   onAddExpense,
+  onEditExpense,
 }) => {
   const cameraInputRef = useRef<HTMLInputElement>(null);
   const [captureMode, setCaptureMode] = useState<'ocr' | 'gps' | 'quick'>('ocr');
   const [rutaId, setRutaId] = useState(defaultRutaId || rutas[0]?.id || '');
 
-  const initialProyectoId =
-    defaultProyectoId ||
-    rutas.find((r) => r.id === (defaultRutaId || rutas[0]?.id))?.proyectoId ||
-    proyectos[0]?.id ||
-    'sin_asignar';
+  const resolveInitialProyectoId = () => {
+    if (defaultProyectoId) return defaultProyectoId;
+    const rutaBase = rutas.find((r) => r.id === (defaultRutaId || rutas[0]?.id));
+    return rutaBase?.proyectoId || proyectos[0]?.id || 'sin_asignar';
+  };
 
   const [category, setCategory] = useState<CategoriaViatico>('Combustible');
   const [merchant, setMerchant] = useState('');
@@ -157,11 +184,10 @@ export const MobileExpenseCaptureModal: React.FC<MobileExpenseCaptureModalProps>
   const [notes, setNotes] = useState('');
   const [method, setMethod] = useState<MetodoViatico>('OCR Móvil');
 
-  // Reparto exacto por proyecto (puede dividirse entre varios proyectos o ir a sin_asignar)
   const [repartoModo, setRepartoModo] = useState<'unico' | 'multiple' | 'sin_asignar'>('unico');
-  const [proyectoUnicoId, setProyectoUnicoId] = useState<string>(initialProyectoId);
+  const [proyectoUnicoId, setProyectoUnicoId] = useState<string>(resolveInitialProyectoId);
   const [repartosMultiples, setRepartosMultiples] = useState<RepartoProyecto[]>([
-    { proyectoId: initialProyectoId, montoRD: 0 },
+    { proyectoId: resolveInitialProyectoId(), montoRD: 0 },
   ]);
 
   const [receiptPreview, setReceiptPreview] = useState<string | null>(null);
@@ -180,6 +206,71 @@ export const MobileExpenseCaptureModal: React.FC<MobileExpenseCaptureModalProps>
     northing: number;
   } | null>(null);
   const [distanceKm, setDistanceKm] = useState<number | undefined>(undefined);
+
+  // Sincroniza ruta, proyecto y campos al abrir o cambiar de ruta activa / modo edición
+  useEffect(() => {
+    if (!isOpen) return;
+
+    setErrorMsg(null);
+    setOcrStatusMsg(null);
+
+    if (editingViatico) {
+      setRutaId(editingViatico.rutaId || '');
+      setCategory(editingViatico.categoria);
+      setMerchant(editingViatico.comercio);
+      setAmountRD(String(editingViatico.montoRD));
+      setItbisRD(String(editingViatico.itbisRD ?? 0));
+      setNcf(editingViatico.ncf || '');
+      setDateIso(editingViatico.fechaIso);
+      setNotes(editingViatico.notas || '');
+      setMethod(editingViatico.metodo);
+      setReceiptPreview(editingViatico.receiptThumbnail || null);
+      setPendingReceiptMime(editingViatico.pendingReceiptMime);
+      setNeedsOfflineOcr(editingViatico.syncStatus === 'needs_ocr');
+      setGpsCoords(editingViatico.gpsCoords || null);
+      setDistanceKm(editingViatico.distanceKm);
+
+      if (editingViatico.repartos.length === 1) {
+        const unico = editingViatico.repartos[0];
+        if (unico.proyectoId === 'sin_asignar') {
+          setRepartoModo('sin_asignar');
+          setProyectoUnicoId(proyectos[0]?.id || 'sin_asignar');
+        } else {
+          setRepartoModo('unico');
+          setProyectoUnicoId(unico.proyectoId);
+        }
+        setRepartosMultiples(editingViatico.repartos);
+      } else {
+        setRepartoModo('multiple');
+        setRepartosMultiples(editingViatico.repartos.map((r) => ({ ...r })));
+      }
+      return;
+    }
+
+    const nextRutaId = defaultRutaId || rutas[0]?.id || '';
+    const rutaObj = rutas.find((r) => r.id === nextRutaId);
+    const nextProyectoId =
+      defaultProyectoId || rutaObj?.proyectoId || proyectos[0]?.id || 'sin_asignar';
+
+    setCaptureMode('ocr');
+    setRutaId(nextRutaId);
+    setCategory('Combustible');
+    setMerchant('');
+    setAmountRD('');
+    setItbisRD('0');
+    setNcf('');
+    setDateIso(new Date().toISOString().slice(0, 10));
+    setNotes('');
+    setMethod('OCR Móvil');
+    setRepartoModo('unico');
+    setProyectoUnicoId(nextProyectoId);
+    setRepartosMultiples([{ proyectoId: nextProyectoId, montoRD: 0 }]);
+    setReceiptPreview(null);
+    setPendingReceiptMime(undefined);
+    setNeedsOfflineOcr(false);
+    setGpsCoords(null);
+    setDistanceKm(undefined);
+  }, [isOpen, defaultRutaId, defaultProyectoId, editingViatico, rutas, proyectos]);
 
   const selectedRuta = useMemo(() => rutas.find((r) => r.id === rutaId), [rutas, rutaId]);
   const montoNumerico = Number(amountRD) || 0;
@@ -219,7 +310,7 @@ export const MobileExpenseCaptureModal: React.FC<MobileExpenseCaptureModalProps>
       if (!isOnline) {
         setNeedsOfflineOcr(true);
         setOcrStatusMsg(
-          'Sin conexión: foto guardada en la cola local. Se procesará al reconectar.'
+          'Sin conexión: foto guardada en cola local para lectura OCR al reconectar. Puedes completar los campos manualmente.'
         );
         if (!merchant) setMerchant('Comprobante pendiente de lectura IA');
         return;
@@ -256,7 +347,9 @@ export const MobileExpenseCaptureModal: React.FC<MobileExpenseCaptureModalProps>
       if (CATEGORIES.includes(ex.category)) setCategory(ex.category);
 
       setNeedsOfflineOcr(false);
-      setOcrStatusMsg(`Comprobante leído automáticamente (confianza ${ex.confidence ?? 'alta'}).`);
+      setOcrStatusMsg(
+        `Sugerencia OCR aplicada (confianza ${ex.confidence ?? 'alta'}). Revisa y edita cualquier campo antes de guardar.`
+      );
     } catch (err: unknown) {
       setErrorMsg(err instanceof Error ? err.message : 'Error procesando el comprobante.');
     } finally {
@@ -364,12 +457,10 @@ export const MobileExpenseCaptureModal: React.FC<MobileExpenseCaptureModalProps>
 
     setIsSaving(true);
     try {
-      await onAddExpense({
-        creadoPorUsuarioId: creadoPorUsuario.id,
-        creadoPorNombre: creadoPorUsuario.nombre,
+      const payloadBase: ViaticoEdicionPayload = {
         rutaId: rutaId || undefined,
         fechaIso: dateIso,
-        timestampAST: formatSantoDomingoAST(new Date()),
+        timestampAST: editingViatico?.timestampAST || formatSantoDomingoAST(new Date()),
         categoria: category,
         comercio: merchant.trim() || `${category} en Campo`,
         montoRD: parsedAmount,
@@ -384,17 +475,21 @@ export const MobileExpenseCaptureModal: React.FC<MobileExpenseCaptureModalProps>
         repartos: repartosCalculados,
         notas: notes.trim() || undefined,
         syncStatus: needsOfflineOcr ? 'needs_ocr' : 'pending',
-      });
+      };
 
-      setReceiptPreview(null);
-      setMerchant('');
-      setAmountRD('');
-      setNcf('');
-      setNotes('');
-      setOcrStatusMsg(null);
+      if (editingViatico && onEditExpense) {
+        await onEditExpense(editingViatico.id, payloadBase);
+      } else {
+        await onAddExpense({
+          ...payloadBase,
+          creadoPorUsuarioId: creadoPorUsuario.id,
+          creadoPorNombre: creadoPorUsuario.nombre,
+        });
+      }
+
       onClose();
     } catch (err: unknown) {
-      setErrorMsg(err instanceof Error ? err.message : 'No se pudo registrar el viático.');
+      setErrorMsg(err instanceof Error ? err.message : 'No se pudo guardar el viático.');
     } finally {
       setIsSaving(false);
     }
@@ -410,10 +505,10 @@ export const MobileExpenseCaptureModal: React.FC<MobileExpenseCaptureModalProps>
         <div className="flex items-center justify-between border-b border-[#E2E8F0] px-5 py-3.5">
           <div>
             <h2 className="text-base font-bold text-[#0D1C2F]">
-              Reportar Viático en Campo
+              {editingViatico ? 'Editar Viático Pendiente' : 'Reportar Viático en Campo'}
             </h2>
             <p className="text-xs text-[#43474D]">
-              Captura por cámara OCR, ruta GPS o tarifa estándar y reparto exacto a proyectos.
+              Captura opcional por foto OCR (editable), ruta GPS o tarifa rápida. Se registra en estado Pendiente.
             </p>
           </div>
           <button
@@ -470,7 +565,7 @@ export const MobileExpenseCaptureModal: React.FC<MobileExpenseCaptureModalProps>
           {/* Ruta de referencia */}
           <div>
             <label className="block text-xs font-semibold text-[#334155] mb-1">
-              Ruta de Campo de Referencia (opcional)
+              Ruta de Campo de Referencia
             </label>
             <select
               value={rutaId}
@@ -516,12 +611,12 @@ export const MobileExpenseCaptureModal: React.FC<MobileExpenseCaptureModalProps>
                   {isAnalyzing ? (
                     <>
                       <Loader2 className="h-4 w-4 animate-spin" />
-                      Extrayendo NCF, monto e ITBIS...
+                      Leyendo comprobante (sugerencia)...
                     </>
                   ) : (
                     <>
                       <Camera className="h-4 w-4" />
-                      Tomar Foto o Subir Comprobante
+                      Tomar Foto / Subir Recibo (Opcional)
                     </>
                   )}
                 </button>
@@ -536,7 +631,7 @@ export const MobileExpenseCaptureModal: React.FC<MobileExpenseCaptureModalProps>
               <p className="mt-2 flex items-center gap-1.5 text-[11px] text-[#43474D]">
                 <Sparkles className="h-3.5 w-3.5 text-[#0284C7] shrink-0" />
                 {isOnline
-                  ? 'Lectura automática con IA: extrae establecimiento, monto en RD$, ITBIS y NCF fiscal.'
+                  ? 'La foto prellena los campos como sugerencia editable; revisa monto, NCF e ITBIS antes de guardar.'
                   : 'Modo sin señal: la fotografía se encola localmente para OCR al reconectar.'}
               </p>
             </div>
@@ -847,6 +942,8 @@ export const MobileExpenseCaptureModal: React.FC<MobileExpenseCaptureModalProps>
               <Receipt className="h-4 w-4" />
               {isSaving
                 ? 'Guardando...'
+                : editingViatico
+                ? 'Guardar Cambios'
                 : isOnline
                 ? 'Guardar y Reportar Viático'
                 : 'Encolar Viático Offline'}

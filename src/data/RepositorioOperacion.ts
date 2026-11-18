@@ -1,5 +1,6 @@
 import type {
   Asignacion,
+  AvisoSobrescrituraLWW,
   BitacoraEntrada,
   Cliente,
   Cuadrilla,
@@ -9,6 +10,7 @@ import type {
   EstadoEmpresaSnapshot,
   EstadoServicio,
   Personal,
+  ProyeccionSnapshotPorRol,
   Proyecto,
   RepartoProyecto,
   RolEmpresa,
@@ -30,6 +32,7 @@ export interface CuentaDemoInfo {
 
 export interface RepositorioOperacion {
   // F1: Autenticación, multiempresa y caché offline
+  esModoDemoActivo(): boolean;
   listarCuentasDemo(): CuentaDemoInfo[];
   iniciarSesion(email: string, password: string): Promise<SesionActiva>;
   obtenerSesionGuardada(): SesionActiva | null;
@@ -37,8 +40,14 @@ export interface RepositorioOperacion {
   listarEmpresasDeUsuario(usuarioId: string): Promise<Array<{ empresa: Empresa; rol: RolEmpresa }>>;
   cambiarEmpresaActiva(empresaId: string): Promise<SesionActiva>;
 
-  // Snapshot operativo de la empresa activa
+  // Snapshot operativo proyectado por rol (admin/coordinador vs SnapshotTecnico)
   cargarSnapshotEmpresa(empresaId: string): Promise<EstadoEmpresaSnapshot>;
+  cargarSnapshotParaRol(params: {
+    empresaId: string;
+    rol: RolEmpresa;
+    usuarioId: string;
+    personalIdMembresia?: string;
+  }): Promise<ProyeccionSnapshotPorRol>;
 
   // F2: Clientes y Proyectos
   crearCliente(
@@ -92,6 +101,23 @@ export interface RepositorioOperacion {
       'id' | 'empresaId' | 'estadoAprobacion' | 'version' | 'updatedAt'
     >
   ): Promise<Viatico>;
+  editarViatico(
+    empresaId: string,
+    viaticoId: string,
+    datos: Omit<
+      Viatico,
+      | 'id'
+      | 'empresaId'
+      | 'creadoPorUsuarioId'
+      | 'creadoPorNombre'
+      | 'estadoAprobacion'
+      | 'motivoRechazo'
+      | 'aprobadoPorUsuarioId'
+      | 'aprobadoEn'
+      | 'version'
+      | 'updatedAt'
+    >
+  ): Promise<Viatico>;
   actualizarRepartoViatico(
     empresaId: string,
     viaticoId: string,
@@ -124,5 +150,6 @@ export interface RepositorioOperacion {
   sincronizarConServidor(empresaId: string): Promise<{
     snapshot: EstadoEmpresaSnapshot;
     ocrProcesados: number;
+    sobrescritosLocales: AvisoSobrescrituraLWW[];
   }>;
 }

@@ -3,3 +3,4 @@ export * from './estados';
 export * from './conflictos';
 export * from './viaticos';
 export * from './sync';
+export * from './tecnico';

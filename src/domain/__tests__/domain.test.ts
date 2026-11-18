@@ -115,11 +115,43 @@ describe('Transiciones de Servicio y datos de cobro (F7-F9)', () => {
 
   it('Técnico puede pasar programado -> en_campo -> procesando con fechas reales, pero no entregado/cobrado', () => {
     const rutasTec = new Set(['ruta-1']);
+    const asignaciones: Asignacion[] = [
+      {
+        id: 'asig-t1',
+        empresaId: 'emp-aia',
+        rutaId: 'ruta-1',
+        fechaInicio: '2026-11-20',
+        fechaFin: '2026-11-22',
+        cuadrillaId: 'cua-1',
+        vehiculoIds: ['veh-1'],
+        equipoIds: ['eq-1'],
+        version: 1,
+        updatedAt: '2026-11-18T10:00:00.000Z',
+        syncStatus: 'synced',
+      },
+    ];
+    const bitacoras = [
+      {
+        id: 'bit-t1',
+        empresaId: 'emp-aia',
+        servicioId: 'srv-1',
+        rutaId: 'ruta-1',
+        autorUsuarioId: 'usr-tec1',
+        autorNombre: 'Carlos Méndez',
+        fechaAST: '20/11/2026 10:00:00 AST',
+        nota: 'Levantamiento ejecutado en linderos.',
+        fotos: [],
+        syncStatus: 'synced' as const,
+      },
+    ];
+
     const r1 = validarTransicionServicio({
       rol: 'tecnico',
       servicio: srvBase,
       nuevoEstado: 'en_campo',
       rutasAsignadasIds: rutasTec,
+      asignaciones,
+      cuadrillasUsuarioIds: new Set(['cua-1']),
       payload: { fechaRealInicio: '2026-11-20' },
     });
     expect(r1.valido).toBe(true);
@@ -131,6 +163,8 @@ describe('Transiciones de Servicio y datos de cobro (F7-F9)', () => {
       servicio: r1.servicioActualizado!,
       nuevoEstado: 'procesando',
       rutasAsignadasIds: rutasTec,
+      asignaciones,
+      bitacoras,
       payload: { fechaRealFin: '2026-11-21' },
     });
     expect(r2.valido).toBe(true);
@@ -141,6 +175,8 @@ describe('Transiciones de Servicio y datos de cobro (F7-F9)', () => {
       servicio: r2.servicioActualizado!,
       nuevoEstado: 'entregado',
       rutasAsignadasIds: rutasTec,
+      asignaciones,
+      bitacoras,
     });
     expect(rForbidden.valido).toBe(false);
   });

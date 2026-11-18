@@ -28,7 +28,7 @@ import { formatRD } from '../utils/geodesy';
 interface ViaticosViewProps {
   rol: RolEmpresa;
   viaticos: Viatico[];
-  proyectos: Proyecto[];
+  proyectos: Array<Pick<Proyecto, 'id' | 'nombre' | 'codigoContrato'>>;
   onAbrirModalNuevo: () => void;
   onDecidirViatico: (params: {
     viaticoId: string;
@@ -423,8 +423,14 @@ export const ViaticosView: React.FC<ViaticosViewProps> = ({
               </span>
             </div>
 
-            {canDecide && (
-              <div className="grid grid-cols-3 gap-2 pt-1">
+            {v.motivoRechazo && (
+              <div className="rounded-sm border border-[#FCA5A5] bg-[#FEE2E2]/60 px-2.5 py-1.5 text-[11px] text-[#93000A]">
+                Motivo rechazo: {v.motivoRechazo}
+              </div>
+            )}
+
+            {canDecide ? (
+              <div className="grid grid-cols-4 gap-2 pt-1">
                 <button
                   type="button"
                   onClick={() => onDecidirViatico({ viaticoId: v.id, nuevoEstado: 'aprobado' })}
@@ -456,7 +462,29 @@ export const ViaticosView: React.FC<ViaticosViewProps> = ({
                   <Split className="h-3.5 w-3.5" />
                   Repartir
                 </button>
+                <button
+                  type="button"
+                  onClick={() => onEliminarViatico(v.id)}
+                  title="Eliminar viático"
+                  className="inline-flex items-center justify-center gap-1 rounded-sm border border-[#FCA5A5] bg-white py-2 text-xs font-semibold text-[#DC2626] min-h-[40px]"
+                >
+                  <Trash2 className="h-3.5 w-3.5" />
+                  Borrar
+                </button>
               </div>
+            ) : (
+              v.estadoAprobacion === 'pendiente' && (
+                <div className="flex justify-end pt-1">
+                  <button
+                    type="button"
+                    onClick={() => onEliminarViatico(v.id)}
+                    className="inline-flex items-center gap-1 rounded-sm border border-[#FCA5A5] bg-white px-3 py-1.5 text-xs font-semibold text-[#DC2626] min-h-[38px]"
+                  >
+                    <Trash2 className="h-3.5 w-3.5" />
+                    Eliminar pendiente
+                  </button>
+                </div>
+              )
             )}
           </div>
         ))}

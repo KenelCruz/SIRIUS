@@ -10,11 +10,15 @@ Aplicación web progresiva (PWA) multi-empresa diseñada para empresas de agrime
 - **F4, F7, F8. Servicios, Estados y Bitácora**: Servicios sumatorios por ruta con máquina de estados normalizada (`cotizado → aprobado → programado → en_campo → procesando → entregado → cobrado`), captura obligatoria de `montoCobradoRD` y `fechaPago` al cobrar, y bitácora con notas y evidencia fotográfica.
 - **F5, F6. Asignaciones por Rango de Fechas y Conflictos**: Asignación de cuadrillas, vehículos y equipos GNSS sobre `[fechaInicio, fechaFin]`, expansión día por día en la agenda, bloqueos duros por mantenimiento, bloqueos con override auditado (`motivo`, `usuarioId`, `fecha`) por solapamiento, y advertencia no bloqueante por proximidad espacial (< 120 m).
 - **F9–F11. Viáticos, OCR y Reparto Exacto**: Captura móvil por foto OCR (Gemini), ruta GPS (OSRM / Haversine) o tarifa estándar; distribución exacta en `RD$` entre uno o varios proyectos o `sin_asignar`; aprobación o rechazo con motivo obligatorio; gráfica comparativa Presupuesto vs. Gasto Real.
-- **F15–F16. Sincronización LWW y Auditoría**: Cola offline (`pending`, `needs_ocr`) sincronizada contra Express (`server.ts`) con reconciliación Last-Write-Wins por `version` y `updatedAt`, y bitácora filtrable de eventos y excepciones.
+- **F15–F16. Sincronización LWW y Auditoría**: Cola offline (`pending`, `needs_ocr`) sincronizada contra Express (`server.ts`) con reconciliación Last-Write-Wins por `version` y `updatedAt`, aviso explícito cuando un registro del servidor sobrescribe un cambio local pendiente, y bitácora filtrable de eventos y excepciones.
+- **T1–T10. Experiencia Móvil del Técnico (`rol === 'tecnico'`)**:
+  - Aislamiento estricto por proyección de tipos (`proyectarSnapshotParaRol` → `SnapshotTecnico`): el técnico nunca recibe en sus vistas presupuestos de viáticos, valores de contrato, cotizaciones, tarifas de vehículos/combustible, usuarios/membresías, personal de otras cuadrillas ni historial de auditoría.
+  - Navegación móvil dedicada de 4 botones (`Hoy`, `Mis rutas`, `Reportar`, `Mis viáticos`), sin pestañas globales de Proyectos, Calculadora, Mapa externo, Catálogos ni Auditoría.
+  - `Hoy` (hoy + próximos 3 días), `Mi agenda semanal` (solo lectura Lunes–Domingo), detalle de ruta con visor KMZ integrado (solo lectura), transición `programado → en_campo` bloqueada fuera del rango de asignación de la cuadrilla, cierre `en_campo → procesando` bloqueado sin al menos 1 entrada de bitácora, y edición/eliminación de viáticos restringida a gastos propios en estado `pendiente`.
 
 ## Roles y Cuentas Demo
 
-Contraseña para todas las cuentas piloto: `demo123`
+Las cuentas piloto de acceso rápido y el banner `"Datos de demostración, no son reales"` se muestran cuando `import.meta.env.DEV` está activo o `VITE_ENABLE_DEMO=true`. Contraseña demo: `demo123`.
 
 | Correo | Rol | Alcance |
 | --- | --- | --- |
@@ -23,12 +27,13 @@ Contraseña para todas las cuentas piloto: `demo123`
 | `carlos@aiaservices.do` | `tecnico` | Ve únicamente sus rutas/servicios asignados, registra inicio/cierre de campo, bitácora y viáticos propios |
 | `laura@aiaservices.do` | `tecnico` | Brigada Cibao Sur (Santiago) |
 
-## Arquitectura
+## Arquitectura y Notas Técnicas
 
-- `src/types/domain.ts`: Modelo normalizado multi-empresa.
-- `src/domain/`: Reglas de negocio puras (permisos, máquina de estados, conflictos por rango de fechas, reparto exacto de viáticos, reconciliación LWW).
-- `src/data/`: Interfaz `RepositorioOperacion` e implementación local/offline `LocalRepositorioOperacion` lista para reemplazarse por Supabase sin tocar las vistas (`docs/modelo-datos.md`).
-- `src/components/`: Vistas modulares y componentes reutilizables.
+- `src/types/domain.ts`: Modelo normalizado multi-empresa y tipo proyectado `SnapshotTecnico` (`ProyeccionSnapshotPorRol`).
+- `src/domain/`: Reglas de negocio puras (permisos, proyección por rol, máquina de estados, conflictos por rango de fechas, reparto exacto de viáticos, reconciliación LWW y lógica de jornada del técnico).
+  - **Cambio de firma en `validarTransicionServicio`** (`src/domain/estados.ts`): ahora acepta `asignaciones?`, `cuadrillasUsuarioIds?` y `bitacoras?` para validar en dominio puro que el técnico solo inicie campo dentro del rango `[fechaInicio, fechaFin]` de su asignación y no cierre a `procesando` sin al menos una entrada en `bitacoras`.
+- `src/data/` y `src/hooks/useOperacionEmpresa.ts`: Las vistas consumen estado y acciones exclusivamente a través del hook `useOperacionEmpresa` sobre `RepositorioOperacion`.
+- `src/components/tecnico/`: Vistas móvil-primero exclusivas del técnico (`TecnicoHoyView`, `TecnicoRutasView`, `TecnicoRutaDetalleView`, `TecnicoAgendaView`, `TecnicoViaticosView`, `TecnicoBitacoraModal`, `TecnicoTransicionModal`, `TecnicoReportarSelectorModal`).
 - `server.ts`: Servidor Express + Vite con autenticación por sesión (`x-session-token`), persistencia aislada por `empresaId` en `.data/geomatrix-saas-store.json` y endpoint OCR `/api/expenses/analyze-receipt`.
 
 ## Comandos
@@ -45,3 +50,5 @@ npm run dev     # Servidor Express + Vite en puerto 3000
 
 1. **Un técnico no puede estar en dos rutas el mismo día (salvo misma ruta)**: Implementado en `src/domain/conflictos.ts` (`detectarConflictosAsignacion`). Si dos cuadrillas distintas comparten a un mismo técnico y se asignan a rutas diferentes con rangos de fechas solapados, se marca como conflicto bloqueante con opción de override auditado; si la asignación pertenece a la misma `rutaId`, se permite.
 2. **El reparto de viáticos es por monto exacto, no por porcentaje**: Implementado en `src/domain/viaticos.ts` (`validarRepartoViatico`). La suma exacta en `RD$` de las líneas asignadas a proyectos (más `sin_asignar` cuando aplique) debe igualar el monto total del comprobante.
+3. **Ventana de "Hoy" para el técnico (hoy + próximos 3 días)**: Implementado en `src/domain/tecnico.ts` (`DIAS_VENTANA_HOY_TECNICO = 3`). Muestra servicios en estado `programado` o `en_campo` cuyas asignaciones caigan entre hoy (AST) y los próximos 3 días, además de servicios actualmente `en_campo`.
+4. **Estados visibles en "Mi agenda" del técnico**: Implementado en `src/domain/tecnico.ts` (`ESTADOS_VISIBLES_AGENDA_TECNICO`). Muestra asignaciones de rutas con servicios en estado operativo activo o en curso (`aprobado`, `programado`, `en_campo`, `procesando`, `entregado`) o sin servicios creados aún; excluye rutas únicamente `cotizado` o completamente `cobrado`.

@@ -1,13 +1,20 @@
 import {
   detectarConflictosAsignacion,
+  obtenerCuadrillasDeUsuario,
+  obtenerFechaHoyAST,
+  obtenerPersonalIdsUsuario,
   obtenerRutasAsignadasAUsuario,
+  proyectarSnapshotParaRol,
   puedeAprobarViatico,
   puedeCrearOEditarOperacion,
   puedeGestionarCatalogos,
   puedeGestionarEmpresa,
   puedeRegistrarBitacoraEnServicio,
-  reconciliarColeccionLWW,
+  reconciliarColeccionLWWConReporte,
+  sumarDiasIso,
   validarDecisionViatico,
+  validarEdicionViaticoTecnico,
+  validarEliminacionViaticoTecnico,
   validarRangoFechas,
   validarRepartoViatico,
   validarResolucionConflictos,
@@ -16,6 +23,7 @@ import {
 import type { PayloadTransicionServicio } from '../domain/estados';
 import type {
   Asignacion,
+  AvisoSobrescrituraLWW,
   BitacoraEntrada,
   Cliente,
   Cuadrilla,
@@ -27,6 +35,7 @@ import type {
   HistorialEvento,
   MembresiaEmpresa,
   Personal,
+  ProyeccionSnapshotPorRol,
   Proyecto,
   RepartoProyecto,
   RolEmpresa,
@@ -46,8 +55,14 @@ import {
 } from '../utils/geodesy';
 import type { CuentaDemoInfo, RepositorioOperacion } from './RepositorioOperacion';
 
-const DB_STORAGE_KEY = 'geomatrix_saas_db_v2';
+const DB_STORAGE_KEY = 'sirius_saas_db_v3';
 const SESSION_STORAGE_KEY = 'geomatrix_saas_session_v2';
+
+function esModoDemoHabilitado(): boolean {
+  const env = (import.meta as unknown as { env?: Record<string, unknown> }).env;
+  if (!env) return false;
+  return Boolean(env.DEV) || env.VITE_ENABLE_DEMO === 'true';
+}
 
 interface DatabaseLocal {
   empresas: Empresa[];
@@ -69,6 +84,17 @@ function makeFeature(id: string, name: string, coords: [number, number, number][
 }
 
 function crearSeedDatabase(): DatabaseLocal {
+  const hoy = obtenerFechaHoyAST();
+  const ayer = sumarDiasIso(hoy, -1);
+  const hace2Dias = sumarDiasIso(hoy, -2);
+  const hace5Dias = sumarDiasIso(hoy, -5);
+  const hace8Dias = sumarDiasIso(hoy, -8);
+  const en1Dia = sumarDiasIso(hoy, 1);
+  const en2Dias = sumarDiasIso(hoy, 2);
+  const en3Dias = sumarDiasIso(hoy, 3);
+  const en5Dias = sumarDiasIso(hoy, 5);
+  const en6Dias = sumarDiasIso(hoy, 6);
+
   const empresas: Empresa[] = [
     {
       id: 'emp-aia',
@@ -332,10 +358,10 @@ function crearSeedDatabase(): DatabaseLocal {
       presupuestoViaticosRD: 18500,
       valorContratoRD: 185000,
       estado: 'en_campo',
-      fechaCreacion: '2026-11-10',
+      fechaCreacion: hace8Dias,
       notas: 'Contrato marco zona este con entrega en Jurisdicción Inmobiliaria.',
       version: 1,
-      updatedAt: '2026-11-17T09:15:00-04:00',
+      updatedAt: `${ayer}T09:15:00-04:00`,
       syncStatus: 'synced',
     },
     {
@@ -347,10 +373,10 @@ function crearSeedDatabase(): DatabaseLocal {
       presupuestoViaticosRD: 24800,
       valorContratoRD: 240000,
       estado: 'programado',
-      fechaCreacion: '2026-11-12',
+      fechaCreacion: hace5Dias,
       notas: 'Incluye levantamiento planimétrico y altimétrico para drenaje pluvial.',
       version: 1,
-      updatedAt: '2026-11-16T16:40:00-04:00',
+      updatedAt: `${hace2Dias}T16:40:00-04:00`,
       syncStatus: 'synced',
     },
     {
@@ -362,10 +388,10 @@ function crearSeedDatabase(): DatabaseLocal {
       presupuestoViaticosRD: 8600,
       valorContratoRD: 115000,
       estado: 'entregado',
-      fechaCreacion: '2026-11-05',
+      fechaCreacion: hace8Dias,
       notas: 'Expediente depositado en Mensuras Catastrales.',
       version: 1,
-      updatedAt: '2026-11-15T14:05:00-04:00',
+      updatedAt: `${hace2Dias}T14:05:00-04:00`,
       syncStatus: 'synced',
     },
   ];
@@ -379,7 +405,7 @@ function crearSeedDatabase(): DatabaseLocal {
       codigoParcela: 'DC-04-PARC-2026-0891',
       ubicacion: 'Autovía del Este Km 68, San Pedro de Macorís',
       provincia: 'San Pedro de Macorís',
-      fechaPrevista: '2026-11-18',
+      fechaPrevista: hoy,
       kmzFileName: 'Hacienda_Macoris_Poligono_A.kmz',
       features: [f1],
       centroid: computeCentroid(f1.points),
@@ -394,7 +420,7 @@ function crearSeedDatabase(): DatabaseLocal {
         vehicleLabel: 'Hilux 4x4 Doble Cabina',
       },
       version: 1,
-      updatedAt: '2026-11-17T09:15:00-04:00',
+      updatedAt: `${ayer}T09:15:00-04:00`,
       syncStatus: 'synced',
     },
     {
@@ -405,7 +431,7 @@ function crearSeedDatabase(): DatabaseLocal {
       codigoParcela: 'DC-08-PARC-2026-0412',
       ubicacion: 'Carretera Turística Luperón, Gurabo',
       provincia: 'Santiago',
-      fechaPrevista: '2026-11-20',
+      fechaPrevista: en1Dia,
       kmzFileName: 'Gurabo_II_Lotes_19N.kmz',
       features: [f2],
       centroid: computeCentroid(f2.points),
@@ -420,7 +446,7 @@ function crearSeedDatabase(): DatabaseLocal {
         vehicleLabel: 'Pickup Ranger 4x4',
       },
       version: 1,
-      updatedAt: '2026-11-16T16:40:00-04:00',
+      updatedAt: `${hace2Dias}T16:40:00-04:00`,
       syncStatus: 'synced',
     },
     {
@@ -431,14 +457,14 @@ function crearSeedDatabase(): DatabaseLocal {
       codigoParcela: 'DC-12-PARC-2026-1108',
       ubicacion: 'Tramo Yamasá · Monte Plata',
       provincia: 'Monte Plata',
-      fechaPrevista: '2026-11-22',
+      fechaPrevista: en5Dias,
       kmzFileName: 'Finca_Yamasa_LoteB.kmz',
       features: [f3],
       centroid: computeCentroid(f3.points),
       totalAreaM2: f3.areaM2,
       totalPerimeterM: f3.perimeterM,
       version: 1,
-      updatedAt: '2026-11-16T11:22:00-04:00',
+      updatedAt: `${hace2Dias}T11:22:00-04:00`,
       syncStatus: 'synced',
     },
     {
@@ -449,14 +475,14 @@ function crearSeedDatabase(): DatabaseLocal {
       codigoParcela: 'DC-05-PARC-2026-0309',
       ubicacion: 'Zona Industrial de Haina',
       provincia: 'San Cristóbal',
-      fechaPrevista: '2026-11-10',
+      fechaPrevista: hace8Dias,
       kmzFileName: 'Parque_Haina_Zona_Franca.kmz',
       features: [f4],
       centroid: computeCentroid(f4.points),
       totalAreaM2: f4.areaM2,
       totalPerimeterM: f4.perimeterM,
       version: 1,
-      updatedAt: '2026-11-15T14:05:00-04:00',
+      updatedAt: `${hace2Dias}T14:05:00-04:00`,
       syncStatus: 'synced',
     },
   ];
@@ -470,10 +496,10 @@ function crearSeedDatabase(): DatabaseLocal {
       nombre: 'Deslinde Catastral',
       cotizacionRD: 95000,
       estado: 'en_campo',
-      fechaRealInicio: '2026-11-18',
+      fechaRealInicio: hoy,
       notas: 'Replanteo de 4 hitos de hormigón y verificación lindero oeste.',
       version: 2,
-      updatedAt: '2026-11-18T08:30:00-04:00',
+      updatedAt: `${hoy}T08:30:00-04:00`,
       syncStatus: 'synced',
     },
     {
@@ -486,7 +512,7 @@ function crearSeedDatabase(): DatabaseLocal {
       estado: 'programado',
       notas: 'Densificación de vértices auxiliares.',
       version: 1,
-      updatedAt: '2026-11-17T10:00:00-04:00',
+      updatedAt: `${ayer}T10:00:00-04:00`,
       syncStatus: 'synced',
     },
     {
@@ -499,7 +525,7 @@ function crearSeedDatabase(): DatabaseLocal {
       estado: 'programado',
       notas: 'Vuelo fotogramétrico con 5 puntos de control GCP.',
       version: 1,
-      updatedAt: '2026-11-16T16:40:00-04:00',
+      updatedAt: `${hace2Dias}T16:40:00-04:00`,
       syncStatus: 'synced',
     },
     {
@@ -509,9 +535,10 @@ function crearSeedDatabase(): DatabaseLocal {
       tipoServicioId: 'rtk',
       nombre: 'Mensura Finca Cacaotera',
       cotizacionRD: 45000,
-      estado: 'aprobado',
+      estado: 'programado',
+      notas: 'Programada para la próxima ventana semanal.',
       version: 1,
-      updatedAt: '2026-11-16T12:00:00-04:00',
+      updatedAt: `${hace2Dias}T12:00:00-04:00`,
       syncStatus: 'synced',
     },
     {
@@ -522,11 +549,11 @@ function crearSeedDatabase(): DatabaseLocal {
       nombre: 'Actualización Parcelaria Haina',
       cotizacionRD: 115000,
       estado: 'entregado',
-      fechaRealInicio: '2026-11-10',
-      fechaRealFin: '2026-11-12',
+      fechaRealInicio: hace8Dias,
+      fechaRealFin: hace5Dias,
       notas: 'Listo para gestión de cobro.',
       version: 3,
-      updatedAt: '2026-11-15T14:05:00-04:00',
+      updatedAt: `${hace2Dias}T14:05:00-04:00`,
       syncStatus: 'synced',
     },
   ];
@@ -539,7 +566,7 @@ function crearSeedDatabase(): DatabaseLocal {
       rutaId: 'ruta-1',
       autorUsuarioId: 'usr-tec1',
       autorNombre: 'Ing. Carlos Méndez',
-      fechaAST: '18/11/2026 08:45:00 AST',
+      fechaAST: formatSantoDomingoAST(new Date()),
       nota: 'Base RTK instalada en PG-01 con solución fija (PDOP 1.4). Levantamiento lindero norte completado.',
       fotos: [],
       syncStatus: 'synced',
@@ -551,26 +578,39 @@ function crearSeedDatabase(): DatabaseLocal {
       id: 'asig-1',
       empresaId: 'emp-aia',
       rutaId: 'ruta-1',
-      fechaInicio: '2026-11-18',
-      fechaFin: '2026-11-19',
+      fechaInicio: hoy,
+      fechaFin: en2Dias,
       cuadrillaId: 'cua-1',
       vehiculoIds: ['veh-1'],
       equipoIds: ['eq-1'],
       version: 1,
-      updatedAt: '2026-11-17T11:00:00-04:00',
+      updatedAt: `${ayer}T11:00:00-04:00`,
       syncStatus: 'synced',
     },
     {
       id: 'asig-2',
       empresaId: 'emp-aia',
       rutaId: 'ruta-2',
-      fechaInicio: '2026-11-20',
-      fechaFin: '2026-11-22',
+      fechaInicio: en1Dia,
+      fechaFin: en3Dias,
       cuadrillaId: 'cua-2',
       vehiculoIds: ['veh-2'],
       equipoIds: ['eq-2'],
       version: 1,
-      updatedAt: '2026-11-17T11:15:00-04:00',
+      updatedAt: `${ayer}T11:15:00-04:00`,
+      syncStatus: 'synced',
+    },
+    {
+      id: 'asig-3',
+      empresaId: 'emp-aia',
+      rutaId: 'ruta-3',
+      fechaInicio: en5Dias,
+      fechaFin: en6Dias,
+      cuadrillaId: 'cua-1',
+      vehiculoIds: ['veh-1'],
+      equipoIds: ['eq-1'],
+      version: 1,
+      updatedAt: `${ayer}T11:30:00-04:00`,
       syncStatus: 'synced',
     },
   ];
@@ -582,8 +622,8 @@ function crearSeedDatabase(): DatabaseLocal {
       creadoPorUsuarioId: 'usr-tec1',
       creadoPorNombre: 'Ing. Carlos Méndez',
       rutaId: 'ruta-1',
-      fechaIso: '2026-11-18',
-      timestampAST: '18/11/2026 07:42:15 AST',
+      fechaIso: hoy,
+      timestampAST: `${hoy} 07:42:15 AST`,
       categoria: 'Combustible',
       comercio: 'Estación Texaco Autovía del Este',
       montoRD: 4500,
@@ -598,14 +638,14 @@ function crearSeedDatabase(): DatabaseLocal {
       },
       estadoAprobacion: 'aprobado',
       aprobadoPorUsuarioId: 'usr-coord',
-      aprobadoEn: '18/11/2026 09:00:00 AST',
+      aprobadoEn: `${hoy} 09:00:00 AST`,
       repartos: [
         { proyectoId: 'proy-1', montoRD: 3850 },
         { proyectoId: 'sin_asignar', montoRD: 650 },
       ],
       notas: 'Tanque lleno Hilux #1; excedente reserva para próxima salida.',
       version: 2,
-      updatedAt: '2026-11-18T09:00:00-04:00',
+      updatedAt: `${hoy}T09:00:00-04:00`,
       syncStatus: 'synced',
     },
     {
@@ -614,8 +654,8 @@ function crearSeedDatabase(): DatabaseLocal {
       creadoPorUsuarioId: 'usr-tec1',
       creadoPorNombre: 'Ing. Carlos Méndez',
       rutaId: 'ruta-1',
-      fechaIso: '2026-11-18',
-      timestampAST: '18/11/2026 07:18:04 AST',
+      fechaIso: hoy,
+      timestampAST: `${hoy} 07:18:04 AST`,
       categoria: 'Peaje',
       comercio: 'RD Vial — Peaje Las Américas + Coral I',
       montoRD: 400,
@@ -630,11 +670,11 @@ function crearSeedDatabase(): DatabaseLocal {
       },
       estadoAprobacion: 'aprobado',
       aprobadoPorUsuarioId: 'usr-coord',
-      aprobadoEn: '18/11/2026 09:05:00 AST',
+      aprobadoEn: `${hoy} 09:05:00 AST`,
       repartos: [{ proyectoId: 'proy-1', montoRD: 400 }],
       notas: 'Ida y vuelta autopista del Este',
       version: 1,
-      updatedAt: '2026-11-18T09:05:00-04:00',
+      updatedAt: `${hoy}T09:05:00-04:00`,
       syncStatus: 'synced',
     },
     {
@@ -643,8 +683,8 @@ function crearSeedDatabase(): DatabaseLocal {
       creadoPorUsuarioId: 'usr-tec1',
       creadoPorNombre: 'Ing. Carlos Méndez',
       rutaId: 'ruta-1',
-      fechaIso: '2026-11-18',
-      timestampAST: '18/11/2026 12:15:00 AST',
+      fechaIso: hoy,
+      timestampAST: `${hoy} 12:15:00 AST`,
       categoria: 'Dieta',
       comercio: 'Dieta de Campo — Brigada Este Alpha',
       montoRD: 4400,
@@ -654,7 +694,7 @@ function crearSeedDatabase(): DatabaseLocal {
       repartos: [{ proyectoId: 'proy-1', montoRD: 4400 }],
       notas: 'Jornada de 2 personas en campo',
       version: 1,
-      updatedAt: '2026-11-18T12:15:00-04:00',
+      updatedAt: `${hoy}T12:15:00-04:00`,
       syncStatus: 'synced',
     },
     {
@@ -663,8 +703,8 @@ function crearSeedDatabase(): DatabaseLocal {
       creadoPorUsuarioId: 'usr-tec2',
       creadoPorNombre: 'Agrim. Laura Ramírez',
       rutaId: 'ruta-4',
-      fechaIso: '2026-11-10',
-      timestampAST: '10/11/2026 08:25:12 AST',
+      fechaIso: hace8Dias,
+      timestampAST: `${hace8Dias} 08:25:12 AST`,
       categoria: 'Combustible',
       comercio: 'TotalEnergies 6 de Noviembre',
       montoRD: 2100,
@@ -673,11 +713,34 @@ function crearSeedDatabase(): DatabaseLocal {
       metodo: 'OCR Móvil',
       estadoAprobacion: 'aprobado',
       aprobadoPorUsuarioId: 'usr-coord',
-      aprobadoEn: '10/11/2026 17:00:00 AST',
+      aprobadoEn: `${hace8Dias} 17:00:00 AST`,
       repartos: [{ proyectoId: 'proy-3', montoRD: 2100 }],
       notas: 'Traslado brigada San Cristóbal',
       version: 1,
-      updatedAt: '2026-11-10T17:00:00-04:00',
+      updatedAt: `${hace8Dias}T17:00:00-04:00`,
+      syncStatus: 'synced',
+    },
+    {
+      id: 'via-5',
+      empresaId: 'emp-aia',
+      creadoPorUsuarioId: 'usr-tec1',
+      creadoPorNombre: 'Ing. Carlos Méndez',
+      rutaId: 'ruta-1',
+      fechaIso: ayer,
+      timestampAST: `${ayer} 16:40:00 AST`,
+      categoria: 'Materiales',
+      comercio: 'Ferretería Del Este',
+      montoRD: 950,
+      itbisRD: 145,
+      metodo: 'Manual',
+      estadoAprobacion: 'rechazado',
+      motivoRechazo: 'Falta fotografía legible del comprobante con NCF fiscal.',
+      aprobadoPorUsuarioId: 'usr-coord',
+      aprobadoEn: `${ayer} 18:10:00 AST`,
+      repartos: [{ proyectoId: 'proy-1', montoRD: 950 }],
+      notas: 'Compra de pintura spray y estacas',
+      version: 2,
+      updatedAt: `${ayer}T18:10:00-04:00`,
       syncStatus: 'synced',
     },
   ];
@@ -918,7 +981,14 @@ export class LocalRepositorioOperacion implements RepositorioOperacion {
     snap.historial = [item, ...snap.historial].slice(0, 200);
   }
 
+  esModoDemoActivo(): boolean {
+    return esModoDemoHabilitado();
+  }
+
   listarCuentasDemo(): CuentaDemoInfo[] {
+    if (!esModoDemoHabilitado()) {
+      return [];
+    }
     return [
       {
         email: 'admin@aiaservices.do',
@@ -1034,6 +1104,21 @@ export class LocalRepositorioOperacion implements RepositorioOperacion {
   async cargarSnapshotEmpresa(empresaId: string): Promise<EstadoEmpresaSnapshot> {
     const snap = this.obtenerSnapshot(empresaId);
     return structuredClone(snap);
+  }
+
+  async cargarSnapshotParaRol(params: {
+    empresaId: string;
+    rol: RolEmpresa;
+    usuarioId: string;
+    personalIdMembresia?: string;
+  }): Promise<ProyeccionSnapshotPorRol> {
+    const snap = structuredClone(this.obtenerSnapshot(params.empresaId));
+    return proyectarSnapshotParaRol({
+      snapshot: snap,
+      rol: params.rol,
+      usuarioId: params.usuarioId,
+      personalIdMembresia: params.personalIdMembresia,
+    });
   }
 
   async crearCliente(
@@ -1222,6 +1307,16 @@ export class LocalRepositorioOperacion implements RepositorioOperacion {
     if (!servicio) throw new Error('Servicio no encontrado.');
 
     const mem = sesion.membresias.find((m) => m.empresaId === params.empresaId);
+    const personalIdsUsuario = obtenerPersonalIdsUsuario({
+      usuarioId: sesion.usuario.id,
+      personalIdMembresia: mem?.personalId,
+      personal: snap.personal,
+    });
+    const cuadrillasUsuarioIds = new Set(
+      obtenerCuadrillasDeUsuario({ personalIdsUsuario, cuadrillas: snap.cuadrillas }).map(
+        (c) => c.id
+      )
+    );
     const rutasAsignadas = obtenerRutasAsignadasAUsuario({
       usuarioId: sesion.usuario.id,
       personalIdMembresia: mem?.personalId,
@@ -1235,6 +1330,9 @@ export class LocalRepositorioOperacion implements RepositorioOperacion {
       servicio,
       nuevoEstado: params.nuevoEstado,
       rutasAsignadasIds: rutasAsignadas,
+      asignaciones: snap.asignaciones,
+      cuadrillasUsuarioIds,
+      bitacoras: snap.bitacoras,
       payload: params.payload,
     });
 
@@ -1514,16 +1612,78 @@ export class LocalRepositorioOperacion implements RepositorioOperacion {
     return actualizado;
   }
 
+  async editarViatico(
+    empresaId: string,
+    viaticoId: string,
+    datos: Omit<
+      Viatico,
+      | 'id'
+      | 'empresaId'
+      | 'creadoPorUsuarioId'
+      | 'creadoPorNombre'
+      | 'estadoAprobacion'
+      | 'motivoRechazo'
+      | 'aprobadoPorUsuarioId'
+      | 'aprobadoEn'
+      | 'version'
+      | 'updatedAt'
+    >
+  ): Promise<Viatico> {
+    const sesion = this.obtenerSesionRequerida();
+    const snap = this.obtenerSnapshot(empresaId);
+    const target = snap.viaticos.find((v) => v.id === viaticoId);
+    if (!target) {
+      throw new Error('Viático no encontrado.');
+    }
+
+    if (sesion.rolActivo === 'tecnico') {
+      const checkEdicion = validarEdicionViaticoTecnico(target, sesion.usuario.id);
+      if (!checkEdicion.valido) {
+        throw new Error(checkEdicion.error || 'Solo puedes editar tus viáticos pendientes.');
+      }
+    }
+
+    const checkReparto = validarRepartoViatico(datos.montoRD, datos.repartos);
+    if (!checkReparto.valido) {
+      throw new Error(checkReparto.error || 'Reparto de viático inválido.');
+    }
+
+    const actualizado: Viatico = {
+      ...target,
+      ...datos,
+      id: target.id,
+      empresaId: target.empresaId,
+      creadoPorUsuarioId: target.creadoPorUsuarioId,
+      creadoPorNombre: target.creadoPorNombre,
+      estadoAprobacion: 'pendiente',
+      version: target.version + 1,
+      updatedAt: new Date().toISOString(),
+      syncStatus: datos.syncStatus === 'needs_ocr' ? 'needs_ocr' : 'pending',
+    };
+
+    snap.viaticos = snap.viaticos.map((v) => (v.id === viaticoId ? actualizado : v));
+    this.registrarEvento(snap, {
+      entidadTipo: 'viatico',
+      entidadId: actualizado.id,
+      accion: 'Viático editado',
+      detalle: `${actualizado.comercio} actualizado a RD$ ${actualizado.montoRD.toLocaleString('en-US')}.`,
+      usuarioId: sesion.usuario.id,
+      usuarioNombre: sesion.usuario.nombre,
+    });
+    this.guardarDB();
+    return actualizado;
+  }
+
   async eliminarViatico(empresaId: string, viaticoId: string): Promise<void> {
     const sesion = this.obtenerSesionRequerida();
     const snap = this.obtenerSnapshot(empresaId);
     const target = snap.viaticos.find((v) => v.id === viaticoId);
     if (!target) return;
-    if (
-      sesion.rolActivo === 'tecnico' &&
-      (target.creadoPorUsuarioId !== sesion.usuario.id || target.estadoAprobacion !== 'pendiente')
-    ) {
-      throw new Error('Solo puedes eliminar tus propios viáticos pendientes.');
+    if (sesion.rolActivo === 'tecnico') {
+      const checkElim = validarEliminacionViaticoTecnico(target, sesion.usuario.id);
+      if (!checkElim.valido) {
+        throw new Error(checkElim.error || 'Solo puedes eliminar tus propios viáticos pendientes.');
+      }
     }
     snap.viaticos = snap.viaticos.filter((v) => v.id !== viaticoId);
     this.guardarDB();
@@ -1715,10 +1875,12 @@ export class LocalRepositorioOperacion implements RepositorioOperacion {
   async sincronizarConServidor(empresaId: string): Promise<{
     snapshot: EstadoEmpresaSnapshot;
     ocrProcesados: number;
+    sobrescritosLocales: AvisoSobrescrituraLWW[];
   }> {
     const sesion = this.obtenerSesionRequerida();
     const snap = this.obtenerSnapshot(empresaId);
     let ocrProcesados = 0;
+    const sobrescritosLocales: AvisoSobrescrituraLWW[] = [];
 
     // 1. Procesar OCR pendiente de la cola offline
     for (let i = 0; i < snap.viaticos.length; i++) {
@@ -1790,23 +1952,85 @@ export class LocalRepositorioOperacion implements RepositorioOperacion {
     const serverSnap = ack.snapshot as EstadoEmpresaSnapshot | undefined;
 
     if (serverSnap) {
-      snap.proyectos = reconciliarColeccionLWW(snap.proyectos, serverSnap.proyectos || []).map((p) => ({
+      const recProyectos = reconciliarColeccionLWWConReporte(
+        snap.proyectos,
+        serverSnap.proyectos || []
+      );
+      const recRutas = reconciliarColeccionLWWConReporte(snap.rutas, serverSnap.rutas || []);
+      const recServicios = reconciliarColeccionLWWConReporte(
+        snap.servicios,
+        serverSnap.servicios || []
+      );
+      const recAsignaciones = reconciliarColeccionLWWConReporte(
+        snap.asignaciones,
+        serverSnap.asignaciones || []
+      );
+      const recViaticos = reconciliarColeccionLWWConReporte(
+        snap.viaticos,
+        serverSnap.viaticos || []
+      );
+
+      for (const s of recServicios.sobrescritosLocales) {
+        const ganador = recServicios.items.find((x) => x.id === s.id);
+        sobrescritosLocales.push({
+          entidadTipo: 'servicio',
+          entidadId: s.id,
+          descripcion: `Servicio "${ganador?.nombre || s.id}" actualizado por una versión más reciente del servidor.`,
+          fecha: s.remotoUpdatedAt,
+        });
+      }
+      for (const v of recViaticos.sobrescritosLocales) {
+        const ganador = recViaticos.items.find((x) => x.id === v.id);
+        if (sesion.rolActivo !== 'tecnico' || ganador?.creadoPorUsuarioId === sesion.usuario.id) {
+          sobrescritosLocales.push({
+            entidadTipo: 'viatico',
+            entidadId: v.id,
+            descripcion: `Viático "${ganador?.comercio || v.id}" actualizado por una versión más reciente del servidor.`,
+            fecha: v.remotoUpdatedAt,
+          });
+        }
+      }
+      if (sesion.rolActivo !== 'tecnico') {
+        for (const p of recProyectos.sobrescritosLocales) {
+          sobrescritosLocales.push({
+            entidadTipo: 'proyecto',
+            entidadId: p.id,
+            descripcion: `Proyecto ${p.id} sobrescrito por versión más reciente del servidor.`,
+            fecha: p.remotoUpdatedAt,
+          });
+        }
+        for (const r of recRutas.sobrescritosLocales) {
+          sobrescritosLocales.push({
+            entidadTipo: 'ruta',
+            entidadId: r.id,
+            descripcion: `Ruta ${r.id} sobrescrita por versión más reciente del servidor.`,
+            fecha: r.remotoUpdatedAt,
+          });
+        }
+        for (const a of recAsignaciones.sobrescritosLocales) {
+          sobrescritosLocales.push({
+            entidadTipo: 'asignacion',
+            entidadId: a.id,
+            descripcion: `Asignación ${a.id} sobrescrita por versión más reciente del servidor.`,
+            fecha: a.remotoUpdatedAt,
+          });
+        }
+      }
+
+      snap.proyectos = recProyectos.items.map((p) => ({
         ...p,
         syncStatus: 'synced',
       }));
-      snap.rutas = reconciliarColeccionLWW(snap.rutas, serverSnap.rutas || []).map((r) => ({
+      snap.rutas = recRutas.items.map((r) => ({
         ...r,
         syncStatus: 'synced',
       }));
-      snap.servicios = reconciliarColeccionLWW(snap.servicios, serverSnap.servicios || []).map((s) => ({
+      snap.servicios = recServicios.items.map((s) => ({
         ...s,
         syncStatus: 'synced',
       }));
-      snap.asignaciones = reconciliarColeccionLWW(
-        snap.asignaciones,
-        serverSnap.asignaciones || []
-      ).map((a) => ({ ...a, syncStatus: 'synced' }));
-      snap.viaticos = reconciliarColeccionLWW(snap.viaticos, serverSnap.viaticos || []).map((v) =>
+      snap.asignaciones = recAsignaciones.items.map((a) => ({ ...a, syncStatus: 'synced' }));
+      snap.viaticos = recViaticos.items.map((v) =>
         v.syncStatus === 'needs_ocr' ? v : { ...v, syncStatus: 'synced' }
       );
       snap.bitacoras = snap.bitacoras.map((b) => ({ ...b, syncStatus: 'synced' }));
@@ -1817,6 +2041,7 @@ export class LocalRepositorioOperacion implements RepositorioOperacion {
     return {
       snapshot: structuredClone(snap),
       ocrProcesados,
+      sobrescritosLocales,
     };
   }
 }
