@@ -132,8 +132,10 @@ export const ProyectosView: React.FC<ProyectosViewProps> = ({
   onReportarViaticoEnRuta,
 }) => {
   const canEdit = puedeCrearOEditarOperacion(rol);
+  const canViewFinances = rol === 'admin' || rol === 'coordinador';
   const [searchQuery, setSearchQuery] = useState('');
   const [estadoFiltro, setEstadoFiltro] = useState<EstadoServicio | 'ALL'>('ALL');
+  const [actionError, setActionError] = useState<string | null>(null);
 
   // Modales F2 Cliente / Proyecto
   const [showClienteModal, setShowClienteModal] = useState(false);
@@ -290,13 +292,18 @@ export const ProyectosView: React.FC<ProyectosViewProps> = ({
 
   const handleIniciarTransicion = async (servicio: Servicio, nuevoEstado: EstadoServicio) => {
     setModalError(null);
+    setActionError(null);
     if (nuevoEstado === 'en_campo' || nuevoEstado === 'procesando' || nuevoEstado === 'cobrado') {
       setFechaInput(new Date().toISOString().slice(0, 10));
       setMontoCobradoInput(String(servicio.cotizacionRD || ''));
       setTransicionTarget({ servicio, nuevoEstado });
       return;
     }
-    await onTransicionarServicio({ servicioId: servicio.id, nuevoEstado });
+    try {
+      await onTransicionarServicio({ servicioId: servicio.id, nuevoEstado });
+    } catch (err: unknown) {
+      setActionError(err instanceof Error ? err.message : 'No se pudo actualizar el estado.');
+    }
   };
 
   const handleConfirmTransicionModal = async (e: React.FormEvent) => {
@@ -373,17 +380,19 @@ export const ProyectosView: React.FC<ProyectosViewProps> = ({
             </div>
           </div>
 
-          <div className="rounded-md border border-[#E2E8F0] bg-white p-4 flex flex-col justify-between">
-            <div className="text-xs font-medium text-[#43474D]">Viáticos Ejecutados</div>
-            <div>
-              <div className="mt-1 font-mono text-lg sm:text-xl font-bold text-[#0F2942] tabular-nums truncate">
-                {formatRD(kpis.totalEjecutado)}
-              </div>
-              <div className="mt-0.5 font-mono text-[11px] text-[#43474D] tabular-nums">
-                Presup.: {formatRD(kpis.totalPresupViaticos)}
+          {canViewFinances && (
+            <div className="rounded-md border border-[#E2E8F0] bg-white p-4 flex flex-col justify-between">
+              <div className="text-xs font-medium text-[#43474D]">Viáticos Ejecutados</div>
+              <div>
+                <div className="mt-1 font-mono text-lg sm:text-xl font-bold text-[#0F2942] tabular-nums truncate">
+                  {formatRD(kpis.totalEjecutado)}
+                </div>
+                <div className="mt-0.5 font-mono text-[11px] text-[#43474D] tabular-nums">
+                  Presup.: {formatRD(kpis.totalPresupViaticos)}
+                </div>
               </div>
             </div>
-          </div>
+          )}
 
           <div className="rounded-md border border-[#E2E8F0] bg-white p-4 flex flex-col justify-between">
             <div className="text-xs font-medium text-[#43474D]">Cola Offline / Sync</div>
@@ -402,17 +411,25 @@ export const ProyectosView: React.FC<ProyectosViewProps> = ({
           </div>
         </div>
 
-        <div className="xl:col-span-7 min-w-0">
-          <ViaticosComparisonChart
-            proyectos={proyectos}
-            viaticos={viaticos}
-            onSelectProyecto={(proyId) => {
-              const firstRuta = rutas.find((r) => r.proyectoId === proyId);
-              if (firstRuta) onVerRutaEnMapa(firstRuta.id);
-            }}
-          />
-        </div>
+        {canViewFinances && (
+          <div className="xl:col-span-7 min-w-0">
+            <ViaticosComparisonChart
+              proyectos={proyectos}
+              viaticos={viaticos}
+              onSelectProyecto={(proyId) => {
+                const firstRuta = rutas.find((r) => r.proyectoId === proyId);
+                if (firstRuta) onVerRutaEnMapa(firstRuta.id);
+              }}
+            />
+          </div>
+        )}
       </div>
+
+      {actionError && (
+        <div className="rounded-sm border border-[#FCA5A5] bg-[#FEE2E2] px-3.5 py-2.5 text-xs font-medium text-[#93000A]">
+          {actionError}
+        </div>
+      )}
 
       {/* Toolbar & F2 Quick Create Actions */}
       <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3 rounded-md border border-[#CBD5E1] bg-white p-3.5">
@@ -527,25 +544,46 @@ export const ProyectosView: React.FC<ProyectosViewProps> = ({
                   </div>
 
                   <div className="flex flex-wrap items-center gap-4 text-xs shrink-0">
-                    <div className="text-right">
-                      <div className="text-[11px] text-[#43474D]">Valor Contrato</div>
-                      <div className="font-mono font-bold text-[#0D1C2F] tabular-nums">
-                        {formatRD(proyecto.valorContratoRD)}
-                      </div>
-                    </div>
-                    <div className="text-right">
-                      <div className="text-[11px] text-[#43474D]">Viáticos (Real / Pres.)</div>
-                      <div
-                        className={`font-mono font-bold tabular-nums ${
-                          overBudget ? 'text-[#DC2626]' : 'text-[#0F2942]'
-                        }`}
-                      >
-                        {formatRD(gastoReal)}{' '}
-                        <span className="font-normal text-[#43474D]">
-                          / {formatRD(proyecto.presupuestoViaticosRD)}
-                        </span>
-                      </div>
-                    </div>
+                    {canViewFinances && (
+                      <>
+                        <div className="text-right">
+                          <div className="text-[11px] text-[#43474D]">Valor Contrato</div>
+                          <div className="font-mono font-bold text-[#0D1C2F] tabular-nums">
+                            {formatRD(proyecto.valorContratoRD)}
+                          </div>
+                        </div>
+                        <div className="text-right">
+                          <div className="text-[11px] text-[#43474D]">Viáticos (Real / Pres.)</div>
+                          <div
+                            className={`font-mono font-bold tabular-nums ${
+                              overBudget ? 'text-[#DC2626]' : 'text-[#0F2942]'
+                            }`}
+                          >
+                            {formatRD(gastoReal)}{' '}
+                            <span className="font-normal text-[#43474D]">
+                              / {formatRD(proyecto.presupuestoViaticosRD)}
+                            </span>
+                          </div>
+                        </div>
+                        {srvsProy.some((s) => s.estado === 'cobrado' && typeof s.montoCobradoRD === 'number') && (
+                          <div className="text-right">
+                            <div className="text-[11px] text-[#15803D]">Total Cobrado</div>
+                            <div className="font-mono font-bold text-[#15803D] tabular-nums">
+                              {formatRD(
+                                srvsProy.reduce(
+                                  (acc, s) =>
+                                    acc +
+                                    (s.estado === 'cobrado' && typeof s.montoCobradoRD === 'number'
+                                      ? s.montoCobradoRD
+                                      : 0),
+                                  0
+                                )
+                              )}
+                            </div>
+                          </div>
+                        )}
+                      </>
+                    )}
                     {canEdit && (
                       <button
                         type="button"
@@ -681,13 +719,20 @@ export const ProyectosView: React.FC<ProyectosViewProps> = ({
                                           {formatRD(srv.cotizacionRD)}
                                         </td>
                                         <td className="px-3 py-2 font-mono text-[11px] text-[#43474D]">
-                                          {srv.fechaRealInicio
-                                            ? `Inicio: ${srv.fechaRealInicio}`
-                                            : 'Sin inicio'}
-                                          {srv.fechaRealFin ? ` · Fin: ${srv.fechaRealFin}` : ''}
-                                          {srv.estado === 'cobrado' && srv.montoCobradoRD
-                                            ? ` · Cobrado ${formatRD(srv.montoCobradoRD)} (${srv.fechaPago})`
-                                            : ''}
+                                          <div>
+                                            {srv.fechaRealInicio
+                                              ? `Inicio: ${srv.fechaRealInicio}`
+                                              : 'Sin inicio'}
+                                            {srv.fechaRealFin ? ` · Fin: ${srv.fechaRealFin}` : ''}
+                                          </div>
+                                          {srv.estado === 'cobrado' &&
+                                            typeof srv.montoCobradoRD === 'number' && (
+                                              <div className="mt-1 inline-flex items-center gap-1 rounded-sm border border-[#86EFAC] bg-[#F0FDF4] px-1.5 py-0.5 text-[10px] font-bold text-[#15803D]">
+                                                <DollarSign className="h-3 w-3" />
+                                                Cobrado {formatRD(srv.montoCobradoRD)} · Pago{' '}
+                                                {srv.fechaPago || 'N/D'}
+                                              </div>
+                                            )}
                                         </td>
                                         <td className="px-3 py-2">
                                           <WorkflowBadge status={srv.estado} />

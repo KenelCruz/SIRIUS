@@ -159,12 +159,16 @@ export const KmzImportModal: React.FC<KmzImportModalProps> = ({
   const [selectedServiceIds, setSelectedServiceIds] = useState<string[]>(['rtk', 'deslinde']);
   const [corridorKm, setCorridorKm] = useState<number>(1);
   const [terrain, setTerrain] = useState<TerrainType>('Llano');
-  const [vehiculoId, setVehiculoId] = useState<string>(vehiculos[0]?.id || VEHICLE_CATALOG[0].id);
+  const defaultVehiculo =
+    vehiculos.find((v) => v.estado === 'disponible') || vehiculos[0];
+  const [vehiculoId, setVehiculoId] = useState<string>(
+    defaultVehiculo?.id || VEHICLE_CATALOG[0].id
+  );
   const [fuelPricePerGalRD, setFuelPricePerGalRD] = useState<number>(
-    vehiculos[0]?.precioGalonRD || VEHICLE_CATALOG[0].fuelPricePerGalRD
+    defaultVehiculo?.precioGalonRD || VEHICLE_CATALOG[0].fuelPricePerGalRD
   );
   const [kmPerGal, setKmPerGal] = useState<number>(
-    vehiculos[0]?.kmPorGal || VEHICLE_CATALOG[0].kmPerGal
+    defaultVehiculo?.kmPorGal || VEHICLE_CATALOG[0].kmPerGal
   );
   const [routes, setRoutes] = useState<RouteAlternative[]>([]);
   const [selectedRouteId, setSelectedRouteId] = useState<'economica' | 'rapida'>('economica');
@@ -191,7 +195,9 @@ export const KmzImportModal: React.FC<KmzImportModalProps> = ({
 
   // Step 3 Programación opcional & Viáticos iniciales
   const [programarAhora, setProgramarAhora] = useState(true);
-  const [cuadrillaId, setCuadrillaId] = useState(cuadrillas[0]?.id || '');
+  const [cuadrillaId, setCuadrillaId] = useState(
+    cuadrillas.find((c) => c.activa)?.id || cuadrillas[0]?.id || ''
+  );
   const [equipoId, setEquipoId] = useState(
     equipos.find((e) => e.estado === 'disponible')?.id || equipos[0]?.id || ''
   );
@@ -457,6 +463,8 @@ export const KmzImportModal: React.FC<KmzImportModalProps> = ({
       const result = await parseKmzOrKmlFile(file);
       await applyParsedResult(result);
     } catch (err: unknown) {
+      setParsed(null);
+      setStep(1);
       setError(
         err instanceof Error ? err.message : 'No se pudo procesar el archivo KMZ/KML/GeoJSON.'
       );
@@ -869,6 +877,7 @@ export const KmzImportModal: React.FC<KmzImportModalProps> = ({
                   onChange={(e) => {
                     const f = e.target.files?.[0];
                     if (f) handleFile(f);
+                    e.target.value = '';
                   }}
                 />
                 <UploadCloud className="mx-auto h-7 w-7 text-[#0284C7]" />
@@ -1374,6 +1383,7 @@ export const KmzImportModal: React.FC<KmzImportModalProps> = ({
                         {cuadrillas.map((c) => (
                           <option key={c.id} value={c.id}>
                             {c.nombre}
+                            {!c.activa ? ' [De baja]' : ''}
                           </option>
                         ))}
                       </select>

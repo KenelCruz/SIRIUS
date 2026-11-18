@@ -96,7 +96,9 @@ export const CatalogosView: React.FC<CatalogosViewProps> = ({
 
   // Cuadrilla form
   const [cuaNombre, setCuaNombre] = useState('');
-  const [cuaJefeId, setCuaJefeId] = useState(personal[0]?.id || '');
+  const [cuaJefeId, setCuaJefeId] = useState(
+    personal.find((p) => p.activo)?.id || personal[0]?.id || ''
+  );
   const [cuaMiembros, setCuaMiembros] = useState<string[]>([]);
 
   // Empresa form (Admin)
@@ -132,6 +134,32 @@ export const CatalogosView: React.FC<CatalogosViewProps> = ({
       notify(`${eq.nombre} actualizado a "${nextEstado}".`);
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'No se pudo actualizar equipo.');
+    }
+  };
+
+  const handleTogglePersonalActivo = async (p: Personal) => {
+    try {
+      await onGuardarPersonal({ ...p, activo: !p.activo });
+      notify(
+        p.activo
+          ? `${p.nombre} dado de baja (su historial se conserva intacto).`
+          : `${p.nombre} reactivado en catálogo.`
+      );
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'No se pudo actualizar personal.');
+    }
+  };
+
+  const handleToggleCuadrillaActiva = async (c: Cuadrilla) => {
+    try {
+      await onGuardarCuadrilla({ ...c, activa: !c.activa });
+      notify(
+        c.activa
+          ? `${c.nombre} dada de baja (sus asignaciones históricas se conservan).`
+          : `${c.nombre} reactivada para nuevas asignaciones.`
+      );
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'No se pudo actualizar cuadrilla.');
     }
   };
 
@@ -192,15 +220,26 @@ export const CatalogosView: React.FC<CatalogosViewProps> = ({
                     {p.telefono ? ` · ${p.telefono}` : ''}
                   </div>
                 </div>
-                <span
-                  className={`rounded-sm border px-2 py-0.5 text-[11px] font-semibold ${
-                    p.activo
-                      ? 'border-[#86EFAC] bg-[#F0FDF4] text-[#15803D]'
-                      : 'border-[#CBD5E1] bg-[#F1F5F9] text-[#43474D]'
-                  }`}
-                >
-                  {p.activo ? 'Activo' : 'Inactivo'}
-                </span>
+                <div className="flex items-center gap-2 shrink-0">
+                  <span
+                    className={`rounded-sm border px-2 py-0.5 text-[11px] font-semibold ${
+                      p.activo
+                        ? 'border-[#86EFAC] bg-[#F0FDF4] text-[#15803D]'
+                        : 'border-[#FCA5A5] bg-[#FEE2E2] text-[#93000A]'
+                    }`}
+                  >
+                    {p.activo ? 'Activo' : 'De baja'}
+                  </span>
+                  {canManageCatalogs && (
+                    <button
+                      type="button"
+                      onClick={() => handleTogglePersonalActivo(p)}
+                      className="rounded-sm border border-[#CBD5E1] bg-white px-2.5 py-1 text-[11px] font-semibold text-[#334155] hover:bg-[#F8FAFC]"
+                    >
+                      {p.activo ? 'Dar de baja' : 'Reactivar'}
+                    </button>
+                  )}
+                </div>
               </div>
             ))}
           </div>
@@ -275,13 +314,37 @@ export const CatalogosView: React.FC<CatalogosViewProps> = ({
               return (
                 <div
                   key={c.id}
-                  className="rounded-md border border-[#CBD5E1] bg-white p-4 space-y-1.5 text-xs"
+                  className="rounded-md border border-[#CBD5E1] bg-white p-4 space-y-2 text-xs flex flex-col justify-between"
                 >
-                  <div className="font-bold text-[#0F2942]">{c.nombre}</div>
-                  <div className="text-[11px] text-[#0284C7] font-semibold">
-                    Jefe: {jefe?.nombre || c.jefeId}
+                  <div className="space-y-1.5">
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="font-bold text-[#0F2942]">{c.nombre}</div>
+                      <span
+                        className={`rounded-sm border px-2 py-0.5 text-[10px] font-semibold shrink-0 ${
+                          c.activa
+                            ? 'border-[#86EFAC] bg-[#F0FDF4] text-[#15803D]'
+                            : 'border-[#FCA5A5] bg-[#FEE2E2] text-[#93000A]'
+                        }`}
+                      >
+                        {c.activa ? 'Activa' : 'De baja'}
+                      </span>
+                    </div>
+                    <div className="text-[11px] text-[#0284C7] font-semibold">
+                      Jefe: {jefe?.nombre || c.jefeId}
+                    </div>
+                    <div className="text-[11px] text-[#43474D]">Integrantes: {miembros}</div>
                   </div>
-                  <div className="text-[11px] text-[#43474D]">Integrantes: {miembros}</div>
+                  {canManageCatalogs && (
+                    <div className="pt-1 flex justify-end border-t border-[#E2E8F0]">
+                      <button
+                        type="button"
+                        onClick={() => handleToggleCuadrillaActiva(c)}
+                        className="rounded-sm border border-[#CBD5E1] bg-white px-2.5 py-1 text-[11px] font-semibold text-[#334155] hover:bg-[#F8FAFC]"
+                      >
+                        {c.activa ? 'Dar de baja' : 'Reactivar'}
+                      </button>
+                    </div>
+                  )}
                 </div>
               );
             })}
@@ -323,30 +386,34 @@ export const CatalogosView: React.FC<CatalogosViewProps> = ({
                   onChange={(e) => setCuaJefeId(e.target.value)}
                   className="w-full rounded-sm border border-[#CBD5E1] bg-white px-3 py-2"
                 >
-                  {personal.map((p) => (
-                    <option key={p.id} value={p.id}>
-                      {p.nombre} ({p.cargo})
-                    </option>
-                  ))}
+                  {personal
+                    .filter((p) => p.activo)
+                    .map((p) => (
+                      <option key={p.id} value={p.id}>
+                        {p.nombre} ({p.cargo})
+                      </option>
+                    ))}
                 </select>
               </div>
               <div>
                 <label className="block font-semibold text-[#334155] mb-1">Integrantes</label>
                 <div className="space-y-1 max-h-32 overflow-y-auto border border-[#E2E8F0] rounded-sm p-2">
-                  {personal.map((p) => (
-                    <label key={p.id} className="flex items-center gap-2 cursor-pointer">
-                      <input
-                        type="checkbox"
-                        checked={cuaMiembros.includes(p.id)}
-                        onChange={() =>
-                          setCuaMiembros((prev) =>
-                            prev.includes(p.id) ? prev.filter((x) => x !== p.id) : [...prev, p.id]
-                          )
-                        }
-                      />
-                      <span>{p.nombre}</span>
-                    </label>
-                  ))}
+                  {personal
+                    .filter((p) => p.activo)
+                    .map((p) => (
+                      <label key={p.id} className="flex items-center gap-2 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={cuaMiembros.includes(p.id)}
+                          onChange={() =>
+                            setCuaMiembros((prev) =>
+                              prev.includes(p.id) ? prev.filter((x) => x !== p.id) : [...prev, p.id]
+                            )
+                          }
+                        />
+                        <span>{p.nombre}</span>
+                      </label>
+                    ))}
                 </div>
               </div>
               <button

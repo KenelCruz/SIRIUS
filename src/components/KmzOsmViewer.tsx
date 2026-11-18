@@ -28,6 +28,7 @@ interface KmzOsmViewerProps {
   onCaptureLiveGps?: () => void;
   isCapturingGps?: boolean;
   compact?: boolean;
+  onDropFile?: (file: File) => void;
 }
 
 export const KmzOsmViewer: React.FC<KmzOsmViewerProps> = ({
@@ -43,6 +44,7 @@ export const KmzOsmViewer: React.FC<KmzOsmViewerProps> = ({
   onCaptureLiveGps,
   isCapturingGps = false,
   compact = false,
+  onDropFile,
 }) => {
   const mapContainerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<L.Map | null>(null);
@@ -51,6 +53,7 @@ export const KmzOsmViewer: React.FC<KmzOsmViewerProps> = ({
 
   const [baseLayer, setBaseLayer] = useState<BaseLayerMode>('osm');
   const [selectedVertexIdx, setSelectedVertexIdx] = useState<number>(0);
+  const [isDragOver, setIsDragOver] = useState(false);
 
   const primaryFeature = features[0];
   const activeVertex =
@@ -196,6 +199,29 @@ export const KmzOsmViewer: React.FC<KmzOsmViewerProps> = ({
             feature.perimeterM
           )}</div>`
         );
+        if (fIdx === 0) {
+          feature.points.forEach((pt, vIdx) => {
+            const isSelected = vIdx === selectedVertexIdx;
+            const marker = L.circleMarker([pt.lat, pt.lon], {
+              radius: isSelected ? 6 : 4,
+              color: isSelected ? '#0F2942' : '#B45309',
+              weight: 2,
+              fillColor: isSelected ? '#FEF08A' : '#FFFFFF',
+              fillOpacity: 1,
+            }).addTo(group);
+            if (!compact && feature.points.length <= 18) {
+              marker.bindTooltip(`V${vIdx + 1}`, {
+                permanent: true,
+                direction: 'top',
+                offset: [0, -5],
+                className: 'font-mono text-[10px] font-bold',
+              });
+            }
+            marker.on('click', () => {
+              setSelectedVertexIdx(vIdx);
+            });
+          });
+        }
       } else {
         feature.points.forEach((pt) => {
           const pin = L.circleMarker([pt.lat, pt.lon], {
@@ -278,7 +304,7 @@ export const KmzOsmViewer: React.FC<KmzOsmViewerProps> = ({
           </div>
           {!compact && (
             <p className="mt-0.5 text-[11px] text-[#43474D]">
-              Visualizador KMZ sobre OpenStreetMap · Proyección WGS84 / UTM Zona 19N (EPSG:32619)
+              Visualizador KMZ / KML / GeoJSON sobre OpenStreetMap · Proyección WGS84 / UTM Zona 19N (EPSG:32619)
             </p>
           )}
         </div>
@@ -357,7 +383,22 @@ export const KmzOsmViewer: React.FC<KmzOsmViewerProps> = ({
       </div>
 
       {/* Leaflet OpenStreetMap Canvas */}
-      <div className="relative">
+      <div
+        className="relative"
+        onDragOver={(e) => {
+          if (!onDropFile) return;
+          e.preventDefault();
+          setIsDragOver(true);
+        }}
+        onDragLeave={() => setIsDragOver(false)}
+        onDrop={(e) => {
+          if (!onDropFile) return;
+          e.preventDefault();
+          setIsDragOver(false);
+          const f = e.dataTransfer.files?.[0];
+          if (f) onDropFile(f);
+        }}
+      >
         <div
           ref={mapContainerRef}
           style={{ backgroundColor: baseLayer === 'grid' ? '#0B1C2E' : '#E6EEFF' }}
@@ -365,6 +406,13 @@ export const KmzOsmViewer: React.FC<KmzOsmViewerProps> = ({
             compact ? 'h-[210px]' : 'h-[340px] sm:h-[420px]'
           } z-0`}
         />
+        {isDragOver && onDropFile && (
+          <div className="pointer-events-none absolute inset-0 z-[500] flex items-center justify-center bg-[#0F2942]/70 backdrop-blur-[1px] border-2 border-dashed border-[#5BB8FE] m-2 rounded-md">
+            <div className="rounded-sm bg-white px-4 py-2 text-xs font-bold text-[#0F2942] shadow">
+              Suelta aquí tu archivo .KMZ, .KML o .GeoJSON para visualizarlo
+            </div>
+          </div>
+        )}
 
         {/* Map Utility Floating Controls */}
         <div className="absolute top-3 right-3 z-[400] flex flex-col gap-1.5">

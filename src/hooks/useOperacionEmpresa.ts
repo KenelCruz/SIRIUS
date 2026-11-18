@@ -300,6 +300,11 @@ export function useOperacionEmpresa(isOnline: boolean) {
         await refrescar();
         return res;
       },
+      actualizarServicio: async (servicio: Servicio) => {
+        const res = await repositorioOperacion.actualizarServicio(empresaId, servicio);
+        await refrescar();
+        return res;
+      },
       guardarAsignacion: async (
         datos: Omit<Asignacion, 'id' | 'empresaId' | 'version' | 'updatedAt' | 'syncStatus'> & {
           id?: string;
@@ -326,6 +331,7 @@ export function useOperacionEmpresa(isOnline: boolean) {
         viaticoId: string;
         nuevoEstado: EstadoAprobacionViatico;
         motivoRechazo?: string;
+        motivoDecision?: string;
       }) => {
         const res = await repositorioOperacion.decidirViatico({ empresaId, ...params });
         await refrescar();

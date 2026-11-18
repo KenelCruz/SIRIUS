@@ -246,6 +246,7 @@ export interface Viatico {
   pendingReceiptMime?: string;
   estadoAprobacion: EstadoAprobacionViatico;
   motivoRechazo?: string;
+  motivoDecision?: string;
   aprobadoPorUsuarioId?: string;
   aprobadoEn?: string;
   repartos: RepartoProyecto[];
@@ -258,6 +259,7 @@ export interface Viatico {
 export type TipoConflicto =
   | 'personal'
   | 'cuadrilla'
+  | 'cuadrilla_inactiva'
   | 'vehiculo'
   | 'vehiculo_mantenimiento'
   | 'equipo'
@@ -285,6 +287,8 @@ export interface HistorialEvento {
   entidadId: string;
   accion: string;
   detalle: string;
+  valorAnterior?: string;
+  valorNuevo?: string;
   usuarioId: string;
   usuarioNombre: string;
   fechaAST: string;

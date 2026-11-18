@@ -15,10 +15,16 @@ export const AuditoriaView: React.FC<AuditoriaViewProps> = ({ historial }) => {
     return historial.filter((h) => {
       if (tipoFiltro !== 'ALL' && h.entidadTipo !== tipoFiltro) return false;
       if (!q) return true;
+      const valAnt = (h.valorAnterior ?? String(h.metadata?.valorAnterior ?? '')).toLowerCase();
+      const valNvo = (h.valorNuevo ?? String(h.metadata?.valorNuevo ?? '')).toLowerCase();
+      const motivoOv = String(h.metadata?.overrideMotivo ?? '').toLowerCase();
       return (
         h.accion.toLowerCase().includes(q) ||
         h.detalle.toLowerCase().includes(q) ||
-        h.usuarioNombre.toLowerCase().includes(q)
+        h.usuarioNombre.toLowerCase().includes(q) ||
+        valAnt.includes(q) ||
+        valNvo.includes(q) ||
+        motivoOv.includes(q)
       );
     });
   }, [historial, tipoFiltro, busqueda]);
@@ -33,7 +39,7 @@ export const AuditoriaView: React.FC<AuditoriaViewProps> = ({ historial }) => {
               Bitácora de Auditoría y Excepciones (F16)
             </h2>
             <p className="text-xs text-[#43474D]">
-              Registro cronológico de cambios de estado, cobros, aprobaciones y overrides de conflicto.
+              Registro cronológico con usuario, fecha, valor anterior, valor nuevo y overrides autorizados.
             </p>
           </div>
         </div>
@@ -45,7 +51,7 @@ export const AuditoriaView: React.FC<AuditoriaViewProps> = ({ historial }) => {
               type="text"
               value={busqueda}
               onChange={(e) => setBusqueda(e.target.value)}
-              placeholder="Buscar usuario, motivo o acción..."
+              placeholder="Buscar usuario, motivo, valor..."
               className="rounded-sm border border-[#CBD5E1] bg-[#F8FAFC] pl-8 pr-3 py-1.5"
             />
           </div>
@@ -76,6 +82,17 @@ export const AuditoriaView: React.FC<AuditoriaViewProps> = ({ historial }) => {
         ) : (
           eventosFiltrados.map((ev) => {
             const esOverride = Boolean(ev.metadata?.overrideMotivo);
+            const valorAnterior =
+              ev.valorAnterior ??
+              (ev.metadata?.valorAnterior !== undefined
+                ? String(ev.metadata.valorAnterior)
+                : undefined);
+            const valorNuevo =
+              ev.valorNuevo ??
+              (ev.metadata?.valorNuevo !== undefined
+                ? String(ev.metadata.valorNuevo)
+                : undefined);
+
             return (
               <div
                 key={ev.id}
@@ -97,6 +114,21 @@ export const AuditoriaView: React.FC<AuditoriaViewProps> = ({ historial }) => {
                     )}
                   </div>
                   <p className="text-[#334155]">{ev.detalle}</p>
+                  {(valorAnterior || valorNuevo) && (
+                    <div className="mt-1 flex flex-wrap items-center gap-2 rounded-sm border border-[#E2E8F0] bg-[#F8FAFC] px-2.5 py-1.5 font-mono text-[11px]">
+                      {valorAnterior && (
+                        <span className="text-[#64748B]">
+                          Anterior: <span className="text-[#334155]">{valorAnterior}</span>
+                        </span>
+                      )}
+                      {valorAnterior && valorNuevo && <span className="text-[#0284C7]">→</span>}
+                      {valorNuevo && (
+                        <span className="text-[#0F2942] font-semibold">
+                          Nuevo: {valorNuevo}
+                        </span>
+                      )}
+                    </div>
+                  )}
                   {esOverride && (
                     <div className="font-mono text-[11px] text-[#93000A]">
                       Motivo: "{String(ev.metadata?.overrideMotivo)}" · Autorizó: {ev.usuarioNombre}{' '}

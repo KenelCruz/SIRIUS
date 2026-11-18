@@ -1204,6 +1204,7 @@ export class LocalRepositorioOperacion implements RepositorioOperacion {
       throw new Error('No tienes permisos para editar proyectos.');
     }
     const snap = this.obtenerSnapshot(empresaId);
+    const anterior = snap.proyectos.find((p) => p.id === proyecto.id);
     const actualizado: Proyecto = {
       ...proyecto,
       version: proyecto.version + 1,
@@ -1211,6 +1212,24 @@ export class LocalRepositorioOperacion implements RepositorioOperacion {
       syncStatus: 'pending',
     };
     snap.proyectos = snap.proyectos.map((p) => (p.id === actualizado.id ? actualizado : p));
+    if (anterior) {
+      const prevTxt = `Presup: RD$ ${anterior.presupuestoViaticosRD.toLocaleString('en-US')} · Contrato: RD$ ${anterior.valorContratoRD.toLocaleString('en-US')}`;
+      const nextTxt = `Presup: RD$ ${actualizado.presupuestoViaticosRD.toLocaleString('en-US')} · Contrato: RD$ ${actualizado.valorContratoRD.toLocaleString('en-US')}`;
+      this.registrarEvento(snap, {
+        entidadTipo: 'proyecto',
+        entidadId: actualizado.id,
+        accion: 'Presupuesto / proyecto actualizado',
+        detalle: `Proyecto "${actualizado.nombre}" (${actualizado.codigoContrato}) actualizado.`,
+        valorAnterior: prevTxt,
+        valorNuevo: nextTxt,
+        usuarioId: sesion.usuario.id,
+        usuarioNombre: sesion.usuario.nombre,
+        metadata: {
+          valorAnterior: prevTxt,
+          valorNuevo: nextTxt,
+        },
+      });
+    }
     this.guardarDB();
     return actualizado;
   }
@@ -1288,11 +1307,53 @@ export class LocalRepositorioOperacion implements RepositorioOperacion {
       entidadId: nuevo.id,
       accion: 'Servicio cotizado',
       detalle: `Servicio "${nuevo.nombre}" por RD$ ${nuevo.cotizacionRD.toLocaleString('en-US')} en ruta ${nuevo.rutaId}.`,
+      valorAnterior: 'Sin registro',
+      valorNuevo: `${nuevo.estado} (RD$ ${nuevo.cotizacionRD.toLocaleString('en-US')})`,
       usuarioId: sesion.usuario.id,
       usuarioNombre: sesion.usuario.nombre,
+      metadata: {
+        valorAnterior: 'Sin registro',
+        valorNuevo: nuevo.estado,
+      },
     });
     this.guardarDB();
     return nuevo;
+  }
+
+  async actualizarServicio(empresaId: string, servicio: Servicio): Promise<Servicio> {
+    const sesion = this.obtenerSesionRequerida();
+    if (!puedeCrearOEditarOperacion(sesion.rolActivo)) {
+      throw new Error('No tienes permisos para editar servicios.');
+    }
+    const snap = this.obtenerSnapshot(empresaId);
+    const anterior = snap.servicios.find((s) => s.id === servicio.id);
+    const actualizado: Servicio = {
+      ...servicio,
+      version: (anterior?.version ?? servicio.version) + 1,
+      updatedAt: new Date().toISOString(),
+      syncStatus: 'pending',
+    };
+    snap.servicios = snap.servicios.map((s) => (s.id === actualizado.id ? actualizado : s));
+    if (anterior) {
+      const prevTxt = `${anterior.nombre} · RD$ ${anterior.cotizacionRD.toLocaleString('en-US')}`;
+      const nextTxt = `${actualizado.nombre} · RD$ ${actualizado.cotizacionRD.toLocaleString('en-US')}`;
+      this.registrarEvento(snap, {
+        entidadTipo: 'servicio',
+        entidadId: actualizado.id,
+        accion: 'Cotización de servicio actualizada',
+        detalle: `Servicio "${actualizado.nombre}" actualizado en ruta ${actualizado.rutaId}.`,
+        valorAnterior: prevTxt,
+        valorNuevo: nextTxt,
+        usuarioId: sesion.usuario.id,
+        usuarioNombre: sesion.usuario.nombre,
+        metadata: {
+          valorAnterior: prevTxt,
+          valorNuevo: nextTxt,
+        },
+      });
+    }
+    this.guardarDB();
+    return actualizado;
   }
 
   async transicionarServicio(params: {
@@ -1347,13 +1408,23 @@ export class LocalRepositorioOperacion implements RepositorioOperacion {
       updated.estado === 'cobrado'
         ? ` · Cobrado: RD$ ${updated.montoCobradoRD?.toLocaleString('en-US')} (${updated.fechaPago})`
         : '';
+    const valorNuevo =
+      updated.estado === 'cobrado'
+        ? `${updated.estado} (RD$ ${updated.montoCobradoRD?.toLocaleString('en-US')} · ${updated.fechaPago})`
+        : updated.estado;
     this.registrarEvento(snap, {
       entidadTipo: 'servicio',
       entidadId: updated.id,
       accion: `Estado servicio -> ${updated.estado}`,
       detalle: `"${updated.nombre}" pasó de ${servicio.estado} a ${updated.estado}${detalleCobro}.`,
+      valorAnterior: servicio.estado,
+      valorNuevo,
       usuarioId: sesion.usuario.id,
       usuarioNombre: sesion.usuario.nombre,
+      metadata: {
+        valorAnterior: servicio.estado,
+        valorNuevo,
+      },
     });
     this.guardarDB();
     return updated;
@@ -1464,21 +1535,48 @@ export class LocalRepositorioOperacion implements RepositorioOperacion {
     const ruta = snap.rutas.find((r) => r.id === guardada.rutaId);
     const cuadrilla = snap.cuadrillas.find((c) => c.id === guardada.cuadrillaId);
 
+    const formatearResumenAsig = (a: Asignacion) => {
+      const r = snap.rutas.find((x) => x.id === a.rutaId);
+      const c = snap.cuadrillas.find((x) => x.id === a.cuadrillaId);
+      const vehs = a.vehiculoIds
+        .map((id) => snap.vehiculos.find((v) => v.id === id)?.etiqueta || id)
+        .join(', ');
+      const eqs = a.equipoIds
+        .map((id) => snap.equipos.find((e) => e.id === id)?.nombre || id)
+        .join(', ');
+      return `${c?.nombre || a.cuadrillaId} · ${r?.codigoParcela || a.rutaId} (${a.fechaInicio} al ${a.fechaFin}) · Veh: ${vehs || 'N/A'} · GNSS: ${eqs || 'N/A'}`;
+    };
+
+    const valorAnterior = existente ? formatearResumenAsig(existente) : 'Sin asignación previa';
+    const valorNuevo = formatearResumenAsig(guardada);
+
     this.registrarEvento(snap, {
       entidadTipo: 'asignacion',
       entidadId: guardada.id,
-      accion: guardada.overrideConflicto ? 'Asignación con override de conflicto' : 'Asignación programada',
+      accion: existente
+        ? guardada.overrideConflicto
+          ? 'Asignación reasignada con override'
+          : 'Asignación reasignada'
+        : guardada.overrideConflicto
+        ? 'Asignación con override de conflicto'
+        : 'Asignación programada',
       detalle: `${cuadrilla?.nombre || guardada.cuadrillaId} → ${ruta?.codigoParcela || guardada.rutaId} (${guardada.fechaInicio} al ${guardada.fechaFin})${
         guardada.overrideConflicto ? ` · Motivo excepción: ${guardada.overrideConflicto.motivo}` : ''
       }`,
+      valorAnterior,
+      valorNuevo,
       usuarioId: sesion.usuario.id,
       usuarioNombre: sesion.usuario.nombre,
-      metadata: guardada.overrideConflicto
-        ? {
-            overrideMotivo: guardada.overrideConflicto.motivo,
-            overrideFecha: guardada.overrideConflicto.fecha,
-          }
-        : undefined,
+      metadata: {
+        valorAnterior,
+        valorNuevo,
+        ...(guardada.overrideConflicto
+          ? {
+              overrideMotivo: guardada.overrideConflicto.motivo,
+              overrideFecha: guardada.overrideConflicto.fecha,
+            }
+          : {}),
+      },
     });
 
     this.guardarDB();
@@ -1491,7 +1589,27 @@ export class LocalRepositorioOperacion implements RepositorioOperacion {
       throw new Error('No tienes permisos para eliminar asignaciones.');
     }
     const snap = this.obtenerSnapshot(empresaId);
+    const target = snap.asignaciones.find((a) => a.id === asignacionId);
     snap.asignaciones = snap.asignaciones.filter((a) => a.id !== asignacionId);
+    if (target) {
+      const r = snap.rutas.find((x) => x.id === target.rutaId);
+      const c = snap.cuadrillas.find((x) => x.id === target.cuadrillaId);
+      const valorAnterior = `${c?.nombre || target.cuadrillaId} · ${r?.codigoParcela || target.rutaId} (${target.fechaInicio} al ${target.fechaFin})`;
+      this.registrarEvento(snap, {
+        entidadTipo: 'asignacion',
+        entidadId: target.id,
+        accion: 'Asignación eliminada',
+        detalle: `Se eliminó la asignación de ${valorAnterior}.`,
+        valorAnterior,
+        valorNuevo: 'Eliminada',
+        usuarioId: sesion.usuario.id,
+        usuarioNombre: sesion.usuario.nombre,
+        metadata: {
+          valorAnterior,
+          valorNuevo: 'Eliminada',
+        },
+      });
+    }
     this.guardarDB();
   }
 
@@ -1514,13 +1632,25 @@ export class LocalRepositorioOperacion implements RepositorioOperacion {
       updatedAt: new Date().toISOString(),
     };
     snap.viaticos = [nuevo, ...snap.viaticos];
+    const repartoStr = nuevo.repartos
+      .map((r) => {
+        const p = snap.proyectos.find((x) => x.id === r.proyectoId);
+        return `${p?.codigoContrato || r.proyectoId}: RD$ ${r.montoRD}`;
+      })
+      .join(' · ');
     this.registrarEvento(snap, {
       entidadTipo: 'viatico',
       entidadId: nuevo.id,
       accion: 'Viático registrado',
       detalle: `${nuevo.comercio} (${nuevo.categoria}) por RD$ ${nuevo.montoRD.toLocaleString('en-US')} [${nuevo.metodo}].`,
+      valorAnterior: 'Sin registro',
+      valorNuevo: `pendiente (${repartoStr})`,
       usuarioId: sesion.usuario.id,
       usuarioNombre: sesion.usuario.nombre,
+      metadata: {
+        valorAnterior: 'Sin registro',
+        valorNuevo: `pendiente (${repartoStr})`,
+      },
     });
     this.guardarDB();
     return nuevo;
@@ -1542,6 +1672,20 @@ export class LocalRepositorioOperacion implements RepositorioOperacion {
     const check = validarRepartoViatico(viatico.montoRD, repartos);
     if (!check.valido) throw new Error(check.error);
 
+    const formatearReparto = (items: RepartoProyecto[]) =>
+      items
+        .map((r) => {
+          const p =
+            r.proyectoId === 'sin_asignar'
+              ? 'Sin asignar'
+              : snap.proyectos.find((x) => x.id === r.proyectoId)?.codigoContrato || r.proyectoId;
+          return `${p}: RD$ ${r.montoRD}`;
+        })
+        .join(' · ');
+
+    const valorAnterior = formatearReparto(viatico.repartos);
+    const valorNuevo = formatearReparto(repartos);
+
     const actualizado: Viatico = {
       ...viatico,
       repartos,
@@ -1554,11 +1698,15 @@ export class LocalRepositorioOperacion implements RepositorioOperacion {
       entidadTipo: 'viatico',
       entidadId: actualizado.id,
       accion: 'Reparto de viático actualizado',
-      detalle: `Reparto recalculado para ${actualizado.comercio}: ${repartos
-        .map((r) => `${r.proyectoId}: RD$ ${r.montoRD}`)
-        .join(' · ')}`,
+      detalle: `Reparto recalculado para ${actualizado.comercio}: ${valorNuevo}`,
+      valorAnterior,
+      valorNuevo,
       usuarioId: sesion.usuario.id,
       usuarioNombre: sesion.usuario.nombre,
+      metadata: {
+        valorAnterior,
+        valorNuevo,
+      },
     });
     this.guardarDB();
     return actualizado;
@@ -1569,12 +1717,14 @@ export class LocalRepositorioOperacion implements RepositorioOperacion {
     viaticoId: string;
     nuevoEstado: EstadoAprobacionViatico;
     motivoRechazo?: string;
+    motivoDecision?: string;
   }): Promise<Viatico> {
     const sesion = this.obtenerSesionRequerida();
     const check = validarDecisionViatico({
       rol: sesion.rolActivo,
       nuevoEstado: params.nuevoEstado,
       motivoRechazo: params.motivoRechazo,
+      motivoDecision: params.motivoDecision,
     });
     if (!check.valido) throw new Error(check.error);
 
@@ -1582,10 +1732,19 @@ export class LocalRepositorioOperacion implements RepositorioOperacion {
     const viatico = snap.viaticos.find((v) => v.id === params.viaticoId);
     if (!viatico) throw new Error('Viático no encontrado.');
 
+    const motivoLimpo = (params.motivoRechazo ?? params.motivoDecision ?? '').trim() || undefined;
+    const valorAnterior = viatico.motivoRechazo
+      ? `${viatico.estadoAprobacion} (${viatico.motivoRechazo})`
+      : viatico.motivoDecision
+      ? `${viatico.estadoAprobacion} (${viatico.motivoDecision})`
+      : viatico.estadoAprobacion;
+    const valorNuevo = motivoLimpo ? `${params.nuevoEstado} (${motivoLimpo})` : params.nuevoEstado;
+
     const actualizado: Viatico = {
       ...viatico,
       estadoAprobacion: params.nuevoEstado,
-      motivoRechazo: params.nuevoEstado === 'rechazado' ? params.motivoRechazo?.trim() : undefined,
+      motivoRechazo: params.nuevoEstado === 'rechazado' ? motivoLimpo : undefined,
+      motivoDecision: motivoLimpo,
       aprobadoPorUsuarioId: sesion.usuario.id,
       aprobadoEn: formatSantoDomingoAST(new Date()),
       version: viatico.version + 1,
@@ -1603,10 +1762,17 @@ export class LocalRepositorioOperacion implements RepositorioOperacion {
           ? 'Viático rechazado'
           : 'Viático devuelto a pendiente',
       detalle: `${actualizado.comercio} (RD$ ${actualizado.montoRD.toLocaleString('en-US')})${
-        actualizado.motivoRechazo ? ` · Motivo: ${actualizado.motivoRechazo}` : ''
+        motivoLimpo ? ` · Motivo: ${motivoLimpo}` : ''
       }`,
+      valorAnterior,
+      valorNuevo,
       usuarioId: sesion.usuario.id,
       usuarioNombre: sesion.usuario.nombre,
+      metadata: {
+        valorAnterior,
+        valorNuevo,
+        ...(motivoLimpo ? { motivoDecision: motivoLimpo } : {}),
+      },
     });
     this.guardarDB();
     return actualizado;
@@ -1661,14 +1827,23 @@ export class LocalRepositorioOperacion implements RepositorioOperacion {
       syncStatus: datos.syncStatus === 'needs_ocr' ? 'needs_ocr' : 'pending',
     };
 
+    const valorAnterior = `${target.comercio} (${target.categoria}) · RD$ ${target.montoRD.toLocaleString('en-US')}`;
+    const valorNuevo = `${actualizado.comercio} (${actualizado.categoria}) · RD$ ${actualizado.montoRD.toLocaleString('en-US')}`;
+
     snap.viaticos = snap.viaticos.map((v) => (v.id === viaticoId ? actualizado : v));
     this.registrarEvento(snap, {
       entidadTipo: 'viatico',
       entidadId: actualizado.id,
       accion: 'Viático editado',
       detalle: `${actualizado.comercio} actualizado a RD$ ${actualizado.montoRD.toLocaleString('en-US')}.`,
+      valorAnterior,
+      valorNuevo,
       usuarioId: sesion.usuario.id,
       usuarioNombre: sesion.usuario.nombre,
+      metadata: {
+        valorAnterior,
+        valorNuevo,
+      },
     });
     this.guardarDB();
     return actualizado;
@@ -1698,15 +1873,40 @@ export class LocalRepositorioOperacion implements RepositorioOperacion {
       throw new Error('No tienes permisos para administrar personal.');
     }
     const snap = this.obtenerSnapshot(empresaId);
+    const anterior = item.id ? snap.personal.find((p) => p.id === item.id) : undefined;
     const record: Personal = {
       ...item,
       id: item.id || `per-${Date.now()}`,
       empresaId,
     };
-    const existe = snap.personal.some((p) => p.id === record.id);
-    snap.personal = existe
+    snap.personal = anterior
       ? snap.personal.map((p) => (p.id === record.id ? record : p))
       : [record, ...snap.personal];
+
+    const valorAnterior = anterior
+      ? `${anterior.activo ? 'Activo' : 'De baja'} (${anterior.cargo})`
+      : 'Sin registro';
+    const valorNuevo = `${record.activo ? 'Activo' : 'De baja'} (${record.cargo})`;
+    this.registrarEvento(snap, {
+      entidadTipo: 'catalogo',
+      entidadId: record.id,
+      accion: anterior
+        ? record.activo === anterior.activo
+          ? 'Personal actualizado'
+          : record.activo
+          ? 'Personal reactivado'
+          : 'Personal dado de baja'
+        : 'Personal registrado',
+      detalle: `${record.nombre} (${record.cargo}) → ${record.activo ? 'Activo' : 'De baja'}.`,
+      valorAnterior,
+      valorNuevo,
+      usuarioId: sesion.usuario.id,
+      usuarioNombre: sesion.usuario.nombre,
+      metadata: {
+        valorAnterior,
+        valorNuevo,
+      },
+    });
     this.guardarDB();
     return record;
   }
@@ -1720,22 +1920,30 @@ export class LocalRepositorioOperacion implements RepositorioOperacion {
       throw new Error('No tienes permisos para administrar vehículos.');
     }
     const snap = this.obtenerSnapshot(empresaId);
+    const anterior = item.id ? snap.vehiculos.find((v) => v.id === item.id) : undefined;
     const record: Vehiculo = {
       ...item,
       id: item.id || `veh-${Date.now()}`,
       empresaId,
     };
-    const existe = snap.vehiculos.some((v) => v.id === record.id);
-    snap.vehiculos = existe
+    snap.vehiculos = anterior
       ? snap.vehiculos.map((v) => (v.id === record.id ? record : v))
       : [record, ...snap.vehiculos];
+    const valorAnterior = anterior ? anterior.estado : 'Sin registro';
+    const valorNuevo = record.estado;
     this.registrarEvento(snap, {
       entidadTipo: 'catalogo',
       entidadId: record.id,
-      accion: 'Vehículo actualizado',
+      accion: anterior ? 'Vehículo actualizado' : 'Vehículo registrado',
       detalle: `${record.etiqueta} (${record.placa}) → estado: ${record.estado}.`,
+      valorAnterior,
+      valorNuevo,
       usuarioId: sesion.usuario.id,
       usuarioNombre: sesion.usuario.nombre,
+      metadata: {
+        valorAnterior,
+        valorNuevo,
+      },
     });
     this.guardarDB();
     return record;
@@ -1750,15 +1958,31 @@ export class LocalRepositorioOperacion implements RepositorioOperacion {
       throw new Error('No tienes permisos para administrar equipos GNSS.');
     }
     const snap = this.obtenerSnapshot(empresaId);
+    const anterior = item.id ? snap.equipos.find((e) => e.id === item.id) : undefined;
     const record: EquipoGNSS = {
       ...item,
       id: item.id || `eq-${Date.now()}`,
       empresaId,
     };
-    const existe = snap.equipos.some((e) => e.id === record.id);
-    snap.equipos = existe
+    snap.equipos = anterior
       ? snap.equipos.map((e) => (e.id === record.id ? record : e))
       : [record, ...snap.equipos];
+    const valorAnterior = anterior ? anterior.estado : 'Sin registro';
+    const valorNuevo = record.estado;
+    this.registrarEvento(snap, {
+      entidadTipo: 'catalogo',
+      entidadId: record.id,
+      accion: anterior ? 'Equipo GNSS actualizado' : 'Equipo GNSS registrado',
+      detalle: `${record.nombre} (${record.serial}) → estado: ${record.estado}.`,
+      valorAnterior,
+      valorNuevo,
+      usuarioId: sesion.usuario.id,
+      usuarioNombre: sesion.usuario.nombre,
+      metadata: {
+        valorAnterior,
+        valorNuevo,
+      },
+    });
     this.guardarDB();
     return record;
   }
@@ -1772,6 +1996,7 @@ export class LocalRepositorioOperacion implements RepositorioOperacion {
       throw new Error('No tienes permisos para administrar cuadrillas.');
     }
     const snap = this.obtenerSnapshot(empresaId);
+    const anterior = item.id ? snap.cuadrillas.find((c) => c.id === item.id) : undefined;
     const miembroSet = new Set(item.miembroIds);
     if (item.jefeId) miembroSet.add(item.jefeId);
     const record: Cuadrilla = {
@@ -1780,10 +2005,34 @@ export class LocalRepositorioOperacion implements RepositorioOperacion {
       id: item.id || `cua-${Date.now()}`,
       empresaId,
     };
-    const existe = snap.cuadrillas.some((c) => c.id === record.id);
-    snap.cuadrillas = existe
+    snap.cuadrillas = anterior
       ? snap.cuadrillas.map((c) => (c.id === record.id ? record : c))
       : [record, ...snap.cuadrillas];
+
+    const valorAnterior = anterior
+      ? `${anterior.activa ? 'Activa' : 'De baja'} (${anterior.miembroIds.length} integrantes)`
+      : 'Sin registro';
+    const valorNuevo = `${record.activa ? 'Activa' : 'De baja'} (${record.miembroIds.length} integrantes)`;
+    this.registrarEvento(snap, {
+      entidadTipo: 'catalogo',
+      entidadId: record.id,
+      accion: anterior
+        ? record.activa === anterior.activa
+          ? 'Cuadrilla actualizada'
+          : record.activa
+          ? 'Cuadrilla reactivada'
+          : 'Cuadrilla dada de baja'
+        : 'Cuadrilla creada',
+      detalle: `${record.nombre} → ${record.activa ? 'Activa' : 'De baja'}.`,
+      valorAnterior,
+      valorNuevo,
+      usuarioId: sesion.usuario.id,
+      usuarioNombre: sesion.usuario.nombre,
+      metadata: {
+        valorAnterior,
+        valorNuevo,
+      },
+    });
     this.guardarDB();
     return record;
   }

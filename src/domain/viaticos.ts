@@ -1,5 +1,6 @@
 import type {
   EstadoAprobacionViatico,
+  Proyecto,
   RepartoProyecto,
   RolEmpresa,
   Viatico,
@@ -86,12 +87,14 @@ export function validarDecisionViatico(params: {
   rol: RolEmpresa;
   nuevoEstado: EstadoAprobacionViatico;
   motivoRechazo?: string;
+  motivoDecision?: string;
 }): { valido: boolean; error?: string } {
-  const { rol, nuevoEstado, motivoRechazo } = params;
+  const { rol, nuevoEstado, motivoRechazo, motivoDecision } = params;
   if (rol !== 'admin' && rol !== 'coordinador') {
     return { valido: false, error: 'Solo Admin o Coordinador pueden aprobar o rechazar viáticos.' };
   }
-  if (nuevoEstado === 'rechazado' && (!motivoRechazo || motivoRechazo.trim().length < 4)) {
+  const motivoEfectivo = (motivoRechazo ?? motivoDecision ?? '').trim();
+  if (nuevoEstado === 'rechazado' && motivoEfectivo.length < 4) {
     return {
       valido: false,
       error: 'Para rechazar un viático debes indicar el motivo del rechazo.',
@@ -129,3 +132,77 @@ export function calcularGastoPorProyecto(
 
   return mapa;
 }
+
+export interface FilaReporteProyectoViaticos {
+  proyectoId: string;
+  codigoContrato: string;
+  nombre: string;
+  presupuestoRD: number;
+  aprobadoRD: number;
+  pendienteRD: number;
+  ejecutadoRD: number;
+  saldoRD: number;
+  excedido: boolean;
+}
+
+export function calcularReporteViaticosPorProyecto(
+  proyectos: Array<Pick<Proyecto, 'id' | 'codigoContrato' | 'nombre' | 'presupuestoViaticosRD'>>,
+  viaticos: Viatico[]
+): {
+  filas: FilaReporteProyectoViaticos[];
+  sinAsignar: { aprobadoRD: number; pendienteRD: number; ejecutadoRD: number };
+  totales: {
+    presupuestoRD: number;
+    aprobadoRD: number;
+    pendienteRD: number;
+    ejecutadoRD: number;
+    saldoRD: number;
+  };
+} {
+  const gastos = calcularGastoPorProyecto(viaticos);
+
+  const filas: FilaReporteProyectoViaticos[] = proyectos.map((p) => {
+    const g = gastos[p.id] ?? { aprobadoRD: 0, pendienteRD: 0, totalEjecutadoRD: 0 };
+    const presupuestoRD = Number(p.presupuestoViaticosRD.toFixed(2));
+    const aprobadoRD = Number(g.aprobadoRD.toFixed(2));
+    const pendienteRD = Number(g.pendienteRD.toFixed(2));
+    const ejecutadoRD = Number(g.totalEjecutadoRD.toFixed(2));
+    const saldoRD = Number((presupuestoRD - ejecutadoRD).toFixed(2));
+    return {
+      proyectoId: p.id,
+      codigoContrato: p.codigoContrato,
+      nombre: p.nombre,
+      presupuestoRD,
+      aprobadoRD,
+      pendienteRD,
+      ejecutadoRD,
+      saldoRD,
+      excedido: saldoRD < 0,
+    };
+  });
+
+  const sin = gastos['sin_asignar'] ?? { aprobadoRD: 0, pendienteRD: 0, totalEjecutadoRD: 0 };
+  const sinAsignar = {
+    aprobadoRD: Number(sin.aprobadoRD.toFixed(2)),
+    pendienteRD: Number(sin.pendienteRD.toFixed(2)),
+    ejecutadoRD: Number(sin.totalEjecutadoRD.toFixed(2)),
+  };
+
+  const presupuestoTotal = filas.reduce((acc, f) => acc + f.presupuestoRD, 0);
+  const aprobadoTotal = filas.reduce((acc, f) => acc + f.aprobadoRD, 0) + sinAsignar.aprobadoRD;
+  const pendienteTotal = filas.reduce((acc, f) => acc + f.pendienteRD, 0) + sinAsignar.pendienteRD;
+  const ejecutadoTotal = filas.reduce((acc, f) => acc + f.ejecutadoRD, 0) + sinAsignar.ejecutadoRD;
+
+  return {
+    filas,
+    sinAsignar,
+    totales: {
+      presupuestoRD: Number(presupuestoTotal.toFixed(2)),
+      aprobadoRD: Number(aprobadoTotal.toFixed(2)),
+      pendienteRD: Number(pendienteTotal.toFixed(2)),
+      ejecutadoRD: Number(ejecutadoTotal.toFixed(2)),
+      saldoRD: Number((presupuestoTotal - ejecutadoTotal).toFixed(2)),
+    },
+  };
+}
+

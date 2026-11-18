@@ -39,6 +39,8 @@ export const ResourceConflictModal: React.FC<ResourceConflictModalProps> = ({
 
   const labelForType = (type: ConflictDetail['type']) => {
     switch (type) {
+      case 'cuadrilla_inactiva':
+        return 'Cuadrilla Dada de Baja (Bloqueo Duro)';
       case 'vehiculo_mantenimiento':
         return 'Vehículo en Mantenimiento (Bloqueo Duro)';
       case 'equipo_mantenimiento':

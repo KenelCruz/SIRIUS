@@ -2,11 +2,15 @@ import React, { useMemo, useState } from 'react';
 import {
   AlertTriangle,
   CalendarDays,
+  ChevronLeft,
+  ChevronRight,
+  Pencil,
   Plus,
   ShieldCheck,
   Trash2,
   Users,
   Wrench,
+  X,
 } from 'lucide-react';
 import {
   detectarConflictosAsignacion,
@@ -44,6 +48,25 @@ interface AgendaViewProps {
   onEliminarAsignacion: (asignacionId: string) => Promise<void>;
 }
 
+const DIAS_SEMANA_CORTOS = ['Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb', 'Dom'];
+
+function sumarDiasIso(iso: string, delta: number): string {
+  const dt = new Date(`${iso}T00:00:00Z`);
+  dt.setUTCDate(dt.getUTCDate() + delta);
+  return dt.toISOString().slice(0, 10);
+}
+
+function obtenerLunesSemana(iso: string): string {
+  const base = /^\d{4}-\d{2}-\d{2}$/.test(iso)
+    ? iso
+    : new Date().toISOString().slice(0, 10);
+  const dt = new Date(`${base}T00:00:00Z`);
+  const day = dt.getUTCDay(); // 0=Dom, 1=Lun, ... 6=Sab
+  const diffToMonday = day === 0 ? -6 : 1 - day;
+  dt.setUTCDate(dt.getUTCDate() + diffToMonday);
+  return dt.toISOString().slice(0, 10);
+}
+
 export const AgendaView: React.FC<AgendaViewProps> = ({
   rol,
   usuarioActual,
@@ -58,8 +81,11 @@ export const AgendaView: React.FC<AgendaViewProps> = ({
 }) => {
   const canAssign = puedeAsignarRutas(rol);
 
+  const [editingAsignacionId, setEditingAsignacionId] = useState<string | null>(null);
   const [rutaId, setRutaId] = useState(rutas[0]?.id || '');
-  const [cuadrillaId, setCuadrillaId] = useState(cuadrillas[0]?.id || '');
+  const [cuadrillaId, setCuadrillaId] = useState(
+    cuadrillas.find((c) => c.activa)?.id || cuadrillas[0]?.id || ''
+  );
   const [fechaInicio, setFechaInicio] = useState(
     rutas[0]?.fechaPrevista || new Date().toISOString().slice(0, 10)
   );
@@ -77,6 +103,14 @@ export const AgendaView: React.FC<AgendaViewProps> = ({
       : []
   );
 
+  const [vistaAgenda, setVistaAgenda] = useState<'diaria' | 'semanal'>('diaria');
+  const [semanaInicioIso, setSemanaInicioIso] = useState(() =>
+    obtenerLunesSemana(
+      asignaciones[0]?.fechaInicio ||
+        rutas[0]?.fechaPrevista ||
+        new Date().toISOString().slice(0, 10)
+    )
+  );
   const [filtroCuadrilla, setFiltroCuadrilla] = useState('ALL');
   const [filtroFecha, setFiltroFecha] = useState('');
   const [formError, setFormError] = useState<string | null>(null);
@@ -94,6 +128,38 @@ export const AgendaView: React.FC<AgendaViewProps> = ({
     setter(list.includes(id) ? list.filter((x) => x !== id) : [...list, id]);
   };
 
+  const resetFormToDefaults = () => {
+    setEditingAsignacionId(null);
+    setFormError(null);
+    setRutaId(rutas[0]?.id || '');
+    setCuadrillaId(cuadrillas.find((c) => c.activa)?.id || cuadrillas[0]?.id || '');
+    const defaultDate = rutas[0]?.fechaPrevista || new Date().toISOString().slice(0, 10);
+    setFechaInicio(defaultDate);
+    setFechaFin(defaultDate);
+    setVehiculoIds(
+      vehiculos.find((v) => v.estado === 'disponible')?.id
+        ? [vehiculos.find((v) => v.estado === 'disponible')!.id]
+        : []
+    );
+    setEquipoIds(
+      equipos.find((e) => e.estado === 'disponible')?.id
+        ? [equipos.find((e) => e.estado === 'disponible')!.id]
+        : []
+    );
+  };
+
+  const handleStartEdit = (asig: Asignacion) => {
+    setEditingAsignacionId(asig.id);
+    setFormError(null);
+    setRutaId(asig.rutaId);
+    setCuadrillaId(asig.cuadrillaId);
+    setFechaInicio(asig.fechaInicio);
+    setFechaFin(asig.fechaFin);
+    setVehiculoIds([...asig.vehiculoIds]);
+    setEquipoIds([...asig.equipoIds]);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
   const handleSubmitAsignacion = async (e: React.FormEvent) => {
     e.preventDefault();
     setFormError(null);
@@ -107,8 +173,9 @@ export const AgendaView: React.FC<AgendaViewProps> = ({
       return;
     }
 
+    const candidateId = editingAsignacionId || `asig-cand-${Date.now()}`;
     const candidata = {
-      id: `asig-cand-${Date.now()}`,
+      id: candidateId,
       rutaId,
       fechaInicio,
       fechaFin,
@@ -128,6 +195,7 @@ export const AgendaView: React.FC<AgendaViewProps> = ({
     });
 
     const payloadLimpio = {
+      ...(editingAsignacionId ? { id: editingAsignacionId } : {}),
       rutaId,
       fechaInicio,
       fechaFin,
@@ -145,6 +213,9 @@ export const AgendaView: React.FC<AgendaViewProps> = ({
     setIsSaving(true);
     try {
       await onGuardarAsignacion(payloadLimpio);
+      if (editingAsignacionId) {
+        resetFormToDefaults();
+      }
     } catch (err: unknown) {
       setFormError(err instanceof Error ? err.message : 'Error al guardar la asignación.');
     } finally {
@@ -171,6 +242,9 @@ export const AgendaView: React.FC<AgendaViewProps> = ({
       });
       setPendingCandidate(null);
       setConflictosModal([]);
+      if (editingAsignacionId) {
+        resetFormToDefaults();
+      }
     } catch (err: unknown) {
       setFormError(err instanceof Error ? err.message : 'No se pudo autorizar la asignación.');
     } finally {
@@ -196,22 +270,59 @@ export const AgendaView: React.FC<AgendaViewProps> = ({
     return Array.from(mapa.entries()).sort(([a], [b]) => a.localeCompare(b));
   }, [asignaciones, rutas, cuadrillas, filtroCuadrilla, filtroFecha]);
 
+  // F7: Vista semanal (Lunes–Domingo) con expansión de rangos por día de la semana
+  const diasSemana = useMemo(() => {
+    return Array.from({ length: 7 }, (_, idx) => {
+      const fecha = sumarDiasIso(semanaInicioIso, idx);
+      const items: Array<{ asignacion: Asignacion; ruta?: Ruta; cuadrilla?: Cuadrilla }> = [];
+      for (const asig of asignaciones) {
+        if (filtroCuadrilla !== 'ALL' && asig.cuadrillaId !== filtroCuadrilla) continue;
+        if (fecha >= asig.fechaInicio && fecha <= asig.fechaFin) {
+          items.push({
+            asignacion: asig,
+            ruta: rutas.find((r) => r.id === asig.rutaId),
+            cuadrilla: cuadrillas.find((c) => c.id === asig.cuadrillaId),
+          });
+        }
+      }
+      return {
+        fecha,
+        labelDia: DIAS_SEMANA_CORTOS[idx],
+        items,
+      };
+    });
+  }, [semanaInicioIso, asignaciones, rutas, cuadrillas, filtroCuadrilla]);
+
   return (
     <section className="space-y-5">
       {canAssign && (
         <form
           onSubmit={handleSubmitAsignacion}
-          className="rounded-md border border-[#CBD5E1] bg-white p-4 sm:p-5 space-y-4"
+          className={`rounded-md border bg-white p-4 sm:p-5 space-y-4 ${
+            editingAsignacionId ? 'border-[#0284C7] ring-1 ring-[#0284C7]' : 'border-[#CBD5E1]'
+          }`}
         >
           <div className="flex flex-wrap items-center justify-between gap-2 border-b border-[#E2E8F0] pb-3">
             <div>
               <h2 className="text-sm font-bold text-[#0F2942]">
-                Programar Asignación de Cuadrilla por Rango de Fechas (F5)
+                {editingAsignacionId
+                  ? 'Reasignar / Editar Asignación de Cuadrilla (F5)'
+                  : 'Programar Asignación de Cuadrilla por Rango de Fechas (F5)'}
               </h2>
               <p className="text-xs text-[#43474D]">
-                Valida solapamientos de cuadrilla, técnicos, vehículos, equipos GNSS y proximidad espacial (&lt; 120 m).
+                Valida solapamientos en todo el rango de fechas de cuadrilla, técnicos, vehículos, equipos GNSS y proximidad espacial (&lt; 120 m).
               </p>
             </div>
+            {editingAsignacionId && (
+              <button
+                type="button"
+                onClick={resetFormToDefaults}
+                className="inline-flex items-center gap-1 rounded-sm border border-[#CBD5E1] bg-white px-2.5 py-1.5 text-xs font-semibold text-[#334155] hover:bg-[#F1F5F9]"
+              >
+                <X className="h-3.5 w-3.5" />
+                Cancelar edición
+              </button>
+            )}
           </div>
 
           {formError && (
@@ -227,10 +338,12 @@ export const AgendaView: React.FC<AgendaViewProps> = ({
                 value={rutaId}
                 onChange={(e) => {
                   setRutaId(e.target.value);
-                  const r = rutas.find((x) => x.id === e.target.value);
-                  if (r) {
-                    setFechaInicio(r.fechaPrevista);
-                    setFechaFin(r.fechaPrevista);
+                  if (!editingAsignacionId) {
+                    const r = rutas.find((x) => x.id === e.target.value);
+                    if (r) {
+                      setFechaInicio(r.fechaPrevista);
+                      setFechaFin(r.fechaPrevista);
+                    }
                   }
                 }}
                 className="w-full rounded-sm border border-[#CBD5E1] bg-white px-3 py-2 text-xs"
@@ -280,6 +393,7 @@ export const AgendaView: React.FC<AgendaViewProps> = ({
                   return (
                     <option key={c.id} value={c.id}>
                       {c.nombre} ({jefe?.nombre || 'Sin jefe'})
+                      {!c.activa ? ' [De baja]' : ''}
                     </option>
                   );
                 })}
@@ -347,30 +461,68 @@ export const AgendaView: React.FC<AgendaViewProps> = ({
             </div>
           </div>
 
-          <div className="flex justify-end">
+          <div className="flex justify-end gap-2">
+            {editingAsignacionId && (
+              <button
+                type="button"
+                onClick={resetFormToDefaults}
+                className="rounded-sm border border-[#CBD5E1] bg-white px-4 py-2 text-xs font-semibold text-[#334155] hover:bg-[#F8FAFC] min-h-[40px]"
+              >
+                Cancelar
+              </button>
+            )}
             <button
               type="submit"
               disabled={isSaving}
               className="inline-flex items-center gap-1.5 rounded-sm bg-[#0F2942] px-4 py-2 text-xs font-semibold text-white hover:bg-[#0284C7] disabled:opacity-50 min-h-[40px]"
             >
-              <Plus className="h-4 w-4" />
-              {isSaving ? 'Validando y guardando...' : 'Validar Conflictos y Programar'}
+              {editingAsignacionId ? <Pencil className="h-3.5 w-3.5" /> : <Plus className="h-4 w-4" />}
+              {isSaving
+                ? 'Validando y guardando...'
+                : editingAsignacionId
+                ? 'Validar Conflictos y Guardar Reasignación'
+                : 'Validar Conflictos y Programar'}
             </button>
           </div>
         </form>
       )}
 
-      {/* F6: Multi-day Expanded Agenda */}
+      {/* F6-F7: Agenda Diaria y Semanal */}
       <div className="rounded-md border border-[#CBD5E1] bg-white p-4 space-y-4">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-[#E2E8F0] pb-3">
+        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3 border-b border-[#E2E8F0] pb-3">
           <div className="flex items-center gap-2">
             <CalendarDays className="h-4 w-4 text-[#0284C7]" />
             <h2 className="text-sm font-bold text-[#0F2942]">
-              Agenda Operativa por Día (F6 — Expansión de Rangos)
+              Agenda Operativa (F6 — Diaria y Semanal)
             </h2>
           </div>
 
           <div className="flex flex-wrap items-center gap-2 text-xs">
+            <div className="inline-flex rounded-sm border border-[#CBD5E1] bg-[#F8FAFC] p-0.5">
+              <button
+                type="button"
+                onClick={() => setVistaAgenda('diaria')}
+                className={`rounded-sm px-2.5 py-1.5 text-xs font-semibold transition-colors ${
+                  vistaAgenda === 'diaria'
+                    ? 'bg-[#0F2942] text-white'
+                    : 'text-[#43474D] hover:bg-white'
+                }`}
+              >
+                Vista Diaria
+              </button>
+              <button
+                type="button"
+                onClick={() => setVistaAgenda('semanal')}
+                className={`rounded-sm px-2.5 py-1.5 text-xs font-semibold transition-colors ${
+                  vistaAgenda === 'semanal'
+                    ? 'bg-[#0F2942] text-white'
+                    : 'text-[#43474D] hover:bg-white'
+                }`}
+              >
+                Vista Semanal
+              </button>
+            </div>
+
             <select
               value={filtroCuadrilla}
               onChange={(e) => setFiltroCuadrilla(e.target.value)}
@@ -380,28 +532,137 @@ export const AgendaView: React.FC<AgendaViewProps> = ({
               {cuadrillas.map((c) => (
                 <option key={c.id} value={c.id}>
                   {c.nombre}
+                  {!c.activa ? ' [De baja]' : ''}
                 </option>
               ))}
             </select>
-            <input
-              type="date"
-              value={filtroFecha}
-              onChange={(e) => setFiltroFecha(e.target.value)}
-              className="rounded-sm border border-[#CBD5E1] px-2.5 py-1.5 font-mono"
-            />
-            {filtroFecha && (
-              <button
-                type="button"
-                onClick={() => setFiltroFecha('')}
-                className="text-[11px] font-semibold text-[#0284C7] hover:underline"
-              >
-                Limpiar fecha
-              </button>
+
+            {vistaAgenda === 'diaria' && (
+              <>
+                <input
+                  type="date"
+                  value={filtroFecha}
+                  onChange={(e) => setFiltroFecha(e.target.value)}
+                  className="rounded-sm border border-[#CBD5E1] px-2.5 py-1.5 font-mono"
+                />
+                {filtroFecha && (
+                  <button
+                    type="button"
+                    onClick={() => setFiltroFecha('')}
+                    className="text-[11px] font-semibold text-[#0284C7] hover:underline"
+                  >
+                    Limpiar fecha
+                  </button>
+                )}
+              </>
             )}
           </div>
         </div>
 
-        {agendaPorDia.length === 0 ? (
+        {vistaAgenda === 'semanal' ? (
+          <div className="space-y-3">
+            <div className="flex flex-wrap items-center justify-between gap-2 text-xs">
+              <div className="font-mono font-bold text-[#0F2942]">
+                Semana: {semanaInicioIso} al {sumarDiasIso(semanaInicioIso, 6)}
+              </div>
+              <div className="inline-flex items-center gap-1.5">
+                <button
+                  type="button"
+                  onClick={() => setSemanaInicioIso((s) => sumarDiasIso(s, -7))}
+                  className="inline-flex items-center gap-1 rounded-sm border border-[#CBD5E1] bg-white px-2.5 py-1.5 font-semibold text-[#334155] hover:bg-[#F8FAFC]"
+                >
+                  <ChevronLeft className="h-3.5 w-3.5" />
+                  Anterior
+                </button>
+                <button
+                  type="button"
+                  onClick={() =>
+                    setSemanaInicioIso(
+                      obtenerLunesSemana(new Date().toISOString().slice(0, 10))
+                    )
+                  }
+                  className="rounded-sm border border-[#CBD5E1] bg-white px-2.5 py-1.5 font-semibold text-[#0284C7] hover:bg-[#EFF6FF]"
+                >
+                  Semana actual
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setSemanaInicioIso((s) => sumarDiasIso(s, 7))}
+                  className="inline-flex items-center gap-1 rounded-sm border border-[#CBD5E1] bg-white px-2.5 py-1.5 font-semibold text-[#334155] hover:bg-[#F8FAFC]"
+                >
+                  Siguiente
+                  <ChevronRight className="h-3.5 w-3.5" />
+                </button>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-7 gap-2.5">
+              {diasSemana.map((dia) => (
+                <div
+                  key={dia.fecha}
+                  className="rounded-sm border border-[#CBD5E1] bg-[#F8FAFC] p-2.5 flex flex-col gap-2 min-h-[160px]"
+                >
+                  <div className="flex items-center justify-between border-b border-[#E2E8F0] pb-1.5">
+                    <span className="text-[11px] font-bold text-[#0F2942]">
+                      {dia.labelDia}
+                    </span>
+                    <span className="font-mono text-[10px] text-[#43474D]">{dia.fecha}</span>
+                  </div>
+
+                  {dia.items.length === 0 ? (
+                    <div className="text-[11px] text-[#94A3B8] py-4 text-center">Sin ruta</div>
+                  ) : (
+                    <div className="space-y-2">
+                      {dia.items.map(({ asignacion, ruta, cuadrilla }) => (
+                        <div
+                          key={`${dia.fecha}-${asignacion.id}`}
+                          className="rounded-sm border border-[#CBD5E1] bg-white p-2 space-y-1 text-[11px]"
+                        >
+                          <div className="flex items-start justify-between gap-1">
+                            <span className="font-mono font-bold text-[#0284C7] truncate">
+                              {ruta?.codigoParcela || asignacion.rutaId}
+                            </span>
+                            {canAssign && (
+                              <div className="inline-flex items-center gap-0.5 shrink-0">
+                                <button
+                                  type="button"
+                                  onClick={() => handleStartEdit(asignacion)}
+                                  title="Reasignar"
+                                  className="rounded-sm p-0.5 text-[#0F2942] hover:bg-[#EFF6FF]"
+                                >
+                                  <Pencil className="h-3 w-3" />
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => onEliminarAsignacion(asignacion.id)}
+                                  title="Eliminar"
+                                  className="rounded-sm p-0.5 text-[#DC2626] hover:bg-[#FEE2E2]"
+                                >
+                                  <Trash2 className="h-3 w-3" />
+                                </button>
+                              </div>
+                            )}
+                          </div>
+                          <div className="font-semibold text-[#0D1C2F] line-clamp-2">
+                            {ruta?.nombre || 'Ruta'}
+                          </div>
+                          <div className="text-[10px] text-[#43474D]">
+                            {cuadrilla?.nombre || asignacion.cuadrillaId}
+                          </div>
+                          {asignacion.overrideConflicto && (
+                            <div className="text-[10px] font-semibold text-[#93000A]">
+                              Override auditado
+                            </div>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          </div>
+        ) : agendaPorDia.length === 0 ? (
           <div className="py-8 text-center text-xs text-[#43474D]">
             No hay asignaciones programadas para los filtros seleccionados.
           </div>
@@ -442,14 +703,25 @@ export const AgendaView: React.FC<AgendaViewProps> = ({
                           </div>
 
                           {canAssign && (
-                            <button
-                              type="button"
-                              onClick={() => onEliminarAsignacion(asignacion.id)}
-                              title="Eliminar asignación"
-                              className="rounded-sm p-1 text-[#DC2626] hover:bg-[#FEE2E2]"
-                            >
-                              <Trash2 className="h-3.5 w-3.5" />
-                            </button>
+                            <div className="inline-flex items-center gap-1 shrink-0">
+                              <button
+                                type="button"
+                                onClick={() => handleStartEdit(asignacion)}
+                                title="Reasignar / Editar rango"
+                                className="inline-flex items-center gap-1 rounded-sm border border-[#CBD5E1] bg-white px-2 py-1 text-[11px] font-semibold text-[#0F2942] hover:bg-[#EFF6FF]"
+                              >
+                                <Pencil className="h-3 w-3" />
+                                Reasignar
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => onEliminarAsignacion(asignacion.id)}
+                                title="Eliminar asignación"
+                                className="rounded-sm p-1 text-[#DC2626] hover:bg-[#FEE2E2]"
+                              >
+                                <Trash2 className="h-3.5 w-3.5" />
+                              </button>
+                            </div>
                           )}
                         </div>
 
@@ -498,3 +770,4 @@ export const AgendaView: React.FC<AgendaViewProps> = ({
     </section>
   );
 };
+

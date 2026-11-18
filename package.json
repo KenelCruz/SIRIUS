@@ -14,6 +14,7 @@
   },
   "dependencies": {
     "@google/genai": "^3.4.0",
+    "@mlightcad/libredwg-web": "^0.9.0",
     "@tailwindcss/vite": "^4.3.3",
     "@types/leaflet": "^1.9.22",
     "@vitejs/plugin-react": "^6.1.1",

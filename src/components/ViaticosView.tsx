@@ -1,5 +1,6 @@
 import React, { useMemo, useState } from 'react';
 import {
+  BarChart3,
   Camera,
   CheckCircle2,
   FileSpreadsheet,
@@ -11,6 +12,7 @@ import {
   XCircle,
 } from 'lucide-react';
 import {
+  calcularReporteViaticosPorProyecto,
   completarRepartoConSinAsignar,
   puedeAprobarViatico,
   validarRepartoViatico,
@@ -28,12 +30,13 @@ import { formatRD } from '../utils/geodesy';
 interface ViaticosViewProps {
   rol: RolEmpresa;
   viaticos: Viatico[];
-  proyectos: Array<Pick<Proyecto, 'id' | 'nombre' | 'codigoContrato'>>;
+  proyectos: Array<Pick<Proyecto, 'id' | 'nombre' | 'codigoContrato' | 'presupuestoViaticosRD'>>;
   onAbrirModalNuevo: () => void;
   onDecidirViatico: (params: {
     viaticoId: string;
     nuevoEstado: EstadoAprobacionViatico;
     motivoRechazo?: string;
+    motivoDecision?: string;
   }) => Promise<void>;
   onActualizarReparto: (viaticoId: string, repartos: RepartoProyecto[]) => Promise<void>;
   onEliminarViatico: (viaticoId: string) => Promise<void>;
@@ -61,7 +64,11 @@ export const ViaticosView: React.FC<ViaticosViewProps> = ({
   const [filtroCat, setFiltroCat] = useState<CategoriaViatico | 'ALL'>('ALL');
   const [filtroEstado, setFiltroEstado] = useState<EstadoAprobacionViatico | 'ALL'>('ALL');
 
-  // Modal rechazo
+  // Modal aprobación con motivo opcional
+  const [aprobacionTarget, setAprobacionTarget] = useState<Viatico | null>(null);
+  const [motivoAprobacion, setMotivoAprobacion] = useState('');
+
+  // Modal rechazo (motivo obligatorio)
   const [rechazoTarget, setRechazoTarget] = useState<Viatico | null>(null);
   const [motivoRechazo, setMotivoRechazo] = useState('');
   const [modalError, setModalError] = useState<string | null>(null);
@@ -99,35 +106,122 @@ export const ViaticosView: React.FC<ViaticosViewProps> = ({
     return { aprobado, pendiente, rechazado, sinAsignar };
   }, [viaticos]);
 
+  const reportePorProyecto = useMemo(
+    () => calcularReporteViaticosPorProyecto(proyectos, viaticos),
+    [proyectos, viaticos]
+  );
+
   const proyectoNombre = (proyectoId: string) => {
     if (proyectoId === 'sin_asignar') return 'Sin asignar';
     const p = proyectos.find((x) => x.id === proyectoId);
     return p ? p.codigoContrato : proyectoId;
   };
 
+  const proyectoNombreCompleto = (proyectoId: string) => {
+    if (proyectoId === 'sin_asignar') return 'Sin asignar';
+    const p = proyectos.find((x) => x.id === proyectoId);
+    return p ? p.nombre : proyectoId;
+  };
+
+  const escapeCsv = (val: string) => `"${val.replace(/"/g, '""')}"`;
+
+  // F12/F13: Exportación CSV con una fila por cada línea de reparto exacto a proyecto
   const handleExportCsv = () => {
     const header =
-      'Fecha,Hora_AST,Registrado_Por,Categoria,Comercio,NCF,ITBIS_RD,Monto_RD,Metodo,Estado,Reparto\n';
-    const rows = viaticosFiltrados
-      .map((v) => {
-        const repartoStr = v.repartos
-          .map((r) => `${proyectoNombre(r.proyectoId)}: ${r.montoRD.toFixed(2)}`)
-          .join(' | ');
-        return `${v.fechaIso},"${v.timestampAST}","${v.creadoPorNombre}",${v.categoria},"${v.comercio.replace(
-          /"/g,
-          '""'
-        )}",${v.ncf || ''},${v.itbisRD.toFixed(2)},${v.montoRD.toFixed(2)},${v.metodo},${
-          v.estadoAprobacion
-        },"${repartoStr}"`;
-      })
-      .join('\n');
-    const blob = new Blob([header + rows], { type: 'text/csv;charset=utf-8;' });
+      'Viatico_ID,Fecha,Hora_AST,Registrado_Por,Categoria,Comercio,NCF,ITBIS_RD,Monto_Total_Viatico_RD,Proyecto_Codigo,Proyecto_Nombre,Monto_Reparto_RD,Metodo,Estado,Motivo_Decision\n';
+    const rows: string[] = [];
+    for (const v of viaticosFiltrados) {
+      const lineas =
+        v.repartos.length > 0 ? v.repartos : [{ proyectoId: 'sin_asignar', montoRD: v.montoRD }];
+      const motivo = v.motivoRechazo || v.motivoDecision || '';
+      for (const r of lineas) {
+        rows.push(
+          [
+            v.id,
+            v.fechaIso,
+            escapeCsv(v.timestampAST),
+            escapeCsv(v.creadoPorNombre),
+            v.categoria,
+            escapeCsv(v.comercio),
+            v.ncf || '',
+            v.itbisRD.toFixed(2),
+            v.montoRD.toFixed(2),
+            escapeCsv(proyectoNombre(r.proyectoId)),
+            escapeCsv(proyectoNombreCompleto(r.proyectoId)),
+            r.montoRD.toFixed(2),
+            escapeCsv(v.metodo),
+            v.estadoAprobacion,
+            escapeCsv(motivo),
+          ].join(',')
+        );
+      }
+    }
+    const blob = new Blob(['\uFEFF' + header + rows.join('\n')], {
+      type: 'text/csv;charset=utf-8;',
+    });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `viaticos_sirius_${new Date().toISOString().slice(0, 10)}.csv`;
+    a.download = `viaticos_reparto_sirius_${new Date().toISOString().slice(0, 10)}.csv`;
     a.click();
     URL.revokeObjectURL(url);
+  };
+
+  const handleExportReporteProyectosCsv = () => {
+    const header =
+      'Codigo_Contrato,Proyecto,Presupuesto_RD,Aprobado_RD,Pendiente_RD,Ejecutado_Total_RD,Saldo_RD,Estado_Presupuesto\n';
+    const rows = reportePorProyecto.filas.map((f) =>
+      [
+        escapeCsv(f.codigoContrato),
+        escapeCsv(f.nombre),
+        f.presupuestoRD.toFixed(2),
+        f.aprobadoRD.toFixed(2),
+        f.pendienteRD.toFixed(2),
+        f.ejecutadoRD.toFixed(2),
+        f.saldoRD.toFixed(2),
+        f.excedido ? 'EXCEDIDO' : 'EN_PRESUPUESTO',
+      ].join(',')
+    );
+    if (reportePorProyecto.sinAsignar.ejecutadoRD > 0) {
+      rows.push(
+        [
+          'SIN_ASIGNAR',
+          'Gastos sin asignar a proyecto',
+          '0.00',
+          reportePorProyecto.sinAsignar.aprobadoRD.toFixed(2),
+          reportePorProyecto.sinAsignar.pendienteRD.toFixed(2),
+          reportePorProyecto.sinAsignar.ejecutadoRD.toFixed(2),
+          (-reportePorProyecto.sinAsignar.ejecutadoRD).toFixed(2),
+          'SIN_ASIGNAR',
+        ].join(',')
+      );
+    }
+    const blob = new Blob(['\uFEFF' + header + rows.join('\n')], {
+      type: 'text/csv;charset=utf-8;',
+    });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `reporte_viaticos_proyectos_${new Date().toISOString().slice(0, 10)}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  const handleConfirmAprobacion = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!aprobacionTarget) return;
+    setModalError(null);
+    try {
+      await onDecidirViatico({
+        viaticoId: aprobacionTarget.id,
+        nuevoEstado: 'aprobado',
+        motivoDecision: motivoAprobacion.trim() || undefined,
+      });
+      setAprobacionTarget(null);
+      setMotivoAprobacion('');
+    } catch (err: unknown) {
+      setModalError(err instanceof Error ? err.message : 'No se pudo aprobar el viático.');
+    }
   };
 
   const handleConfirmRechazo = async (e: React.FormEvent) => {
@@ -170,6 +264,8 @@ export const ViaticosView: React.FC<ViaticosViewProps> = ({
     return 'border-[#FDE047] bg-[#FEF9C3]/60 text-[#A16207]';
   };
 
+  const sumaRepartoActual = repartoEdicion.reduce((acc, item) => acc + (Number(item.montoRD) || 0), 0);
+
   return (
     <section className="space-y-5">
       {/* KPI Summary */}
@@ -197,6 +293,126 @@ export const ViaticosView: React.FC<ViaticosViewProps> = ({
           <div className="mt-1 font-mono text-xl font-bold text-[#DC2626] tabular-nums">
             {formatRD(resumen.rechazado)}
           </div>
+        </div>
+      </div>
+
+      {/* F13: Reporte General por Proyecto (Presupuesto, Ejecutado y Saldo) */}
+      <div className="rounded-md border border-[#CBD5E1] bg-white overflow-hidden">
+        <div className="flex flex-wrap items-center justify-between gap-2 border-b border-[#E2E8F0] bg-[#F8FAFC] px-4 py-3">
+          <div className="flex items-center gap-2">
+            <BarChart3 className="h-4 w-4 text-[#0284C7]" />
+            <div>
+              <h2 className="text-xs sm:text-sm font-bold text-[#0F2942]">
+                Reporte General por Proyecto: Presupuesto, Ejecutado y Saldo (F13)
+              </h2>
+              <p className="text-[11px] text-[#43474D]">
+                Incluye líneas de reparto aprobadas y pendientes; excluye viáticos rechazados.
+              </p>
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={handleExportReporteProyectosCsv}
+            className="inline-flex items-center gap-1.5 rounded-sm border border-[#CBD5E1] bg-white px-2.5 py-1.5 text-[11px] font-semibold text-[#0F2942] hover:bg-[#EFF6FF]"
+          >
+            <FileSpreadsheet className="h-3.5 w-3.5" />
+            Exportar Resumen Proyectos CSV
+          </button>
+        </div>
+
+        <div className="overflow-x-auto">
+          <table className="w-full border-collapse text-left text-xs">
+            <thead>
+              <tr className="border-b border-[#E2E8F0] bg-white text-[11px] font-semibold text-[#43474D]">
+                <th className="px-4 py-2.5">Proyecto / Contrato</th>
+                <th className="px-4 py-2.5 text-right">Presupuesto</th>
+                <th className="px-4 py-2.5 text-right">Aprobado</th>
+                <th className="px-4 py-2.5 text-right">Pendiente</th>
+                <th className="px-4 py-2.5 text-right">Ejecutado Total</th>
+                <th className="px-4 py-2.5 text-right">Saldo Disponible</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-[#E2E8F0]">
+              {reportePorProyecto.filas.map((f) => (
+                <tr key={f.proyectoId} className="hover:bg-[#F8FAFC]">
+                  <td className="px-4 py-2.5">
+                    <div className="font-mono text-[11px] font-bold text-[#0284C7]">
+                      {f.codigoContrato}
+                    </div>
+                    <div className="font-medium text-[#0D1C2F]">{f.nombre}</div>
+                  </td>
+                  <td className="px-4 py-2.5 text-right font-mono tabular-nums">
+                    {formatRD(f.presupuestoRD)}
+                  </td>
+                  <td className="px-4 py-2.5 text-right font-mono tabular-nums text-[#15803D]">
+                    {formatRD(f.aprobadoRD)}
+                  </td>
+                  <td className="px-4 py-2.5 text-right font-mono tabular-nums text-[#D97706]">
+                    {formatRD(f.pendienteRD)}
+                  </td>
+                  <td className="px-4 py-2.5 text-right font-mono font-semibold tabular-nums text-[#0F2942]">
+                    {formatRD(f.ejecutadoRD)}
+                  </td>
+                  <td className="px-4 py-2.5 text-right font-mono font-bold tabular-nums">
+                    <span className={f.excedido ? 'text-[#DC2626]' : 'text-[#15803D]'}>
+                      {formatRD(f.saldoRD)}
+                    </span>
+                    {f.excedido && (
+                      <span className="ml-1.5 rounded-sm border border-[#FCA5A5] bg-[#FEE2E2] px-1.5 py-0.5 text-[10px] font-bold text-[#93000A]">
+                        Excedido
+                      </span>
+                    )}
+                  </td>
+                </tr>
+              ))}
+              {reportePorProyecto.sinAsignar.ejecutadoRD > 0 && (
+                <tr className="bg-[#FEF9C3]/35">
+                  <td className="px-4 py-2.5 font-semibold text-[#A16207]">
+                    Sin asignar a proyecto
+                  </td>
+                  <td className="px-4 py-2.5 text-right font-mono tabular-nums text-[#43474D]">
+                    {formatRD(0)}
+                  </td>
+                  <td className="px-4 py-2.5 text-right font-mono tabular-nums">
+                    {formatRD(reportePorProyecto.sinAsignar.aprobadoRD)}
+                  </td>
+                  <td className="px-4 py-2.5 text-right font-mono tabular-nums">
+                    {formatRD(reportePorProyecto.sinAsignar.pendienteRD)}
+                  </td>
+                  <td className="px-4 py-2.5 text-right font-mono font-semibold tabular-nums text-[#A16207]">
+                    {formatRD(reportePorProyecto.sinAsignar.ejecutadoRD)}
+                  </td>
+                  <td className="px-4 py-2.5 text-right font-mono font-semibold text-[#A16207]">
+                    Pendiente repartir
+                  </td>
+                </tr>
+              )}
+            </tbody>
+            <tfoot>
+              <tr className="border-t-2 border-[#CBD5E1] bg-[#F8FAFC] font-bold text-[#0F2942]">
+                <td className="px-4 py-2.5">Total General</td>
+                <td className="px-4 py-2.5 text-right font-mono tabular-nums">
+                  {formatRD(reportePorProyecto.totales.presupuestoRD)}
+                </td>
+                <td className="px-4 py-2.5 text-right font-mono tabular-nums text-[#15803D]">
+                  {formatRD(reportePorProyecto.totales.aprobadoRD)}
+                </td>
+                <td className="px-4 py-2.5 text-right font-mono tabular-nums text-[#D97706]">
+                  {formatRD(reportePorProyecto.totales.pendienteRD)}
+                </td>
+                <td className="px-4 py-2.5 text-right font-mono tabular-nums">
+                  {formatRD(reportePorProyecto.totales.ejecutadoRD)}
+                </td>
+                <td
+                  className={`px-4 py-2.5 text-right font-mono tabular-nums ${
+                    reportePorProyecto.totales.saldoRD < 0 ? 'text-[#DC2626]' : 'text-[#15803D]'
+                  }`}
+                >
+                  {formatRD(reportePorProyecto.totales.saldoRD)}
+                </td>
+              </tr>
+            </tfoot>
+          </table>
         </div>
       </div>
 
@@ -234,7 +450,7 @@ export const ViaticosView: React.FC<ViaticosViewProps> = ({
             className="inline-flex items-center gap-1.5 rounded-sm border border-[#CBD5E1] bg-white px-3 py-2 text-xs font-semibold text-[#334155] hover:bg-[#F8FAFC] min-h-[38px]"
           >
             <FileSpreadsheet className="h-4 w-4" />
-            Exportar CSV
+            Exportar Detalle + Reparto CSV
           </button>
           <button
             type="button"
@@ -323,8 +539,13 @@ export const ViaticosView: React.FC<ViaticosViewProps> = ({
                     {v.estadoAprobacion}
                   </span>
                   {v.motivoRechazo && (
-                    <div className="mt-1 text-[11px] text-[#DC2626] max-w-[180px]">
+                    <div className="mt-1 text-[11px] text-[#DC2626] max-w-[190px]">
                       {v.motivoRechazo}
+                    </div>
+                  )}
+                  {v.motivoDecision && !v.motivoRechazo && (
+                    <div className="mt-1 text-[11px] text-[#15803D] max-w-[190px]">
+                      {v.motivoDecision}
                     </div>
                   )}
                 </td>
@@ -333,9 +554,11 @@ export const ViaticosView: React.FC<ViaticosViewProps> = ({
                     {canDecide && v.estadoAprobacion !== 'aprobado' && (
                       <button
                         type="button"
-                        onClick={() =>
-                          onDecidirViatico({ viaticoId: v.id, nuevoEstado: 'aprobado' })
-                        }
+                        onClick={() => {
+                          setModalError(null);
+                          setMotivoAprobacion(v.motivoDecision || '');
+                          setAprobacionTarget(v);
+                        }}
                         title="Aprobar viático"
                         className="rounded-sm bg-[#15803D] px-2 py-1 text-[11px] font-semibold text-white hover:bg-[#166534]"
                       >
@@ -428,12 +651,21 @@ export const ViaticosView: React.FC<ViaticosViewProps> = ({
                 Motivo rechazo: {v.motivoRechazo}
               </div>
             )}
+            {v.motivoDecision && !v.motivoRechazo && (
+              <div className="rounded-sm border border-[#86EFAC] bg-[#F0FDF4] px-2.5 py-1.5 text-[11px] text-[#15803D]">
+                Nota aprobación: {v.motivoDecision}
+              </div>
+            )}
 
             {canDecide ? (
               <div className="grid grid-cols-4 gap-2 pt-1">
                 <button
                   type="button"
-                  onClick={() => onDecidirViatico({ viaticoId: v.id, nuevoEstado: 'aprobado' })}
+                  onClick={() => {
+                    setModalError(null);
+                    setMotivoAprobacion(v.motivoDecision || '');
+                    setAprobacionTarget(v);
+                  }}
                   className="inline-flex items-center justify-center gap-1 rounded-sm bg-[#15803D] py-2 text-xs font-semibold text-white min-h-[40px]"
                 >
                   <CheckCircle2 className="h-3.5 w-3.5" />
@@ -489,6 +721,71 @@ export const ViaticosView: React.FC<ViaticosViewProps> = ({
           </div>
         ))}
       </div>
+
+      {/* Modal Aprobar Viático (F12 con motivo opcional auditado) */}
+      {aprobacionTarget && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-[#0F2942]/65 p-4">
+          <div className="w-full max-w-md rounded-md border border-[#CBD5E1] bg-white p-5 space-y-4 shadow-xl">
+            <div className="flex items-center justify-between border-b border-[#E2E8F0] pb-3">
+              <h3 className="text-sm font-bold text-[#0D1C2F]">
+                Aprobar Viático ({formatRD(aprobacionTarget.montoRD)})
+              </h3>
+              <button
+                type="button"
+                onClick={() => setAprobacionTarget(null)}
+                className="rounded-sm p-1 text-[#43474D] hover:bg-[#F1F5F9]"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+            {modalError && (
+              <div className="rounded-sm border border-[#FCA5A5] bg-[#FEE2E2] px-3 py-2 text-xs text-[#93000A]">
+                {modalError}
+              </div>
+            )}
+            <form onSubmit={handleConfirmAprobacion} className="space-y-3 text-xs">
+              <div className="rounded-sm border border-[#E2E8F0] bg-[#F8FAFC] p-2.5 text-[11px] text-[#334155]">
+                <div>
+                  <strong>{aprobacionTarget.comercio}</strong> · {aprobacionTarget.categoria}
+                </div>
+                <div className="font-mono mt-0.5">
+                  Reparto:{' '}
+                  {aprobacionTarget.repartos
+                    .map((r) => `${proyectoNombre(r.proyectoId)} (${formatRD(r.montoRD)})`)
+                    .join(' · ')}
+                </div>
+              </div>
+              <div>
+                <label className="block font-semibold text-[#334155] mb-1">
+                  Motivo / Observación de aprobación (opcional para auditoría)
+                </label>
+                <textarea
+                  rows={2}
+                  value={motivoAprobacion}
+                  onChange={(e) => setMotivoAprobacion(e.target.value)}
+                  placeholder="Ej. Comprobante fiscal verificado contra cálculo de ruta GPS..."
+                  className="w-full rounded-sm border border-[#CBD5E1] px-3 py-2"
+                />
+              </div>
+              <div className="flex justify-end gap-2">
+                <button
+                  type="button"
+                  onClick={() => setAprobacionTarget(null)}
+                  className="rounded-sm border border-[#CBD5E1] px-3 py-2 font-semibold"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  className="rounded-sm bg-[#15803D] px-4 py-2 font-semibold text-white hover:bg-[#166534]"
+                >
+                  Confirmar Aprobación
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
 
       {/* Modal Rechazar Viático */}
       {rechazoTarget && (
@@ -620,6 +917,19 @@ export const ViaticosView: React.FC<ViaticosViewProps> = ({
                 ))}
               </div>
 
+              <div className="rounded-sm border border-[#E2E8F0] bg-[#F8FAFC] px-3 py-2 font-mono text-[11px] flex flex-wrap items-center justify-between gap-2">
+                <span>Asignado: {formatRD(sumaRepartoActual)}</span>
+                <span
+                  className={
+                    Math.round((repartoTarget.montoRD - sumaRepartoActual) * 100) === 0
+                      ? 'font-bold text-[#15803D]'
+                      : 'font-bold text-[#DC2626]'
+                  }
+                >
+                  Diferencia: {formatRD(repartoTarget.montoRD - sumaRepartoActual)}
+                </span>
+              </div>
+
               <div className="flex flex-wrap items-center justify-between gap-2 pt-1">
                 <button
                   type="button"
@@ -668,3 +978,4 @@ export const ViaticosView: React.FC<ViaticosViewProps> = ({
     </section>
   );
 };
+

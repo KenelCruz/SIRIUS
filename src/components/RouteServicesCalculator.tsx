@@ -5,6 +5,7 @@ import {
   Camera,
   Car,
   Check,
+  Compass,
   Download,
   Layers,
   Map as MapIcon,
@@ -19,6 +20,8 @@ import {
   UploadCloud,
   X,
 } from 'lucide-react';
+import { DwgPlanViewer } from './DwgPlanViewer';
+import type { ParsedDwgPlan } from '../utils/dwgParser';
 import type {
   CategoriaViatico,
   Proyecto,
@@ -139,15 +142,19 @@ export const RouteServicesCalculator: React.FC<RouteServicesCalculatorProps> = (
   );
 
   // Vehículo y combustible (toma catálogo real de la empresa si existe)
+  const defaultVehiculo =
+    vehiculos.find((v) => v.estado === 'disponible') || vehiculos[0];
   const [vehiculoId, setVehiculoId] = useState<string>(
-    vehiculos[0]?.id || VEHICLE_CATALOG[0].id
+    defaultVehiculo?.id || VEHICLE_CATALOG[0].id
   );
   const [fuelPricePerGalRD, setFuelPricePerGalRD] = useState<number>(
-    vehiculos[0]?.precioGalonRD || VEHICLE_CATALOG[0].fuelPricePerGalRD
+    defaultVehiculo?.precioGalonRD || VEHICLE_CATALOG[0].fuelPricePerGalRD
   );
   const [kmPerGal, setKmPerGal] = useState<number>(
-    vehiculos[0]?.kmPorGal || VEHICLE_CATALOG[0].kmPerGal
+    defaultVehiculo?.kmPorGal || VEHICLE_CATALOG[0].kmPerGal
   );
+  const [applyFeedback, setApplyFeedback] = useState<string | null>(null);
+  const [isApplying, setIsApplying] = useState<boolean>(false);
 
   // Rutas OSRM
   const [routes, setRoutes] = useState<RouteAlternative[]>([]);
@@ -170,6 +177,10 @@ export const RouteServicesCalculator: React.FC<RouteServicesCalculatorProps> = (
   const [isSearchingOrigin, setIsSearchingOrigin] = useState<boolean>(false);
   const [originSearchError, setOriginSearchError] = useState<string | null>(null);
   const [isPickingOriginPin, setIsPickingOriginPin] = useState<boolean>(false);
+
+  // Planos arquitectónicos .DWG / .DXF (para Arquitectura o de necesitarse)
+  const [showDwgSection, setShowDwgSection] = useState<boolean>(false);
+  const [dwgPlan, setDwgPlan] = useState<ParsedDwgPlan | null>(null);
 
   const activeVehicle = useMemo(() => {
     const vEmp = vehiculos.find((v) => v.id === vehiculoId);
@@ -478,7 +489,32 @@ export const RouteServicesCalculator: React.FC<RouteServicesCalculatorProps> = (
             fillColor: '#0284C7',
             fillOpacity: 0.25,
           }
-        ).addTo(overlay);
+        )
+          .bindTooltip(feat.name)
+          .addTo(overlay);
+      } else if (feat.geometryType === 'LineString' && feat.points.length >= 2) {
+        L.polyline(
+          feat.points.map((p) => [p.lat, p.lon] as [number, number]),
+          {
+            color: '#0284C7',
+            weight: 3,
+            opacity: 0.9,
+          }
+        )
+          .bindTooltip(feat.name)
+          .addTo(overlay);
+      } else if (feat.points.length >= 1) {
+        feat.points.forEach((pt) => {
+          L.circleMarker([pt.lat, pt.lon], {
+            radius: 5,
+            color: '#FFFFFF',
+            weight: 1.5,
+            fillColor: '#16A34A',
+            fillOpacity: 1,
+          })
+            .bindTooltip(feat.name)
+            .addTo(overlay);
+        });
       }
     });
 
@@ -517,7 +553,7 @@ export const RouteServicesCalculator: React.FC<RouteServicesCalculatorProps> = (
       fillOpacity: 1,
     })
       .bindPopup(
-        `<strong>Destino KMZ:</strong> ${
+        `<strong>Destino:</strong> ${
           uploadedKmz?.autoMeta.title || selectedRuta?.nombre || 'Parcela'
         }`
       )
@@ -540,9 +576,13 @@ export const RouteServicesCalculator: React.FC<RouteServicesCalculatorProps> = (
   ]);
 
   const handleToggleService = (id: string) => {
-    setSelectedServiceIds((prev) =>
-      prev.includes(id) ? prev.filter((item) => item !== id) : [...prev, id]
-    );
+    setSelectedServiceIds((prev) => {
+      const adding = !prev.includes(id);
+      if (id === 'arquitectura' && adding) {
+        setShowDwgSection(true);
+      }
+      return adding ? [...prev, id] : prev.filter((item) => item !== id);
+    });
   };
 
   const handleSearchOriginStreet = async (e: React.FormEvent) => {
@@ -606,12 +646,14 @@ export const RouteServicesCalculator: React.FC<RouteServicesCalculatorProps> = (
 
   const handleUploadKmz = async (file: File) => {
     setKmzError(null);
+    setApplyFeedback(null);
     try {
       const parsed = await parseKmzOrKmlFile(file);
       setUploadedKmz(parsed);
       setProvince(parsed.autoMeta.province);
       setManualAreaM2(Math.round(parsed.totalAreaM2));
     } catch (err: unknown) {
+      setUploadedKmz(null);
       setKmzError(
         err instanceof Error ? err.message : 'No se pudo leer el archivo KMZ/KML/GeoJSON.'
       );
@@ -619,31 +661,43 @@ export const RouteServicesCalculator: React.FC<RouteServicesCalculatorProps> = (
   };
 
   const handleApplyCalculation = async () => {
+    setApplyFeedback(null);
     if (uploadedKmz) {
       onRegisterKmzFromCalculator(uploadedKmz);
       return;
     }
 
     if (selectedRuta) {
-      await onApplyToRuta({
-        rutaId: selectedRuta.id,
-        proyectoId: selectedRuta.proyectoId,
-        budgetViaticosRD: activeBreakdown.totalViaticosRD,
-        contractValueRD: grandTotalRD,
-        serviciosPropuestos: servicesCalculation.items.map((item) => ({
-          tipoServicioId: item.id,
-          nombre: item.name,
-          cotizacionRD: item.adjustedPriceRD,
-        })),
-        routeSummary: {
-          routeName: activeRoute?.name || 'Ruta Directa',
-          distanceOneWayKm: effectiveOneWayKm,
-          durationMin: activeRoute?.durationMin ?? Math.round(effectiveOneWayKm * 1.4),
-          tollsRD: activeBreakdown.tollsRD,
-          fuelRD: activeBreakdown.fuelRD,
-          vehicleLabel: activeVehicle.label,
-        },
-      });
+      setIsApplying(true);
+      try {
+        await onApplyToRuta({
+          rutaId: selectedRuta.id,
+          proyectoId: selectedRuta.proyectoId,
+          budgetViaticosRD: activeBreakdown.totalViaticosRD,
+          contractValueRD: grandTotalRD,
+          serviciosPropuestos: servicesCalculation.items.map((item) => ({
+            tipoServicioId: item.id,
+            nombre: item.name,
+            cotizacionRD: item.adjustedPriceRD,
+          })),
+          routeSummary: {
+            routeName: activeRoute?.name || 'Ruta Directa',
+            distanceOneWayKm: effectiveOneWayKm,
+            durationMin: activeRoute?.durationMin ?? Math.round(effectiveOneWayKm * 1.4),
+            tollsRD: activeBreakdown.tollsRD,
+            fuelRD: activeBreakdown.fuelRD,
+            vehicleLabel: activeVehicle.label,
+          },
+        });
+        const proyVinculado = proyectos.find((p) => p.id === selectedRuta.proyectoId);
+        setApplyFeedback(
+          `Guardado en proyecto ${proyVinculado?.codigoContrato || selectedRuta.proyectoId}: Presupuesto viáticos ${formatRD(
+            activeBreakdown.totalViaticosRD
+          )} y valor contrato ${formatRD(grandTotalRD)}.`
+        );
+      } finally {
+        setIsApplying(false);
+      }
     }
   };
 
@@ -759,7 +813,7 @@ export const RouteServicesCalculator: React.FC<RouteServicesCalculatorProps> = (
       <div className="lg:col-span-4 space-y-4">
         <div className="rounded-md border border-[#CBD5E1] bg-white p-4 space-y-3">
           <div className="flex items-center justify-between">
-            <h2 className="text-xs font-bold text-[#0F2942]">Cargar Polígono KMZ / GeoJSON</h2>
+            <h2 className="text-xs font-bold text-[#0F2942]">Cargar KMZ / KML / GeoJSON</h2>
             <span className="text-[11px] font-medium text-[#0284C7]">Detección auto</span>
           </div>
 
@@ -781,6 +835,7 @@ export const RouteServicesCalculator: React.FC<RouteServicesCalculatorProps> = (
               onChange={(e) => {
                 const f = e.target.files?.[0];
                 if (f) handleUploadKmz(f);
+                e.target.value = '';
               }}
             />
             <UploadCloud className="mx-auto h-6 w-6 text-[#0284C7]" />
@@ -903,6 +958,25 @@ export const RouteServicesCalculator: React.FC<RouteServicesCalculatorProps> = (
               />
             </div>
           )}
+
+          <div className="pt-1 border-t border-[#E2E8F0] flex items-center justify-between gap-2">
+            <span className="text-[11px] text-[#43474D]">
+              Planos de arquitectura (.DWG / .DXF)
+              {dwgPlan ? ` · ${dwgPlan.fileName}` : ''}
+            </span>
+            <button
+              type="button"
+              onClick={() => setShowDwgSection((prev) => !prev)}
+              className={`inline-flex items-center gap-1.5 rounded-sm border px-2.5 py-1 text-[11px] font-semibold transition-colors shrink-0 ${
+                showDwgSection
+                  ? 'border-[#0284C7] bg-[#EFF6FF] text-[#0284C7]'
+                  : 'border-[#CBD5E1] bg-white text-[#0F2942] hover:bg-[#F8FAFC]'
+              }`}
+            >
+              <Compass className="h-3.5 w-3.5" />
+              {showDwgSection ? 'Ocultar visor .DWG' : 'Abrir visor .DWG'}
+            </button>
+          </div>
         </div>
 
         {/* Topography, Province & Area */}
@@ -1372,6 +1446,16 @@ export const RouteServicesCalculator: React.FC<RouteServicesCalculatorProps> = (
           )}
         </div>
 
+        {showDwgSection && (
+          <DwgPlanViewer
+            plan={dwgPlan}
+            onPlanLoaded={setDwgPlan}
+            compact
+            title="Planos Arquitectónicos (.DWG / .DXF) · Soporte de Proyecto"
+            subtitle="Carga planos AutoCAD para revisar plantas, capas constructivas y dimensiones junto con la ruta."
+          />
+        )}
+
         {/* Additive Services Summary & Actions */}
         <div className="rounded-md border border-[#CBD5E1] bg-white p-4 space-y-3">
           <div className="flex items-center justify-between border-b border-[#E2E8F0] pb-2.5">
@@ -1429,16 +1513,42 @@ export const RouteServicesCalculator: React.FC<RouteServicesCalculatorProps> = (
             </div>
           </div>
 
+          {selectedRuta && !uploadedKmz && (() => {
+            const proyDestino = proyectos.find((p) => p.id === selectedRuta.proyectoId);
+            if (!proyDestino) return null;
+            return (
+              <div className="rounded-sm border border-[#CBD5E1] bg-[#F8FAFC] px-3 py-2 text-[11px] flex flex-wrap items-center justify-between gap-2">
+                <span className="text-[#334155]">
+                  Proyecto vinculado:{' '}
+                  <strong className="font-mono text-[#0F2942]">{proyDestino.codigoContrato}</strong>{' '}
+                  — {proyDestino.nombre}
+                </span>
+                <span className="font-mono text-[#0284C7] font-semibold">
+                  Presup. actual viáticos: {formatRD(proyDestino.presupuestoViaticosRD)}
+                </span>
+              </div>
+            );
+          })()}
+
+          {applyFeedback && (
+            <div className="rounded-sm border border-[#86EFAC] bg-[#F0FDF4] px-3 py-2 text-xs font-medium text-[#15803D]">
+              {applyFeedback}
+            </div>
+          )}
+
           <div className="flex flex-col sm:flex-row flex-wrap gap-2.5 pt-2">
             {canEdit && (
               <button
                 type="button"
+                disabled={isApplying || (!uploadedKmz && !selectedRuta)}
                 onClick={handleApplyCalculation}
-                className="flex-1 inline-flex items-center justify-center gap-2 rounded-sm bg-[#F59E0B] px-4 py-2.5 text-xs font-bold text-[#0F2942] hover:bg-[#D97706] hover:text-white transition-colors min-h-[44px]"
+                className="flex-1 inline-flex items-center justify-center gap-2 rounded-sm bg-[#F59E0B] px-4 py-2.5 text-xs font-bold text-[#0F2942] hover:bg-[#D97706] hover:text-white disabled:opacity-50 transition-colors min-h-[44px]"
               >
                 <Send className="h-4 w-4" />
                 {uploadedKmz
                   ? 'Crear Ruta desde este KMZ'
+                  : isApplying
+                  ? 'Aplicando al proyecto...'
                   : 'Aplicar Presupuesto y Servicios a Ruta'}
               </button>
             )}

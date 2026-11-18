@@ -73,6 +73,7 @@ export interface RepositorioOperacion {
     empresaId: string,
     datos: Omit<Servicio, 'id' | 'empresaId' | 'version' | 'updatedAt' | 'syncStatus'>
   ): Promise<Servicio>;
+  actualizarServicio(empresaId: string, servicio: Servicio): Promise<Servicio>;
   transicionarServicio(params: {
     empresaId: string;
     servicioId: string;
@@ -128,6 +129,7 @@ export interface RepositorioOperacion {
     viaticoId: string;
     nuevoEstado: EstadoAprobacionViatico;
     motivoRechazo?: string;
+    motivoDecision?: string;
   }): Promise<Viatico>;
   eliminarViatico(empresaId: string, viaticoId: string): Promise<void>;
 

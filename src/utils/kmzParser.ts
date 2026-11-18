@@ -16,14 +16,57 @@ function parseCoordinatesString(raw: string): GeoPoint[] {
   const points: GeoPoint[] = [];
   for (const token of tokens) {
     const parts = token.split(',').map(Number);
-    if (parts.length >= 2 && !Number.isNaN(parts[0]) && !Number.isNaN(parts[1])) {
+    if (parts.length >= 2 && Number.isFinite(parts[0]) && Number.isFinite(parts[1])) {
       const lon = parts[0];
       const lat = parts[1];
-      const elev = parts.length >= 3 && !Number.isNaN(parts[2]) ? parts[2] : 18.0;
+      const elev = parts.length >= 3 && Number.isFinite(parts[2]) ? parts[2] : 18.0;
       points.push(latLonToUtm19N(lat, lon, elev));
     }
   }
   return points;
+}
+
+function parseGxCoordNodes(nodes: Element[]): GeoPoint[] {
+  const points: GeoPoint[] = [];
+  for (const node of nodes) {
+    const parts = (node.textContent || '').trim().split(/\s+/).map(Number);
+    if (parts.length >= 2 && Number.isFinite(parts[0]) && Number.isFinite(parts[1])) {
+      const lon = parts[0];
+      const lat = parts[1];
+      const elev = parts.length >= 3 && Number.isFinite(parts[2]) ? parts[2] : 18.0;
+      points.push(latLonToUtm19N(lat, lon, elev));
+    }
+  }
+  return points;
+}
+
+function elementsByLocalName(root: Document | Element, localName: string): Element[] {
+  const target = localName.toLowerCase();
+  const byNs = Array.from(root.getElementsByTagNameNS('*', localName));
+  if (byNs.length > 0) return byNs;
+  const all = Array.from(root.getElementsByTagName('*'));
+  return all.filter((el) => (el.localName || el.tagName.split(':').pop() || '').toLowerCase() === target);
+}
+
+function firstDirectChildByLocalName(parent: Element, localName: string): Element | null {
+  const target = localName.toLowerCase();
+  for (const child of Array.from(parent.children)) {
+    const name = (child.localName || child.tagName.split(':').pop() || '').toLowerCase();
+    if (name === target) return child;
+  }
+  return null;
+}
+
+function firstDescendantByLocalName(root: Document | Element, localName: string): Element | null {
+  return elementsByLocalName(root, localName)[0] ?? null;
+}
+
+function sanitizeKmlXml(raw: string): string {
+  const withoutBom = raw.replace(/^\uFEFF/, '').trimStart();
+  return withoutBom.replace(
+    /&(?!(?:amp|lt|gt|quot|apos|#\d+|#x[0-9a-fA-F]+);)/g,
+    '&amp;'
+  );
 }
 
 function stripHtmlToText(html: string): string {
@@ -151,25 +194,42 @@ export function estimateViaticosFromKmz(
 }
 
 export function parseKmlText(kmlXml: string, fileName: string): ParsedKmzResult {
+  const cleanedRaw = kmlXml.replace(/^\uFEFF/, '').trimStart();
   const parser = new DOMParser();
-  const doc = parser.parseFromString(kmlXml, 'application/xml');
-  const parserError = doc.querySelector('parsererror');
-  if (parserError) {
-    throw new Error('El archivo KML interno no contiene XML válido.');
+  let doc = parser.parseFromString(cleanedRaw, 'application/xml');
+  if (doc.querySelector('parsererror')) {
+    const sanitized = sanitizeKmlXml(cleanedRaw);
+    doc = parser.parseFromString(sanitized, 'application/xml');
+    if (doc.querySelector('parsererror')) {
+      const htmlDoc = parser.parseFromString(sanitized, 'text/html');
+      if (elementsByLocalName(htmlDoc, 'coordinates').length === 0 && elementsByLocalName(htmlDoc, 'coord').length === 0) {
+        throw new Error('El archivo KML interno no contiene XML válido.');
+      }
+      doc = htmlDoc;
+    }
   }
 
-  const rawDocName = doc.querySelector('Document > name')?.textContent?.trim();
-  const rawFolderName = doc.querySelector('Folder > name')?.textContent?.trim();
+  const docEl = firstDescendantByLocalName(doc, 'Document');
+  const folderEl = firstDescendantByLocalName(doc, 'Folder');
+  const rawDocName = docEl ? firstDirectChildByLocalName(docEl, 'name')?.textContent?.trim() : undefined;
+  const rawFolderName = folderEl ? firstDirectChildByLocalName(folderEl, 'name')?.textContent?.trim() : undefined;
   const cleanFileBase = fileName.replace(/\.(kmz|kml)$/i, '').trim();
   const documentName = rawDocName || rawFolderName || cleanFileBase;
 
-  const placemarks = Array.from(doc.querySelectorAll('Placemark'));
+  const rawPlacemarks = elementsByLocalName(doc, 'Placemark');
+  const placemarks: Element[] =
+    rawPlacemarks.length > 0
+      ? rawPlacemarks
+      : doc.documentElement
+      ? [doc.documentElement]
+      : [];
+
   const features: KmzFeature[] = [];
   const mergedAttributes: Record<string, string> = {};
   const rawDescriptions: string[] = [];
   let kmlTimestampDate: string | null = null;
 
-  const docDesc = doc.querySelector('Document > description')?.textContent?.trim();
+  const docDesc = docEl ? firstDirectChildByLocalName(docEl, 'description')?.textContent?.trim() : undefined;
   if (docDesc) {
     const cleanDocDesc = stripHtmlToText(docDesc);
     if (cleanDocDesc) rawDescriptions.push(cleanDocDesc);
@@ -177,17 +237,18 @@ export function parseKmlText(kmlXml: string, fileName: string): ParsedKmzResult 
   }
 
   placemarks.forEach((pm, idx) => {
-    const name = pm.querySelector('name')?.textContent?.trim() || `Polígono ${idx + 1}`;
-    const rawDesc = pm.querySelector('description')?.textContent?.trim() || '';
+    const directName = firstDirectChildByLocalName(pm, 'name')?.textContent?.trim();
+    const name = directName || (rawPlacemarks.length === 0 ? documentName : `Polígono ${idx + 1}`);
+    const rawDesc = firstDirectChildByLocalName(pm, 'description')?.textContent?.trim() || '';
     const cleanDesc = stripHtmlToText(rawDesc);
     if (cleanDesc) rawDescriptions.push(cleanDesc);
 
-    const address = pm.querySelector('address')?.textContent?.trim();
+    const address = firstDirectChildByLocalName(pm, 'address')?.textContent?.trim();
     if (address) mergedAttributes['address'] = address;
 
     const whenText =
-      pm.querySelector('TimeStamp > when')?.textContent?.trim() ||
-      pm.querySelector('TimeSpan > begin')?.textContent?.trim();
+      firstDescendantByLocalName(pm, 'when')?.textContent?.trim() ||
+      firstDescendantByLocalName(pm, 'begin')?.textContent?.trim();
     if (whenText && !kmlTimestampDate) {
       kmlTimestampDate = extractDateFromText(whenText);
     }
@@ -197,14 +258,14 @@ export function parseKmlText(kmlXml: string, fileName: string): ParsedKmzResult 
     };
 
     // Parse KML <ExtendedData><Data name="..."><value>...</value></Data>
-    pm.querySelectorAll('ExtendedData Data').forEach((d) => {
+    elementsByLocalName(pm, 'Data').forEach((d) => {
       const k = d.getAttribute('name')?.trim();
-      const v = d.querySelector('value')?.textContent?.trim();
+      const v = firstDirectChildByLocalName(d, 'value')?.textContent?.trim() || d.textContent?.trim();
       if (k && v) attrs[k] = v;
     });
 
     // Parse KML <ExtendedData><SchemaData><SimpleData name="...">...</SimpleData>
-    pm.querySelectorAll('ExtendedData SimpleData').forEach((sd) => {
+    elementsByLocalName(pm, 'SimpleData').forEach((sd) => {
       const k = sd.getAttribute('name')?.trim();
       const v = sd.textContent?.trim();
       if (k && v) attrs[k] = v;
@@ -212,56 +273,76 @@ export function parseKmlText(kmlXml: string, fileName: string): ParsedKmzResult 
 
     Object.assign(mergedAttributes, attrs);
 
-    // Extract all polygons (handles single Polygon or MultiGeometry with multiple Polygons)
-    const polygonCoordNodes = Array.from(
-      pm.querySelectorAll('Polygon outerBoundaryIs LinearRing coordinates')
-    );
-    if (polygonCoordNodes.length > 0) {
-      polygonCoordNodes.forEach((node, polyIdx) => {
-        const points = parseCoordinatesString(node.textContent || '');
-        if (points.length >= 3) {
-          features.push({
-            id: `feat-${idx}-${polyIdx}-${Date.now()}`,
-            name: polygonCoordNodes.length > 1 ? `${name} (${polyIdx + 1})` : name,
-            description: cleanDesc || undefined,
-            attributes: Object.keys(attrs).length > 0 ? attrs : undefined,
-            geometryType: 'Polygon',
-            points,
-            areaM2: computePolygonAreaM2(points),
-            perimeterM: computePerimeterM(points, true),
-          });
-        }
-      });
-      return;
-    }
+    // Extract Polygons (outerBoundaryIs preferred to avoid treating holes as separate polygons)
+    const polygonEls = elementsByLocalName(pm, 'Polygon');
+    polygonEls.forEach((polyEl, polyIdx) => {
+      const outer = firstDirectChildByLocalName(polyEl, 'outerBoundaryIs') ?? polyEl;
+      const coordNode = firstDescendantByLocalName(outer, 'coordinates');
+      if (!coordNode) return;
+      const points = parseCoordinatesString(coordNode.textContent || '');
+      if (points.length >= 3) {
+        features.push({
+          id: `feat-${idx}-poly-${polyIdx}-${Date.now()}`,
+          name: polygonEls.length > 1 ? `${name} (${polyIdx + 1})` : name,
+          description: cleanDesc || undefined,
+          attributes: Object.keys(attrs).length > 0 ? attrs : undefined,
+          geometryType: 'Polygon',
+          points,
+          areaM2: computePolygonAreaM2(points),
+          perimeterM: computePerimeterM(points, true),
+        });
+      }
+    });
 
-    const lineCoordNodes = Array.from(pm.querySelectorAll('LineString coordinates'));
-    if (lineCoordNodes.length > 0) {
-      lineCoordNodes.forEach((node, lineIdx) => {
-        const points = parseCoordinatesString(node.textContent || '');
-        if (points.length >= 2) {
-          features.push({
-            id: `feat-${idx}-${lineIdx}-${Date.now()}`,
-            name,
-            description: cleanDesc || undefined,
-            attributes: Object.keys(attrs).length > 0 ? attrs : undefined,
-            geometryType: 'LineString',
-            points,
-            areaM2: 0,
-            perimeterM: computePerimeterM(points, false),
-          });
-        }
-      });
-      return;
-    }
+    // Extract LineStrings (also kept when inside MultiGeometry alongside Polygons)
+    const lineEls = elementsByLocalName(pm, 'LineString');
+    lineEls.forEach((lineEl, lineIdx) => {
+      const coordNode = firstDescendantByLocalName(lineEl, 'coordinates');
+      if (!coordNode) return;
+      const points = parseCoordinatesString(coordNode.textContent || '');
+      if (points.length >= 2) {
+        features.push({
+          id: `feat-${idx}-line-${lineIdx}-${Date.now()}`,
+          name: lineEls.length > 1 ? `${name} (Tramo ${lineIdx + 1})` : name,
+          description: cleanDesc || undefined,
+          attributes: Object.keys(attrs).length > 0 ? attrs : undefined,
+          geometryType: 'LineString',
+          points,
+          areaM2: 0,
+          perimeterM: computePerimeterM(points, false),
+        });
+      }
+    });
 
-    const pointCoords = pm.querySelector('Point coordinates')?.textContent;
-    if (pointCoords) {
-      const points = parseCoordinatesString(pointCoords);
+    // Extract gx:Track GPS tracks from Google Earth KML/KMZ
+    const trackEls = elementsByLocalName(pm, 'Track');
+    trackEls.forEach((trackEl, trackIdx) => {
+      const gxCoords = elementsByLocalName(trackEl, 'coord');
+      const points = parseGxCoordNodes(gxCoords);
+      if (points.length >= 2) {
+        features.push({
+          id: `feat-${idx}-track-${trackIdx}-${Date.now()}`,
+          name: trackEls.length > 1 ? `${name} (Track ${trackIdx + 1})` : name,
+          description: cleanDesc || undefined,
+          attributes: Object.keys(attrs).length > 0 ? attrs : undefined,
+          geometryType: 'LineString',
+          points,
+          areaM2: 0,
+          perimeterM: computePerimeterM(points, false),
+        });
+      }
+    });
+
+    // Extract Points (also kept when inside MultiGeometry)
+    const pointEls = elementsByLocalName(pm, 'Point');
+    pointEls.forEach((ptEl, ptIdx) => {
+      const coordNode = firstDescendantByLocalName(ptEl, 'coordinates');
+      if (!coordNode) return;
+      const points = parseCoordinatesString(coordNode.textContent || '');
       if (points.length >= 1) {
         features.push({
-          id: `feat-${idx}-${Date.now()}`,
-          name,
+          id: `feat-${idx}-pt-${ptIdx}-${Date.now()}`,
+          name: pointEls.length > 1 ? `${name} (${ptIdx + 1})` : name,
           description: cleanDesc || undefined,
           attributes: Object.keys(attrs).length > 0 ? attrs : undefined,
           geometryType: 'Point',
@@ -270,7 +351,7 @@ export function parseKmlText(kmlXml: string, fileName: string): ParsedKmzResult 
           perimeterM: 0,
         });
       }
-    }
+    });
   });
 
   if (features.length === 0) {
@@ -601,7 +682,11 @@ export async function parseKmzOrKmlFile(file: File): Promise<ParsedKmzResult> {
   } catch {
     throw new Error('El archivo .kmz está corrupto o no es un paquete ZIP válido.');
   }
-  const kmlEntryName = Object.keys(zip.files).find((name) => name.toLowerCase().endsWith('.kml'));
+  const kmlCandidates = Object.keys(zip.files).filter(
+    (name) => !zip.files[name].dir && name.toLowerCase().endsWith('.kml')
+  );
+  const kmlEntryName =
+    kmlCandidates.find((name) => name.toLowerCase() === 'doc.kml') ?? kmlCandidates[0];
 
   if (!kmlEntryName) {
     throw new Error('El archivo KMZ comprimido no contiene ningún documento .kml válido.');

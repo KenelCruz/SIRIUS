@@ -22,6 +22,7 @@ import { AgendaView } from './components/AgendaView';
 import { AuditoriaView } from './components/AuditoriaView';
 import { AuthGate } from './components/AuthGate';
 import { CatalogosView } from './components/CatalogosView';
+import { DwgPlanViewer } from './components/DwgPlanViewer';
 import { KmzImportModal } from './components/KmzImportModal';
 import { KmzOsmViewer } from './components/KmzOsmViewer';
 import { MobileExpenseCaptureModal } from './components/MobileExpenseCaptureModal';
@@ -55,6 +56,7 @@ import type {
   Viatico,
 } from './types/domain';
 import { formatRD, latLonToUtm19N } from './utils/geodesy';
+import type { ParsedDwgPlan } from './utils/dwgParser';
 import { parseKmzOrKmlFile, type ParsedKmzResult } from './utils/kmzParser';
 
 type AdminTab =
@@ -103,6 +105,8 @@ export default function App() {
   const [areaUnit, setAreaUnit] = useState<AreaUnit>('tareas');
 
   const [standaloneKmz, setStandaloneKmz] = useState<ParsedKmzResult | null>(null);
+  const [mapViewerMode, setMapViewerMode] = useState<'cartografia' | 'planos'>('cartografia');
+  const [loadedDwgPlan, setLoadedDwgPlan] = useState<ParsedDwgPlan | null>(null);
   const [preloadedKmzForModal, setPreloadedKmzForModal] = useState<ParsedKmzResult | null>(null);
   const [defaultProyectoModal, setDefaultProyectoModal] = useState<string | undefined>(undefined);
   const [isKmzModalOpen, setIsKmzModalOpen] = useState(false);
@@ -800,6 +804,7 @@ export default function App() {
     try {
       const parsed = await parseKmzOrKmlFile(file);
       setStandaloneKmz(parsed);
+      setMapViewerMode('cartografia');
       setAdminTab('map');
       showToast(`Visualizando ${parsed.fileName} en OpenStreetMap.`);
     } catch (err: unknown) {
@@ -818,7 +823,7 @@ export default function App() {
     { id: 'proyectos', label: 'Proyectos y Rutas', shortLabel: 'Proyectos', icon: FolderKanban },
     { id: 'agenda', label: 'Agenda y Cuadrillas', shortLabel: 'Agenda', icon: CalendarDays },
     { id: 'rutas', label: 'Rutas y Servicios', shortLabel: 'Rutas', icon: Route },
-    { id: 'map', label: 'Visor KMZ (OSM)', shortLabel: 'Mapa', icon: Layers },
+    { id: 'map', label: 'Visor KMZ / KML / DWG', shortLabel: 'Visor', icon: Layers },
     { id: 'viaticos', label: 'Viáticos y Gastos', shortLabel: 'Viáticos', icon: Receipt },
     { id: 'catalogos', label: 'Catálogos y Equipos', shortLabel: 'Catálogos', icon: Users },
     ...(canAudit
@@ -956,7 +961,10 @@ export default function App() {
                   {adminTab === 'proyectos' && `${snapshot.empresa.nombre} · Proyectos y Rutas`}
                   {adminTab === 'agenda' && 'Agenda de Cuadrillas y Conflictos'}
                   {adminTab === 'rutas' && 'Cálculo de Rutas y Servicios Sumatorios'}
-                  {adminTab === 'map' && 'Visualizador KMZ / GeoJSON · OpenStreetMap'}
+                  {adminTab === 'map' &&
+                    (mapViewerMode === 'planos'
+                      ? 'Planos Arquitectónicos · AutoCAD (.DWG / .DXF)'
+                      : 'Visualizador KMZ / KML / GeoJSON · OpenStreetMap')}
                   {adminTab === 'viaticos' && 'Control de Viáticos y Reparto por Proyecto'}
                   {adminTab === 'catalogos' && 'Catálogos, Flota y Equipos GNSS'}
                   {adminTab === 'auditoria' && 'Auditoría Operativa (F16)'}
@@ -1070,6 +1078,7 @@ export default function App() {
                 onVerRutaEnMapa={(rId) => {
                   setStandaloneKmz(null);
                   setSelectedRutaId(rId);
+                  setMapViewerMode('cartografia');
                   setAdminTab('map');
                 }}
                 onCalcularRuta={(rId) => {
@@ -1143,10 +1152,10 @@ export default function App() {
                     });
                   }
                   for (const sp of serviciosPropuestos) {
-                    const existe = snapshot.servicios.some(
+                    const existente = snapshot.servicios.find(
                       (s) => s.rutaId === rutaId && s.tipoServicioId === sp.tipoServicioId
                     );
-                    if (!existe) {
+                    if (!existente) {
                       await actions.crearServicio({
                         rutaId,
                         tipoServicioId: sp.tipoServicioId,
@@ -1154,10 +1163,19 @@ export default function App() {
                         cotizacionRD: sp.cotizacionRD,
                         estado: 'cotizado',
                       });
+                    } else if (
+                      existente.estado === 'cotizado' &&
+                      existente.cotizacionRD !== sp.cotizacionRD
+                    ) {
+                      await actions.actualizarServicio({
+                        ...existente,
+                        nombre: sp.nombre,
+                        cotizacionRD: sp.cotizacionRD,
+                      });
                     }
                   }
                   showToast(
-                    `Presupuesto (${formatRD(budgetViaticosRD)}) y servicios aplicados a la ruta.`
+                    `Presupuesto (${formatRD(budgetViaticosRD)}) y servicios aplicados al proyecto.`
                   );
                 }}
                 onRegisterKmzFromCalculator={(parsed) => {
@@ -1182,87 +1200,138 @@ export default function App() {
 
             {adminTab === 'map' && (
               <section className="space-y-4">
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 rounded-md border border-[#CBD5E1] bg-white p-4">
-                  <div className="flex flex-wrap items-center gap-2.5 flex-1 min-w-0">
-                    <select
-                      value={standaloneKmz ? '__standalone__' : selectedRuta?.id ?? ''}
-                      onChange={(e) => {
-                        if (e.target.value !== '__standalone__') {
-                          setStandaloneKmz(null);
-                          setSelectedRutaId(e.target.value);
-                        }
-                      }}
-                      className="rounded-sm border border-[#CBD5E1] bg-white px-3 py-2 text-xs font-medium text-[#0D1C2F] min-h-[40px] max-w-full"
-                    >
-                      {standaloneKmz && (
-                        <option value="__standalone__">
-                          Vista previa: {standaloneKmz.fileName}
-                        </option>
-                      )}
-                      {snapshot.rutas.map((r) => (
-                        <option key={r.id} value={r.id}>
-                          {r.codigoParcela} — {r.nombre} ({r.provincia})
-                        </option>
-                      ))}
-                    </select>
-
-                    <input
-                      ref={viewerFileInputRef}
-                      type="file"
-                      accept=".kmz,.kml,.geojson,.json"
-                      className="hidden"
-                      onChange={(e) => {
-                        const f = e.target.files?.[0];
-                        if (f) handleOpenKmzInViewer(f);
-                      }}
-                    />
-
+                <div className="flex flex-wrap items-center justify-between gap-3 rounded-md border border-[#CBD5E1] bg-white px-4 py-2.5">
+                  <div className="inline-flex rounded-sm bg-[#F1F5F9] p-1 border border-[#CBD5E1]">
                     <button
                       type="button"
-                      onClick={() => viewerFileInputRef.current?.click()}
-                      className="inline-flex items-center gap-1.5 rounded-sm border border-[#CBD5E1] bg-[#F8FAFC] px-3 py-2 text-xs font-semibold text-[#0F2942] hover:bg-[#EFF4FF] min-h-[40px]"
+                      onClick={() => setMapViewerMode('cartografia')}
+                      className={`inline-flex items-center gap-1.5 rounded-sm px-3 py-1.5 text-xs font-semibold transition-colors ${
+                        mapViewerMode === 'cartografia'
+                          ? 'bg-[#0F2942] text-white'
+                          : 'text-[#334155] hover:text-[#0F2942]'
+                      }`}
                     >
-                      <FileUp className="h-4 w-4 text-[#0284C7]" />
-                      Abrir Archivo KMZ / GeoJSON
+                      <Layers className="h-3.5 w-3.5" />
+                      Mapa Cartográfico (KMZ / KML / GeoJSON)
                     </button>
-
-                    {standaloneKmz && canEdit && (
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setPreloadedKmzForModal(standaloneKmz);
-                          setIsKmzModalOpen(true);
-                        }}
-                        className="inline-flex items-center gap-1.5 rounded-sm bg-[#0F2942] px-3 py-2 text-xs font-semibold text-white hover:bg-[#0284C7] min-h-[40px]"
-                      >
-                        <Plus className="h-4 w-4" />
-                        Guardar como Ruta de Proyecto
-                      </button>
-                    )}
+                    <button
+                      type="button"
+                      onClick={() => setMapViewerMode('planos')}
+                      className={`inline-flex items-center gap-1.5 rounded-sm px-3 py-1.5 text-xs font-semibold transition-colors ${
+                        mapViewerMode === 'planos'
+                          ? 'bg-[#0F2942] text-white'
+                          : 'text-[#334155] hover:text-[#0F2942]'
+                      }`}
+                    >
+                      <Compass className="h-3.5 w-3.5" />
+                      Planos Arquitectónicos (.DWG / .DXF)
+                    </button>
                   </div>
 
-                  <button
-                    type="button"
-                    onClick={() => handleCaptureLiveGps()}
-                    disabled={isCapturingGps}
-                    className="inline-flex items-center justify-center gap-1.5 rounded-sm bg-[#0284C7] px-3.5 py-2 text-xs font-semibold text-white hover:bg-[#006398] disabled:opacity-60 min-h-[40px] shrink-0"
-                  >
-                    <Compass className="h-4 w-4" />
-                    {isCapturingGps ? 'Fijando GPS...' : 'Capturar GPS Actual'}
-                  </button>
+                  <span className="text-[11px] text-[#43474D]">
+                    {mapViewerMode === 'planos'
+                      ? 'Lectura vectorial CAD local para arquitectura e ingeniería'
+                      : 'Parcelas, polilíneas y coordenadas UTM Zona 19N sobre OSM'}
+                  </span>
                 </div>
 
-                <KmzOsmViewer
-                  parcelCode={viewerParcelCode}
-                  fileName={viewerFileName}
-                  features={viewerFeatures}
-                  centroid={viewerCentroid}
-                  totalAreaM2={viewerAreaM2}
-                  totalPerimeterM={viewerPerimeterM}
-                  areaUnit={areaUnit}
-                  onChangeAreaUnit={setAreaUnit}
-                  liveGpsPoint={liveGpsPoint}
-                />
+                {mapViewerMode === 'cartografia' ? (
+                  <>
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 rounded-md border border-[#CBD5E1] bg-white p-4">
+                      <div className="flex flex-wrap items-center gap-2.5 flex-1 min-w-0">
+                        <select
+                          value={standaloneKmz ? '__standalone__' : selectedRuta?.id ?? ''}
+                          onChange={(e) => {
+                            if (e.target.value !== '__standalone__') {
+                              setStandaloneKmz(null);
+                              setSelectedRutaId(e.target.value);
+                            }
+                          }}
+                          className="rounded-sm border border-[#CBD5E1] bg-white px-3 py-2 text-xs font-medium text-[#0D1C2F] min-h-[40px] max-w-full"
+                        >
+                          {standaloneKmz && (
+                            <option value="__standalone__">
+                              Vista previa: {standaloneKmz.fileName}
+                            </option>
+                          )}
+                          {snapshot.rutas.map((r) => (
+                            <option key={r.id} value={r.id}>
+                              {r.codigoParcela} — {r.nombre} ({r.provincia})
+                            </option>
+                          ))}
+                        </select>
+
+                        <input
+                          ref={viewerFileInputRef}
+                          type="file"
+                          accept=".kmz,.kml,.geojson,.json"
+                          className="hidden"
+                          onChange={(e) => {
+                            const f = e.target.files?.[0];
+                            if (f) handleOpenKmzInViewer(f);
+                            e.target.value = '';
+                          }}
+                        />
+
+                        <button
+                          type="button"
+                          onClick={() => viewerFileInputRef.current?.click()}
+                          className="inline-flex items-center gap-1.5 rounded-sm border border-[#CBD5E1] bg-[#F8FAFC] px-3 py-2 text-xs font-semibold text-[#0F2942] hover:bg-[#EFF4FF] min-h-[40px]"
+                        >
+                          <FileUp className="h-4 w-4 text-[#0284C7]" />
+                          Abrir Archivo KMZ / KML / GeoJSON
+                        </button>
+
+                        {standaloneKmz && canEdit && (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setPreloadedKmzForModal(standaloneKmz);
+                              setIsKmzModalOpen(true);
+                            }}
+                            className="inline-flex items-center gap-1.5 rounded-sm bg-[#0F2942] px-3 py-2 text-xs font-semibold text-white hover:bg-[#0284C7] min-h-[40px]"
+                          >
+                            <Plus className="h-4 w-4" />
+                            Guardar como Ruta de Proyecto
+                          </button>
+                        )}
+                      </div>
+
+                      <button
+                        type="button"
+                        onClick={() => handleCaptureLiveGps()}
+                        disabled={isCapturingGps}
+                        className="inline-flex items-center justify-center gap-1.5 rounded-sm bg-[#0284C7] px-3.5 py-2 text-xs font-semibold text-white hover:bg-[#006398] disabled:opacity-60 min-h-[40px] shrink-0"
+                      >
+                        <Compass className="h-4 w-4" />
+                        {isCapturingGps ? 'Fijando GPS...' : 'Capturar GPS Actual'}
+                      </button>
+                    </div>
+
+                    <KmzOsmViewer
+                      parcelCode={viewerParcelCode}
+                      fileName={viewerFileName}
+                      features={viewerFeatures}
+                      centroid={viewerCentroid}
+                      totalAreaM2={viewerAreaM2}
+                      totalPerimeterM={viewerPerimeterM}
+                      areaUnit={areaUnit}
+                      onChangeAreaUnit={setAreaUnit}
+                      liveGpsPoint={liveGpsPoint}
+                      onDropFile={handleOpenKmzInViewer}
+                    />
+                  </>
+                ) : (
+                  <DwgPlanViewer
+                    plan={loadedDwgPlan}
+                    onPlanLoaded={(next) => {
+                      setLoadedDwgPlan(next);
+                      if (next) {
+                        showToast(`Plano ${next.fileName} cargado (${next.layers.length} capas).`);
+                      }
+                    }}
+                  />
+                )}
               </section>
             )}
 

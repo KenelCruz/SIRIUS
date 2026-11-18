@@ -92,6 +92,18 @@ export function detectarConflictosAsignacion(params: ParamsDeteccionConflictos):
   const cuadrillaCandidata = cuadrillas.find((c) => c.id === candidata.cuadrillaId);
   const miembrosCand = miembrosDeCuadrilla(cuadrillaCandidata);
 
+  if (cuadrillaCandidata && !cuadrillaCandidata.activa) {
+    conflictos.push({
+      type: 'cuadrilla_inactiva',
+      severidad: 'bloqueante',
+      permiteOverride: false,
+      conflictingEntityId: cuadrillaCandidata.id,
+      message: `La cuadrilla "${cuadrillaCandidata.nombre}" está dada de baja (inactiva) y no puede asignarse.`,
+      conflictingRutaCode: rutaCandidata?.codigoParcela || 'RUTA',
+      conflictingRutaTitle: rutaCandidata?.nombre || 'Ruta seleccionada',
+    });
+  }
+
   // 1. Bloqueos duros por estado físico de vehículos (en mantenimiento o fuera de servicio)
   for (const vehiculoId of candidata.vehiculoIds) {
     const veh = vehiculos.find((v) => v.id === vehiculoId);
