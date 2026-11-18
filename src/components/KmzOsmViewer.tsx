@@ -101,12 +101,20 @@ export const KmzOsmViewer: React.FC<KmzOsmViewerProps> = ({
         maxZoom: 19,
         attribution: '&copy; OpenStreetMap contributors',
       }).addTo(map);
+      tileLayerRef.current.bringToBack();
     } else if (baseLayer === 'topo') {
       tileLayerRef.current = L.tileLayer('https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png', {
-        maxZoom: 17,
+        maxNativeZoom: 17,
+        maxZoom: 19,
         attribution: '&copy; OpenStreetMap, SRTM | OpenTopoMap',
       }).addTo(map);
+      tileLayerRef.current.bringToBack();
     }
+
+    if (vectorGroupRef.current) {
+      vectorGroupRef.current.bringToFront();
+    }
+    map.invalidateSize();
   }, [baseLayer]);
 
   // Render KMZ geometries, vertices, popups, and live GPS point
@@ -352,9 +360,10 @@ export const KmzOsmViewer: React.FC<KmzOsmViewerProps> = ({
       <div className="relative">
         <div
           ref={mapContainerRef}
+          style={{ backgroundColor: baseLayer === 'grid' ? '#0B1C2E' : '#E6EEFF' }}
           className={`w-full ${
             compact ? 'h-[210px]' : 'h-[340px] sm:h-[420px]'
-          } ${baseLayer === 'grid' ? 'bg-[#0B1C2E]' : 'bg-[#E6EEFF]'} z-0`}
+          } z-0`}
         />
 
         {/* Map Utility Floating Controls */}

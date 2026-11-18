@@ -373,10 +373,18 @@ export default function App() {
                 <Compass className="h-4 w-4" />
               </div>
               <div className="min-w-0">
-                <div className="text-base font-bold tracking-tight whitespace-nowrap truncate">
-                  GeoMatrix RD
+                <div
+                  className="text-base font-bold tracking-tight whitespace-nowrap truncate"
+                  title="SIRIUS: Sistema Integral de Recursos, Información, Operaciones y Análisis"
+                >
+                  SIRIUS
                 </div>
-                <div className="text-[11px] text-[#93CCFF] truncate">{snapshot.empresa.nombre}</div>
+                <div className="text-[10px] leading-tight text-[#CBD5E1] line-clamp-2">
+                  Sistema Integral de Recursos, Información, Operaciones y Análisis
+                </div>
+                <div className="mt-0.5 text-[11px] font-medium text-[#93CCFF] truncate">
+                  {snapshot.empresa.nombre}
+                </div>
               </div>
             </div>
 
@@ -651,6 +659,7 @@ export default function App() {
                 creadoPorUsuario={sesion.usuario}
                 baseLat={snapshot.empresa.baseLat}
                 baseLon={snapshot.empresa.baseLon}
+                baseDireccion={snapshot.empresa.direccionBase}
                 onSelectRuta={setSelectedRutaId}
                 onApplyToRuta={async ({
                   rutaId,
@@ -929,6 +938,9 @@ export default function App() {
         defaultProyectoId={defaultProyectoModal}
         preloadedKmz={preloadedKmzForModal}
         creadoPorUsuario={sesion.usuario}
+        baseLat={snapshot.empresa.baseLat}
+        baseLon={snapshot.empresa.baseLon}
+        baseDireccion={snapshot.empresa.direccionBase}
         onCrearClienteYProyectoRapido={async (datos) => {
           let cliId = datos.clienteIdExistente;
           if (!cliId) {

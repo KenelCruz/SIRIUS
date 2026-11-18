@@ -15,9 +15,9 @@ export default defineConfig(() => {
         includeAssets: ['icon.svg', 'apple-touch-icon.png', 'pwa-192x192.png', 'pwa-512x512.png', 'pwa-maskable-512x512.png'],
         manifest: {
           id: '/',
-          name: 'GeoMatrix RD — Levantamientos KMZ y Viáticos',
-          short_name: 'GeoMatrix RD',
-          description: 'Gestión de levantamientos geodésicos desde archivos KMZ y reporte automático de viáticos en campo.',
+          name: 'SIRIUS: Sistema Integral de Recursos, Información, Operaciones y Análisis',
+          short_name: 'SIRIUS',
+          description: 'Sistema Integral de Recursos, Información, Operaciones y Análisis para levantamientos geodésicos KMZ/GeoJSON y viáticos en campo.',
           theme_color: '#0F2942',
           background_color: '#F8FAFC',
           display: 'standalone',

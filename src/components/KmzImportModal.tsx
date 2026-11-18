@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
+import L from 'leaflet';
 import {
   ArrowLeft,
   ArrowRight,
@@ -8,8 +9,12 @@ import {
   CheckCircle2,
   Download,
   FileUp,
+  MapPin,
+  Navigation,
   Receipt,
+  RotateCcw,
   Route,
+  Search,
   Sparkles,
   UploadCloud,
   X,
@@ -40,10 +45,15 @@ import {
   type ParsedKmzResult,
   type SampleKmzTemplate,
 } from '../utils/kmzParser';
-import { reverseGeocodeOSM } from '../utils/osmGeocode';
+import {
+  reverseGeocodeOSM,
+  searchAddressOSM,
+  type AddressSearchResult,
+} from '../utils/osmGeocode';
 import {
   computeRouteViaticos,
   fetchOptimalRoutesOSM,
+  SANTO_DOMINGO_ORIGIN,
   SERVICE_CATALOG,
   TERRAIN_MULTIPLIER,
   VEHICLE_CATALOG,
@@ -63,6 +73,9 @@ interface KmzImportModalProps {
   defaultProyectoId?: string;
   preloadedKmz?: ParsedKmzResult | null;
   creadoPorUsuario: { id: string; nombre: string };
+  baseLat?: number;
+  baseLon?: number;
+  baseDireccion?: string;
   onCrearClienteYProyectoRapido: (datos: {
     clienteIdExistente?: string;
     clienteNombre: string;
@@ -102,10 +115,16 @@ export const KmzImportModal: React.FC<KmzImportModalProps> = ({
   defaultProyectoId,
   preloadedKmz = null,
   creadoPorUsuario,
+  baseLat = SANTO_DOMINGO_ORIGIN.lat,
+  baseLon = SANTO_DOMINGO_ORIGIN.lon,
+  baseDireccion = 'Base Operativa (Santo Domingo)',
   onCrearClienteYProyectoRapido,
   onCreateRutaCompleta,
 }) => {
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const originMapRef = useRef<HTMLDivElement>(null);
+  const originLeafletRef = useRef<L.Map | null>(null);
+  const originOverlayRef = useRef<L.FeatureGroup | null>(null);
 
   const [step, setStep] = useState<1 | 2 | 3>(1);
   const [parsed, setParsed] = useState<ParsedKmzResult | null>(null);
@@ -152,6 +171,23 @@ export const KmzImportModal: React.FC<KmzImportModalProps> = ({
   const [includeTolls, setIncludeTolls] = useState(true);
   const [includeLodging, setIncludeLodging] = useState(false);
   const [isRouting, setIsRouting] = useState(false);
+
+  // Punto de partida personalizado (empresa / calle / pin mapa)
+  const [originPoint, setOriginPoint] = useState<{
+    lat: number;
+    lon: number;
+    label: string;
+    source: 'empresa' | 'calle' | 'pin';
+  }>({
+    lat: baseLat,
+    lon: baseLon,
+    label: baseDireccion,
+    source: 'empresa',
+  });
+  const [originQuery, setOriginQuery] = useState('');
+  const [originResults, setOriginResults] = useState<AddressSearchResult[]>([]);
+  const [isSearchingOrigin, setIsSearchingOrigin] = useState(false);
+  const [showOriginPinMap, setShowOriginPinMap] = useState(false);
 
   // Step 3 Programación opcional & Viáticos iniciales
   const [programarAhora, setProgramarAhora] = useState(true);
@@ -250,18 +286,6 @@ export const KmzImportModal: React.FC<KmzImportModalProps> = ({
       setNuevoClienteNombre(meta.client);
     }
 
-    setIsRouting(true);
-    fetchOptimalRoutesOSM(res.centroid.lat, res.centroid.lon)
-      .then((r) => {
-        setRoutes(r);
-        if (r[0] && r[0].distanceOneWayKm > 105) {
-          setIncludeLodging(true);
-        } else {
-          setIncludeLodging(false);
-        }
-      })
-      .finally(() => setIsRouting(false));
-
     const osmLoc = await reverseGeocodeOSM(res.centroid.lat, res.centroid.lon);
     if (osmLoc.source === 'osm') {
       if (!template && !res.autoMeta.extractedFields.includes('Provincia (KML)')) {
@@ -273,6 +297,141 @@ export const KmzImportModal: React.FC<KmzImportModalProps> = ({
       setUbicacion(locLabel);
     }
   };
+
+  useEffect(() => {
+    setOriginPoint((prev) =>
+      prev.source === 'empresa'
+        ? { lat: baseLat, lon: baseLon, label: baseDireccion, source: 'empresa' }
+        : prev
+    );
+  }, [baseLat, baseLon, baseDireccion]);
+
+  useEffect(() => {
+    if (!parsed) return;
+    let active = true;
+    setIsRouting(true);
+    fetchOptimalRoutesOSM(
+      parsed.centroid.lat,
+      parsed.centroid.lon,
+      originPoint.lat,
+      originPoint.lon
+    )
+      .then((r) => {
+        if (!active) return;
+        setRoutes(r);
+        if (r[0] && r[0].distanceOneWayKm > 105) {
+          setIncludeLodging(true);
+        } else {
+          setIncludeLodging(false);
+        }
+      })
+      .finally(() => {
+        if (active) setIsRouting(false);
+      });
+    return () => {
+      active = false;
+    };
+  }, [parsed, originPoint.lat, originPoint.lon]);
+
+  const setPinOriginFromCoords = async (lat: number, lon: number) => {
+    setOriginResults([]);
+    setOriginPoint({
+      lat,
+      lon,
+      label: `Pin (${lat.toFixed(5)}, ${lon.toFixed(5)})`,
+      source: 'pin',
+    });
+    const geo = await reverseGeocodeOSM(lat, lon);
+    const shortStreet = geo.displayAddress
+      ? geo.displayAddress.split(',').slice(0, 2).join(',').trim()
+      : '';
+    const resolved = [shortStreet || geo.locality, geo.municipality || geo.province]
+      .filter(Boolean)
+      .join(' · ');
+    if (resolved) {
+      setOriginPoint((prev) =>
+        prev.source === 'pin' &&
+        Math.abs(prev.lat - lat) < 1e-6 &&
+        Math.abs(prev.lon - lon) < 1e-6
+          ? { ...prev, label: resolved }
+          : prev
+      );
+    }
+  };
+
+  useEffect(() => {
+    if (!isOpen || step !== 2 || !showOriginPinMap || !originMapRef.current) {
+      if (originLeafletRef.current) {
+        originLeafletRef.current.remove();
+        originLeafletRef.current = null;
+        originOverlayRef.current = null;
+      }
+      return;
+    }
+
+    if (!originLeafletRef.current) {
+      const map = L.map(originMapRef.current, {
+        center: [originPoint.lat, originPoint.lon],
+        zoom: 11,
+        zoomControl: true,
+      });
+      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        maxZoom: 19,
+        attribution: '&copy; OpenStreetMap',
+      }).addTo(map);
+      map.getContainer().style.cursor = 'crosshair';
+      map.on('click', (e: L.LeafletMouseEvent) => {
+        setPinOriginFromCoords(e.latlng.lat, e.latlng.lng);
+      });
+      originLeafletRef.current = map;
+      originOverlayRef.current = L.featureGroup().addTo(map);
+      setTimeout(() => map.invalidateSize(), 120);
+    }
+
+    const map = originLeafletRef.current;
+    const overlay = originOverlayRef.current;
+    if (!map || !overlay) return;
+
+    overlay.clearLayers();
+    if (activeRoute) {
+      L.polyline(activeRoute.coordinates, {
+        color: '#D97706',
+        weight: 4,
+      }).addTo(overlay);
+    }
+
+    const originIcon = L.divIcon({
+      className: '',
+      iconSize: [24, 24],
+      iconAnchor: [12, 12],
+      html: `<div style="width:24px;height:24px;border-radius:9999px;background:#0284C7;border:2px solid #FFFFFF;color:#FFFFFF;font-family:ui-monospace,monospace;font-size:10px;font-weight:700;display:flex;align-items:center;justify-content:center;box-shadow:0 2px 5px rgba(15,41,66,0.4);">A</div>`,
+    });
+
+    const marker = L.marker([originPoint.lat, originPoint.lon], {
+      draggable: true,
+      icon: originIcon,
+    }).addTo(overlay);
+
+    marker.on('dragend', () => {
+      const p = marker.getLatLng();
+      setPinOriginFromCoords(p.lat, p.lng);
+    });
+
+    if (parsed) {
+      L.circleMarker([parsed.centroid.lat, parsed.centroid.lon], {
+        radius: 6,
+        color: '#FFFFFF',
+        weight: 2,
+        fillColor: '#D97706',
+        fillOpacity: 1,
+      }).addTo(overlay);
+    }
+
+    const bounds = overlay.getBounds();
+    if (bounds.isValid()) {
+      map.fitBounds(bounds, { padding: [24, 24], maxZoom: 15 });
+    }
+  }, [isOpen, step, showOriginPinMap, originPoint, activeRoute, parsed]);
 
   useEffect(() => {
     if (isOpen && defaultProyectoId) {
@@ -997,6 +1156,129 @@ export const KmzImportModal: React.FC<KmzImportModalProps> = ({
                   <span className="font-mono text-[11px] text-[#0284C7]">
                     {isRouting ? 'Calculando ruta...' : `${routeBreakdown.roundTripKm} km ida/vuelta`}
                   </span>
+                </div>
+
+                {/* Punto de Partida (calle o pin en mapa) */}
+                <div className="rounded-sm border border-[#CBD5E1] bg-white p-2.5 space-y-2 text-xs">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <div className="flex items-center gap-1.5 min-w-0">
+                      <span className="inline-flex h-4 w-4 shrink-0 items-center justify-center rounded-sm bg-[#0284C7] font-mono text-[10px] font-bold text-white">
+                        A
+                      </span>
+                      <span className="font-bold text-[#0F2942]">Salida:</span>
+                      <span className="text-[#334155] truncate">{originPoint.label}</span>
+                    </div>
+                    {originPoint.source !== 'empresa' && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setOriginQuery('');
+                          setOriginResults([]);
+                          setOriginPoint({
+                            lat: baseLat,
+                            lon: baseLon,
+                            label: baseDireccion,
+                            source: 'empresa',
+                          });
+                        }}
+                        className="inline-flex items-center gap-1 rounded-sm border border-[#CBD5E1] px-2 py-0.5 text-[11px] font-semibold text-[#334155] hover:bg-[#F8FAFC]"
+                      >
+                        <RotateCcw className="h-3 w-3" />
+                        Base
+                      </button>
+                    )}
+                  </div>
+
+                  <div className="flex flex-col sm:flex-row gap-1.5">
+                    <div className="flex-1 flex gap-1.5 min-w-0">
+                      <div className="relative flex-1 min-w-0">
+                        <Navigation className="pointer-events-none absolute left-2 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-[#64748B]" />
+                        <input
+                          type="text"
+                          value={originQuery}
+                          onChange={(e) => setOriginQuery(e.target.value)}
+                          onKeyDown={async (e) => {
+                            if (e.key === 'Enter') {
+                              e.preventDefault();
+                              if (!originQuery.trim()) return;
+                              setIsSearchingOrigin(true);
+                              const list = await searchAddressOSM(originQuery);
+                              setOriginResults(list);
+                              setIsSearchingOrigin(false);
+                            }
+                          }}
+                          placeholder="Buscar calle o sector de partida..."
+                          className="w-full rounded-sm border border-[#CBD5E1] bg-white pl-7 pr-2 py-1.5 text-xs"
+                        />
+                      </div>
+                      <button
+                        type="button"
+                        disabled={isSearchingOrigin || !originQuery.trim()}
+                        onClick={async () => {
+                          if (!originQuery.trim()) return;
+                          setIsSearchingOrigin(true);
+                          const list = await searchAddressOSM(originQuery);
+                          setOriginResults(list);
+                          setIsSearchingOrigin(false);
+                        }}
+                        className="inline-flex items-center gap-1 rounded-sm bg-[#0F2942] px-2.5 py-1.5 text-[11px] font-semibold text-white hover:bg-[#0284C7] disabled:opacity-50 whitespace-nowrap shrink-0"
+                      >
+                        <Search className="h-3 w-3" />
+                        {isSearchingOrigin ? '...' : 'Calle'}
+                      </button>
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={() => setShowOriginPinMap((prev) => !prev)}
+                      className={`inline-flex items-center justify-center gap-1 rounded-sm border px-2.5 py-1.5 text-[11px] font-semibold whitespace-nowrap shrink-0 ${
+                        showOriginPinMap
+                          ? 'border-[#0F2942] bg-[#0F2942] text-white'
+                          : 'border-[#0284C7] bg-white text-[#0284C7] hover:bg-[#EFF6FF]'
+                      }`}
+                    >
+                      <MapPin className="h-3 w-3" />
+                      {showOriginPinMap ? 'Ocultar mapa pin' : 'Fijar pin en mapa'}
+                    </button>
+                  </div>
+
+                  {originResults.length > 0 && (
+                    <div className="rounded-sm border border-[#CBD5E1] divide-y divide-[#E2E8F0] max-h-32 overflow-y-auto">
+                      {originResults.map((res, idx) => (
+                        <button
+                          key={`${res.lat}-${res.lon}-${idx}`}
+                          type="button"
+                          onClick={() => {
+                            setOriginPoint({
+                              lat: res.lat,
+                              lon: res.lon,
+                              label: res.label,
+                              source: 'calle',
+                            });
+                            setOriginResults([]);
+                          }}
+                          className="w-full flex items-center justify-between gap-2 px-2.5 py-1.5 text-left text-[11px] hover:bg-[#EFF6FF]"
+                        >
+                          <span className="truncate text-[#0D1C2F]">{res.label}</span>
+                          <span className="font-mono text-[10px] text-[#0284C7] uppercase shrink-0">
+                            {res.source}
+                          </span>
+                        </button>
+                      ))}
+                    </div>
+                  )}
+
+                  {showOriginPinMap && (
+                    <div className="space-y-1">
+                      <div className="text-[11px] text-[#43474D]">
+                        Haz clic en el mapa o arrastra el pin azul (A) para fijar el inicio de la ruta.
+                      </div>
+                      <div
+                        ref={originMapRef}
+                        className="w-full h-[180px] rounded-sm border border-[#CBD5E1] z-0"
+                      />
+                    </div>
+                  )}
                 </div>
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">

@@ -1,4 +1,4 @@
-# GeoMatrix RD — PWA de Gestión Topográfica y Viáticos
+# SIRIUS: Sistema Integral de Recursos, Información, Operaciones y Análisis
 
 Aplicación web progresiva (PWA) multi-empresa diseñada para empresas de agrimensura y topografía en República Dominicana (**empresa piloto: AIA Services**). Moneda en **RD$** y marcas de tiempo en zona **America/Santo_Domingo (AST)**.
 

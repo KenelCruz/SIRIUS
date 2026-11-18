@@ -125,7 +125,7 @@ export const ViaticosView: React.FC<ViaticosViewProps> = ({
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `viaticos_geomatrix_${new Date().toISOString().slice(0, 10)}.csv`;
+    a.download = `viaticos_sirius_${new Date().toISOString().slice(0, 10)}.csv`;
     a.click();
     URL.revokeObjectURL(url);
   };

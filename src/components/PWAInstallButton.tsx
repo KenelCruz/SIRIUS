@@ -41,7 +41,7 @@ export const PWAInstallButton: React.FC = () => {
             <div className="flex items-start justify-between gap-4">
               <div>
                 <h3 className="text-base font-semibold text-[#0D1C2F]">
-                  Instalar GeoMatrix RD en tu dispositivo
+                  Instalar SIRIUS en tu dispositivo
                 </h3>
                 <p className="mt-1 text-xs text-[#43474D]">
                   Operación en campo sin señal y acceso directo desde la pantalla de inicio.

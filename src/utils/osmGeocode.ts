@@ -116,3 +116,57 @@ export async function reverseGeocodeOSM(lat: number, lon: number): Promise<OsmLo
     return fallback;
   }
 }
+
+export interface AddressSearchResult {
+  label: string;
+  lat: number;
+  lon: number;
+  source: 'osm' | 'offline';
+}
+
+export async function searchAddressOSM(query: string): Promise<AddressSearchResult[]> {
+  const q = query.trim();
+  if (!q) return [];
+
+  const offlineMatches: AddressSearchResult[] = DR_PROVINCES.filter((p) =>
+    p.province.toLowerCase().includes(q.toLowerCase())
+  )
+    .slice(0, 5)
+    .map((p) => ({
+      label: `${p.province}, República Dominicana`,
+      lat: p.lat,
+      lon: p.lon,
+      source: 'offline',
+    }));
+
+  if (typeof navigator !== 'undefined' && !navigator.onLine) {
+    return offlineMatches;
+  }
+
+  try {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 4500);
+    const url = `https://nominatim.openstreetmap.org/search?format=jsonv2&q=${encodeURIComponent(
+      q
+    )}&countrycodes=do&limit=5&addressdetails=1&accept-language=es`;
+    const res = await fetch(url, {
+      signal: controller.signal,
+      headers: { Accept: 'application/json' },
+    });
+    clearTimeout(timer);
+
+    if (!res.ok) return offlineMatches;
+    const rows = await res.json();
+    if (!Array.isArray(rows) || rows.length === 0) return offlineMatches;
+
+    return rows.map((row: { display_name?: string; lat: string; lon: string }) => ({
+      label: row.display_name || `${row.lat}, ${row.lon}`,
+      lat: Number(row.lat),
+      lon: Number(row.lon),
+      source: 'osm' as const,
+    }));
+  } catch {
+    return offlineMatches;
+  }
+}
+

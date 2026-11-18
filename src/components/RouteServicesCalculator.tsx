@@ -8,11 +8,16 @@ import {
   Download,
   Layers,
   Map as MapIcon,
+  MapPin,
   Mountain,
+  Navigation,
   Receipt,
+  RotateCcw,
   Route,
+  Search,
   Send,
   UploadCloud,
+  X,
 } from 'lucide-react';
 import type {
   CategoriaViatico,
@@ -35,6 +40,19 @@ import {
   type TerrainType,
 } from '../utils/routingEngine';
 
+import {
+  reverseGeocodeOSM,
+  searchAddressOSM,
+  type AddressSearchResult,
+} from '../utils/osmGeocode';
+
+interface OriginPointState {
+  lat: number;
+  lon: number;
+  label: string;
+  source: 'empresa' | 'calle' | 'pin';
+}
+
 interface RouteServicesCalculatorProps {
   rutas: Ruta[];
   proyectos: Proyecto[];
@@ -44,6 +62,7 @@ interface RouteServicesCalculatorProps {
   creadoPorUsuario: { id: string; nombre: string };
   baseLat?: number;
   baseLon?: number;
+  baseDireccion?: string;
   onSelectRuta: (rutaId: string) => void;
   onApplyToRuta: (payload: {
     rutaId: string;
@@ -92,6 +111,7 @@ export const RouteServicesCalculator: React.FC<RouteServicesCalculatorProps> = (
   creadoPorUsuario,
   baseLat = SANTO_DOMINGO_ORIGIN.lat,
   baseLon = SANTO_DOMINGO_ORIGIN.lon,
+  baseDireccion = 'Base Operativa (Santo Domingo)',
   onSelectRuta,
   onApplyToRuta,
   onRegisterKmzFromCalculator,
@@ -138,6 +158,19 @@ export const RouteServicesCalculator: React.FC<RouteServicesCalculatorProps> = (
   const [mapStyle, setMapStyle] = useState<'osm' | 'topo'>('osm');
   const [isLoadingRoutes, setIsLoadingRoutes] = useState<boolean>(false);
 
+  // Punto de partida personalizado (empresa / calle / pin en mapa)
+  const [originPoint, setOriginPoint] = useState<OriginPointState>({
+    lat: baseLat,
+    lon: baseLon,
+    label: baseDireccion,
+    source: 'empresa',
+  });
+  const [originSearchQuery, setOriginSearchQuery] = useState<string>('');
+  const [originSearchResults, setOriginSearchResults] = useState<AddressSearchResult[]>([]);
+  const [isSearchingOrigin, setIsSearchingOrigin] = useState<boolean>(false);
+  const [originSearchError, setOriginSearchError] = useState<string | null>(null);
+  const [isPickingOriginPin, setIsPickingOriginPin] = useState<boolean>(false);
+
   const activeVehicle = useMemo(() => {
     const vEmp = vehiculos.find((v) => v.id === vehiculoId);
     if (vEmp) {
@@ -173,11 +206,24 @@ export const RouteServicesCalculator: React.FC<RouteServicesCalculatorProps> = (
   }, [selectedRuta, uploadedKmz]);
 
   useEffect(() => {
+    setOriginPoint((prev) =>
+      prev.source === 'empresa'
+        ? { lat: baseLat, lon: baseLon, label: baseDireccion, source: 'empresa' }
+        : prev
+    );
+  }, [baseLat, baseLon, baseDireccion]);
+
+  useEffect(() => {
     let active = true;
     setIsLoadingRoutes(true);
     setDistanceOverrideKm(null);
 
-    fetchOptimalRoutesOSM(activeCentroid.lat, activeCentroid.lon, baseLat, baseLon)
+    fetchOptimalRoutesOSM(
+      activeCentroid.lat,
+      activeCentroid.lon,
+      originPoint.lat,
+      originPoint.lon
+    )
       .then((res) => {
         if (!active) return;
         setRoutes(res);
@@ -195,7 +241,7 @@ export const RouteServicesCalculator: React.FC<RouteServicesCalculatorProps> = (
     return () => {
       active = false;
     };
-  }, [activeCentroid.lat, activeCentroid.lon, baseLat, baseLon]);
+  }, [activeCentroid.lat, activeCentroid.lon, originPoint.lat, originPoint.lon]);
 
   const activeRoute = useMemo(
     () => routes.find((r) => r.id === selectedRouteId) ?? routes[0],
@@ -298,11 +344,40 @@ export const RouteServicesCalculator: React.FC<RouteServicesCalculatorProps> = (
 
   const grandTotalRD = servicesCalculation.totalServicesRD + activeBreakdown.totalViaticosRD;
 
+  const applyPinOrigin = async (lat: number, lon: number) => {
+    setIsPickingOriginPin(false);
+    setOriginSearchResults([]);
+    setOriginSearchError(null);
+    setOriginPoint({
+      lat,
+      lon,
+      label: `Pin (${lat.toFixed(5)}, ${lon.toFixed(5)})`,
+      source: 'pin',
+    });
+
+    const geo = await reverseGeocodeOSM(lat, lon);
+    const shortStreet = geo.displayAddress
+      ? geo.displayAddress.split(',').slice(0, 2).join(',').trim()
+      : '';
+    const resolvedLabel = [shortStreet || geo.locality, geo.municipality || geo.province]
+      .filter(Boolean)
+      .join(' · ');
+    if (resolvedLabel) {
+      setOriginPoint((prev) =>
+        prev.source === 'pin' &&
+        Math.abs(prev.lat - lat) < 1e-6 &&
+        Math.abs(prev.lon - lon) < 1e-6
+          ? { ...prev, label: resolvedLabel }
+          : prev
+      );
+    }
+  };
+
   useEffect(() => {
     if (!mapContainerRef.current || mapRef.current) return;
 
     const map = L.map(mapContainerRef.current, {
-      center: [baseLat, baseLon],
+      center: [originPoint.lat, originPoint.lon],
       zoom: 11,
       zoomControl: true,
     });
@@ -311,15 +386,17 @@ export const RouteServicesCalculator: React.FC<RouteServicesCalculatorProps> = (
     mapRef.current = map;
     overlayRef.current = overlay;
 
-    setTimeout(() => map.invalidateSize(), 150);
+    const timer = setTimeout(() => map.invalidateSize(), 150);
 
     return () => {
+      clearTimeout(timer);
       map.remove();
       mapRef.current = null;
       tileRef.current = null;
       overlayRef.current = null;
     };
-  }, [baseLat, baseLon]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   useEffect(() => {
     const map = mapRef.current;
@@ -335,10 +412,32 @@ export const RouteServicesCalculator: React.FC<RouteServicesCalculatorProps> = (
         ? 'https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png'
         : 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png';
     tileRef.current = L.tileLayer(url, {
-      maxZoom: 18,
+      ...(mapStyle === 'topo' ? { maxNativeZoom: 17, maxZoom: 19 } : { maxZoom: 19 }),
       attribution: '&copy; OpenStreetMap contributors',
     }).addTo(map);
+    tileRef.current.bringToBack();
+    map.invalidateSize();
   }, [mapStyle]);
+
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map) return;
+
+    map.getContainer().style.cursor = isPickingOriginPin ? 'crosshair' : '';
+    if (!isPickingOriginPin) return;
+
+    const handleClick = (e: L.LeafletMouseEvent) => {
+      applyPinOrigin(e.latlng.lat, e.latlng.lng);
+    };
+
+    map.on('click', handleClick);
+    return () => {
+      map.off('click', handleClick);
+      if (mapRef.current) {
+        mapRef.current.getContainer().style.cursor = '';
+      }
+    };
+  }, [isPickingOriginPin]);
 
   useEffect(() => {
     const map = mapRef.current;
@@ -383,15 +482,32 @@ export const RouteServicesCalculator: React.FC<RouteServicesCalculatorProps> = (
       }
     });
 
-    L.circleMarker([baseLat, baseLon], {
-      radius: 7,
-      color: '#FFFFFF',
-      weight: 2,
-      fillColor: '#0284C7',
-      fillOpacity: 1,
+    const originIcon = L.divIcon({
+      className: '',
+      iconSize: [28, 28],
+      iconAnchor: [14, 14],
+      html: `<div style="width:28px;height:28px;border-radius:9999px;background:#0284C7;border:2.5px solid #FFFFFF;color:#FFFFFF;font-family:ui-monospace,monospace;font-size:11px;font-weight:700;display:flex;align-items:center;justify-content:center;box-shadow:0 2px 6px rgba(15,41,66,0.45);cursor:grab;">A</div>`,
+    });
+
+    const originMarker = L.marker([originPoint.lat, originPoint.lon], {
+      draggable: true,
+      icon: originIcon,
     })
-      .bindPopup('<strong>Base Operativa</strong>')
+      .bindPopup(
+        `<strong>Punto de Partida (${
+          originPoint.source === 'empresa'
+            ? 'Base'
+            : originPoint.source === 'calle'
+            ? 'Calle'
+            : 'Pin mapa'
+        })</strong><br/>${originPoint.label}<br/><span style="font-size:11px;color:#475569;">Arrastra este pin para mover el origen</span>`
+      )
       .addTo(overlay);
+
+    originMarker.on('dragend', () => {
+      const pos = originMarker.getLatLng();
+      applyPinOrigin(pos.lat, pos.lng);
+    });
 
     L.circleMarker([activeCentroid.lat, activeCentroid.lon], {
       radius: 7,
@@ -420,14 +536,57 @@ export const RouteServicesCalculator: React.FC<RouteServicesCalculatorProps> = (
     effectiveOneWayKm,
     uploadedKmz,
     selectedRuta,
-    baseLat,
-    baseLon,
+    originPoint,
   ]);
 
   const handleToggleService = (id: string) => {
     setSelectedServiceIds((prev) =>
       prev.includes(id) ? prev.filter((item) => item !== id) : [...prev, id]
     );
+  };
+
+  const handleSearchOriginStreet = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const q = originSearchQuery.trim();
+    if (!q) return;
+    setIsSearchingOrigin(true);
+    setOriginSearchError(null);
+    try {
+      const results = await searchAddressOSM(q);
+      setOriginSearchResults(results);
+      if (results.length === 0) {
+        setOriginSearchError('No se encontraron direcciones en República Dominicana.');
+      }
+    } catch {
+      setOriginSearchError('Error consultando el servicio de calles OpenStreetMap.');
+    } finally {
+      setIsSearchingOrigin(false);
+    }
+  };
+
+  const handleSelectStreetOrigin = (result: AddressSearchResult) => {
+    setIsPickingOriginPin(false);
+    setOriginPoint({
+      lat: result.lat,
+      lon: result.lon,
+      label: result.label,
+      source: 'calle',
+    });
+    setOriginSearchResults([]);
+    setOriginSearchError(null);
+  };
+
+  const handleResetOriginToBase = () => {
+    setIsPickingOriginPin(false);
+    setOriginSearchResults([]);
+    setOriginSearchError(null);
+    setOriginSearchQuery('');
+    setOriginPoint({
+      lat: baseLat,
+      lon: baseLon,
+      label: baseDireccion,
+      source: 'empresa',
+    });
   };
 
   const handleVehicleChange = (newId: string) => {
@@ -898,7 +1057,7 @@ export const RouteServicesCalculator: React.FC<RouteServicesCalculatorProps> = (
                 Cálculo de Rutas Óptimas y Viáticos (Ida y Vuelta)
               </h3>
               <p className="text-xs text-[#43474D]">
-                Compara rutas reales desde la base operativa (OSRM), peajes RD Vial y consumo por vehículo.
+                Define el punto de partida por calle o pin en el mapa y compara rutas reales (OSRM), peajes y consumo.
               </p>
             </div>
             <div className="font-mono text-xs font-semibold text-[#0284C7] tabular-nums">
@@ -908,6 +1067,116 @@ export const RouteServicesCalculator: React.FC<RouteServicesCalculatorProps> = (
                     activeRoute?.durationMin ?? 25
                   } min/vía`}
             </div>
+          </div>
+
+          {/* Punto de Partida (Calle o Pin en el Mapa) */}
+          <div className="rounded-sm border border-[#CBD5E1] bg-[#F8FAFC] p-3 space-y-2.5">
+            <div className="flex flex-wrap items-center justify-between gap-2 text-xs">
+              <div className="flex items-center gap-2 min-w-0">
+                <span className="inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-sm bg-[#0284C7] font-mono text-[11px] font-bold text-white">
+                  A
+                </span>
+                <div className="min-w-0">
+                  <span className="font-bold text-[#0F2942]">Punto de Partida: </span>
+                  <span className="text-[#334155] truncate">{originPoint.label}</span>
+                </div>
+                <span className="rounded-sm border border-[#CBD5E1] bg-white px-1.5 py-0.5 font-mono text-[10px] font-semibold text-[#0F2942] whitespace-nowrap shrink-0">
+                  {originPoint.source === 'empresa'
+                    ? 'Base'
+                    : originPoint.source === 'calle'
+                    ? 'Calle'
+                    : 'Pin mapa'}
+                </span>
+              </div>
+
+              <div className="flex items-center gap-2 shrink-0">
+                <span className="font-mono text-[11px] text-[#43474D] tabular-nums hidden sm:inline">
+                  {originPoint.lat.toFixed(5)}, {originPoint.lon.toFixed(5)}
+                </span>
+                {originPoint.source !== 'empresa' && (
+                  <button
+                    type="button"
+                    onClick={handleResetOriginToBase}
+                    className="inline-flex items-center gap-1 rounded-sm border border-[#CBD5E1] bg-white px-2 py-1 text-[11px] font-semibold text-[#334155] hover:bg-[#EFF4FF] whitespace-nowrap shrink-0"
+                  >
+                    <RotateCcw className="h-3 w-3" />
+                    Restablecer base
+                  </button>
+                )}
+              </div>
+            </div>
+
+            <div className="flex flex-col sm:flex-row gap-2">
+              <form onSubmit={handleSearchOriginStreet} className="flex-1 flex gap-1.5 min-w-0">
+                <div className="relative flex-1 min-w-0">
+                  <Navigation className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-[#64748B]" />
+                  <input
+                    type="text"
+                    value={originSearchQuery}
+                    onChange={(e) => setOriginSearchQuery(e.target.value)}
+                    placeholder="Buscar calle o sector de salida (ej. Av. 27 de Febrero, Santiago)..."
+                    className="w-full rounded-sm border border-[#CBD5E1] bg-white pl-8 pr-7 py-2 text-xs text-[#0D1C2F] placeholder:text-[#94A3B8]"
+                  />
+                  {originSearchQuery && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setOriginSearchQuery('');
+                        setOriginSearchResults([]);
+                        setOriginSearchError(null);
+                      }}
+                      className="absolute right-2 top-1/2 -translate-y-1/2 text-[#64748B] hover:text-[#0F2942]"
+                      aria-label="Limpiar búsqueda de calle"
+                    >
+                      <X className="h-3.5 w-3.5" />
+                    </button>
+                  )}
+                </div>
+                <button
+                  type="submit"
+                  disabled={isSearchingOrigin || !originSearchQuery.trim()}
+                  className="inline-flex items-center gap-1.5 rounded-sm bg-[#0F2942] px-3 py-2 text-xs font-semibold text-white hover:bg-[#0284C7] disabled:opacity-50 transition-colors whitespace-nowrap shrink-0"
+                >
+                  <Search className="h-3.5 w-3.5" />
+                  {isSearchingOrigin ? 'Buscando...' : 'Buscar calle'}
+                </button>
+              </form>
+
+              <button
+                type="button"
+                onClick={() => setIsPickingOriginPin((prev) => !prev)}
+                className={`inline-flex items-center justify-center gap-1.5 rounded-sm border px-3 py-2 text-xs font-semibold transition-colors whitespace-nowrap shrink-0 ${
+                  isPickingOriginPin
+                    ? 'border-[#D97706] bg-[#FEF3C7] text-[#92400E]'
+                    : 'border-[#0284C7] bg-white text-[#0284C7] hover:bg-[#EFF6FF]'
+                }`}
+              >
+                <MapPin className="h-3.5 w-3.5" />
+                {isPickingOriginPin ? 'Haz clic en el mapa (Cancelar)' : 'Fijar pin en mapa'}
+              </button>
+            </div>
+
+            {originSearchError && (
+              <div className="text-[11px] font-medium text-[#B91C1C]">{originSearchError}</div>
+            )}
+
+            {originSearchResults.length > 0 && (
+              <div className="rounded-sm border border-[#CBD5E1] bg-white divide-y divide-[#E2E8F0] max-h-44 overflow-y-auto">
+                {originSearchResults.map((res, idx) => (
+                  <button
+                    key={`${res.lat}-${res.lon}-${idx}`}
+                    type="button"
+                    onClick={() => handleSelectStreetOrigin(res)}
+                    className="w-full flex items-center justify-between gap-2 px-3 py-2 text-left text-xs hover:bg-[#EFF6FF] transition-colors"
+                  >
+                    <span className="text-[#0D1C2F] truncate">{res.label}</span>
+                    <span className="font-mono text-[10px] font-semibold text-[#0284C7] uppercase shrink-0">
+                      {res.source}
+                    </span>
+                  </button>
+                ))}
+              </div>
+            )}
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
@@ -981,6 +1250,11 @@ export const RouteServicesCalculator: React.FC<RouteServicesCalculatorProps> = (
 
             <div className="relative">
               <div ref={mapContainerRef} className="w-full h-[260px] sm:h-[300px] z-0" />
+              {isPickingOriginPin && (
+                <div className="absolute top-3 left-1/2 -translate-x-1/2 z-[400] rounded-sm border border-[#FBBF24] bg-[#0F2942]/95 px-3 py-1.5 text-xs font-semibold text-[#FBBF24] shadow-md whitespace-nowrap">
+                  Haz clic en cualquier punto del mapa para fijar el punto de partida (A)
+                </div>
+              )}
               <div className="absolute bottom-3 left-3 z-[400] rounded-sm bg-[#0F2942]/95 px-3 py-1.5 font-mono text-[11px] font-semibold text-white shadow">
                 {effectiveOneWayKm.toFixed(1)} km ida · {activeBreakdown.roundTripKm} km ida y vuelta
               </div>
@@ -988,6 +1262,10 @@ export const RouteServicesCalculator: React.FC<RouteServicesCalculatorProps> = (
 
             <div className="flex flex-wrap items-center justify-between gap-2 bg-[#0F2942] px-3.5 py-1.5 text-[11px] text-[#CBD5E1]">
               <div className="flex items-center gap-4">
+                <span className="inline-flex items-center gap-1.5">
+                  <span className="h-2.5 w-2.5 rounded-full bg-[#0284C7] border border-white inline-block" />{' '}
+                  Origen (arrastrable)
+                </span>
                 <span className="inline-flex items-center gap-1.5">
                   <span className="h-1 w-4 bg-[#D97706] inline-block" /> Ruta activa
                 </span>

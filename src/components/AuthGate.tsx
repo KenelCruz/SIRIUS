@@ -53,7 +53,7 @@ export const AuthGate: React.FC<AuthGateProps> = ({
                 <Compass className="h-5 w-5" />
               </div>
               <div>
-                <h1 className="text-base font-bold text-[#0D1C2F]">GeoMatrix RD</h1>
+                <h1 className="text-base font-bold text-[#0D1C2F]">SIRIUS</h1>
                 <p className="text-xs text-[#43474D]">
                   Sesión de {sesionGuardada.usuario.nombre} · Selecciona empresa
                 </p>
@@ -118,10 +118,13 @@ export const AuthGate: React.FC<AuthGateProps> = ({
               <div className="flex h-9 w-9 items-center justify-center rounded-sm bg-[#0284C7]">
                 <Compass className="h-5 w-5 text-white" />
               </div>
-              <span className="text-lg font-bold tracking-tight">GeoMatrix RD</span>
+              <span className="text-lg font-bold tracking-tight">SIRIUS</span>
             </div>
-            <p className="mt-3 text-xs text-[#CBD5E1] leading-relaxed">
-              Plataforma de operaciones topográficas, rutas KMZ/GeoJSON, control de brigadas y viáticos en RD$.
+            <p className="mt-2 text-xs font-semibold text-[#93CCFF]">
+              Sistema Integral de Recursos, Información, Operaciones y Análisis
+            </p>
+            <p className="mt-2 text-xs text-[#CBD5E1] leading-relaxed">
+              Operaciones topográficas, rutas KMZ/GeoJSON, control de brigadas y viáticos en RD$.
             </p>
           </div>
 
