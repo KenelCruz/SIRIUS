@@ -360,8 +360,18 @@ export async function parseDwgOrDxfBuffer(
       viewBox.height > 0 &&
       /<(line|path|circle|ellipse|text|use)\b/i.test(rawSvg);
 
-    const acadVer = db.header?.ACADVER || (typeof versionObj === 'string' ? versionObj : '');
-    const version = VERSION_LABELS[acadVer] || acadVer || format;
+    const versionHdr =
+      versionObj && typeof versionObj === 'object' && versionObj.hdr && versionObj.hdr !== 'INVALI'
+        ? versionObj.hdr
+        : '';
+    const acadVer = db.header?.ACADVER || versionHdr;
+    const version =
+      VERSION_LABELS[acadVer] ||
+      (versionObj && typeof versionObj === 'object' && versionObj.type !== 'invalid'
+        ? versionObj.description
+        : '') ||
+      acadVer ||
+      format;
     const insUnitsCode = Number(db.header?.INSUNITS ?? 0);
     const insUnitsLabel = INSUNITS_LABELS[insUnitsCode] || 'Unidades CAD';
 

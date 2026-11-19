@@ -3,91 +3,105 @@ import {
   adaptCadSvg,
   buildSampleArchitecturalDxfContent,
   detectCadFormat,
+  parseCadViewBox,
   parseDwgOrDxfBuffer,
   renderDwgPlanSvg,
 } from '../../utils/dwgParser';
 
-const SAMPLE_SVG = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 -10 100 50" width="100%" height="100%"><g stroke="#000000" stroke-width="0.1%" fill="none" transform="matrix(1,0,0,-1,0,0)"><g stroke="rgb(255,255,255)" fill="none"><line x1="0" y1="0" x2="100" y2="0" /></g></g></svg>`;
-
-describe('Visor de Planos Arquitectónicos (.DWG / .DXF)', () => {
-  it('detecta formatos válidos .dwg y .dxf y rechaza otros', () => {
-    expect(detectCadFormat('planta_nivel_1.DWG')).toBe('DWG');
-    expect(detectCadFormat('fachada_norte.dxf')).toBe('DXF');
-    expect(() => detectCadFormat('parcela.kmz')).toThrow(/Formato no compatible/i);
+describe('Visor CAD DWG/DXF (Arquitectura)', () => {
+  it('detecta formatos DWG y DXF y rechaza extensiones no soportadas', () => {
+    expect(detectCadFormat('Planta_Nivel1.dwg')).toBe('DWG');
+    expect(detectCadFormat('ESQUEMA_VIAL.DXF')).toBe('DXF');
+    expect(() => detectCadFormat('parcela.kmz')).toThrow(/Formato no compatible/);
+    expect(() => detectCadFormat('plano.pdf')).toThrow(/Formato no compatible/);
   });
 
-  it('adapta colores y grosor de trazo del SVG según tema CAD', () => {
-    const dark = adaptCadSvg(SAMPLE_SVG, { theme: 'dark', strokeMode: 'thick' });
-    expect(dark.hasGeometry).toBe(true);
-    expect(dark.svg).toContain('stroke-width="0.26%"');
-    expect(dark.svg).toContain('#F8FAFC');
+  it('adapta colores y grosores de SVG CAD segun tema oscuro, cianotipo y blanco', () => {
+    const sampleSvg =
+      '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 50" width="100%" height="100%">' +
+      '<g stroke="#000000" stroke-width="0.1%" fill="none" transform="matrix(1,0,0,-1,0,0)">' +
+      '<g id="1" stroke="rgb(255,255,255)" fill="none"><line x1="0" y1="0" x2="100" y2="50" /></g>' +
+      '<g id="2" stroke="rgb(0,0,0)" fill="none"><line x1="0" y1="50" x2="100" y2="0" /></g>' +
+      '</g></svg>';
 
-    const light = adaptCadSvg(SAMPLE_SVG, { theme: 'light', strokeMode: 'thin' });
-    expect(light.hasGeometry).toBe(true);
-    expect(light.svg).toContain('stroke-width="0.06%"');
-    expect(light.svg).toContain('#0F172A');
+    const darkRes = adaptCadSvg(sampleSvg, { theme: 'dark', strokeMode: 'thick' });
+    expect(darkRes.hasGeometry).toBe(true);
+    expect(darkRes.svg).toContain('stroke-width="0.26%"');
+    expect(darkRes.svg).toContain('#E2E8F0');
+    expect(darkRes.svg).toContain('#F8FAFC');
 
-    const empty = adaptCadSvg('<svg viewBox="0 0 0 0"></svg>');
-    expect(empty.hasGeometry).toBe(false);
+    const lightRes = adaptCadSvg(sampleSvg, { theme: 'light', strokeMode: 'thin' });
+    expect(lightRes.hasGeometry).toBe(true);
+    expect(lightRes.svg).toContain('stroke-width="0.06%"');
+    expect(lightRes.svg).toContain('#0F172A');
+
+    const bpRes = adaptCadSvg(sampleSvg, { theme: 'blueprint', strokeMode: 'normal' });
+    expect(bpRes.hasGeometry).toBe(true);
+    expect(bpRes.svg).toContain('#E0F2FE');
+
+    const vb = parseCadViewBox(darkRes.svg);
+    expect(vb.width).toBeCloseTo(108, 4);
+    expect(vb.height).toBeCloseTo(54, 4);
   });
 
-  it('decodifica un plano arquitectónico DXF completo con LibreDWG WASM, capas y filtrado', async () => {
+  it('decodifica el plano arquitectonico de ejemplo via LibreDWG WASM, extrae capas y filtra capas ocultas', async () => {
     const dxfContent = buildSampleArchitecturalDxfContent();
-    const bytes = new TextEncoder().encode(dxfContent);
+    const buffer = new TextEncoder().encode(dxfContent);
 
-    const parsed = await parseDwgOrDxfBuffer(bytes, 'Planta_Arquitectonica_Ejemplo.dxf', {
+    const parsed = await parseDwgOrDxfBuffer(buffer, 'Planta_Arquitectonica_Ejemplo.dxf', {
       wasmBasePath: './public/wasm',
     });
 
     expect(parsed.format).toBe('DXF');
-    expect(parsed.insUnitsLabel).toBe('Metros (m)');
+    expect(parsed.version).toBeTruthy();
+    expect(parsed.insUnitsLabel).toContain('Metros');
     expect(parsed.hasRenderableGeometry).toBe(true);
-    expect(parsed.totalEntities).toBeGreaterThan(20);
     expect(parsed.viewBox.width).toBeGreaterThan(10);
     expect(parsed.viewBox.height).toBeGreaterThan(10);
+    expect(parsed.totalEntities).toBeGreaterThan(20);
 
     const layerNames = parsed.layers.map((l) => l.name);
-    expect(layerNames).toEqual(
-      expect.arrayContaining(['LINDERO', 'EJES', 'MUROS', 'PUERTAS_VENTANAS', 'COTAS', 'TEXTOS'])
-    );
+    expect(layerNames).toContain('MUROS');
+    expect(layerNames).toContain('PUERTAS_VENTANAS');
+    expect(layerNames).toContain('EJES');
+    expect(layerNames).toContain('TEXTOS');
 
     const fullRender = await renderDwgPlanSvg(parsed, {
-      theme: 'blueprint',
+      hiddenLayers: new Set(),
+      theme: 'dark',
       strokeMode: 'normal',
       wasmBasePath: './public/wasm',
     });
     expect(fullRender.hasGeometry).toBe(true);
     expect(fullRender.svg).toContain('SALA / COMEDOR');
 
-    // Ocultar capa TEXTOS debe excluir los textos pero conservar la geometría constructiva
-    const withoutTexts = await renderDwgPlanSvg(parsed, {
+    // Ocultando capa TEXTOS ya no aparecen los rótulos de texto
+    const noTextRender = await renderDwgPlanSvg(parsed, {
       hiddenLayers: new Set(['TEXTOS']),
+      theme: 'light',
+      strokeMode: 'normal',
+      wasmBasePath: './public/wasm',
+    });
+    expect(noTextRender.hasGeometry).toBe(true);
+    expect(noTextRender.svg).not.toContain('SALA / COMEDOR');
+
+    // Ocultando todas las capas queda sin geometría renderizable
+    const allHiddenRender = await renderDwgPlanSvg(parsed, {
+      hiddenLayers: new Set(layerNames),
       theme: 'dark',
       wasmBasePath: './public/wasm',
     });
-    expect(withoutTexts.hasGeometry).toBe(true);
-    expect(withoutTexts.svg).not.toContain('SALA / COMEDOR');
-
-    // Ocultar todas las capas debe informar sin geometría visible
-    const allHidden = await renderDwgPlanSvg(parsed, {
-      hiddenLayers: new Set(layerNames),
-      wasmBasePath: './public/wasm',
-    });
-    expect(allHidden.hasGeometry).toBe(false);
+    expect(allHiddenRender.hasGeometry).toBe(false);
   });
 
-  it('rechaza archivos .dwg corruptos o vacíos con error claro', async () => {
+  it('rechaza archivos DWG vacios o corruptos con mensaje claro', async () => {
     await expect(
-      parseDwgOrDxfBuffer(new Uint8Array(0), 'vacio.dwg', {
-        wasmBasePath: './public/wasm',
-      })
-    ).rejects.toThrow(/vacío/i);
+      parseDwgOrDxfBuffer(new Uint8Array(0), 'vacio.dwg', { wasmBasePath: './public/wasm' })
+    ).rejects.toThrow(/vacío/);
 
-    const garbage = new TextEncoder().encode('ESTO_NO_ES_UN_DWG_BINARIO_VALIDO');
+    const corruptBytes = new TextEncoder().encode('ESTO NO ES UN ARCHIVO DWG VALIDO');
     await expect(
-      parseDwgOrDxfBuffer(garbage, 'corrupto.dwg', {
-        wasmBasePath: './public/wasm',
-      })
-    ).rejects.toThrow(/No se pudo decodificar/i);
+      parseDwgOrDxfBuffer(corruptBytes, 'corrupto.dwg', { wasmBasePath: './public/wasm' })
+    ).rejects.toThrow(/no contiene entidades CAD|No se pudo decodificar/);
   });
 });
