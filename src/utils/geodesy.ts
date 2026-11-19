@@ -134,20 +134,24 @@ export function formatPerimeter(meters: number): string {
   return `${meters.toLocaleString('en-US', { minimumFractionDigits: 1, maximumFractionDigits: 1 })} m`;
 }
 
-export function formatRD(amount: number): string {
-  return `RD$ ${amount.toLocaleString('en-US', {
+export function formatRD(amount: number, moneda: string = 'RD$'): string {
+  const prefijo = moneda.trim() || 'RD$';
+  return `${prefijo} ${amount.toLocaleString('en-US', {
     minimumFractionDigits: 2,
     maximumFractionDigits: 2,
   })}`;
 }
 
-export function formatSantoDomingoAST(dateInput: Date | string = new Date()): string {
+export function formatSantoDomingoAST(
+  dateInput: Date | string = new Date(),
+  timeZone: string = 'America/Santo_Domingo'
+): string {
   const date = typeof dateInput === 'string' ? new Date(dateInput) : dateInput;
   if (Number.isNaN(date.getTime())) {
     return '17/11/2026 00:00:00 AST';
   }
   const formatter = new Intl.DateTimeFormat('es-DO', {
-    timeZone: 'America/Santo_Domingo',
+    timeZone: timeZone || 'America/Santo_Domingo',
     day: '2-digit',
     month: '2-digit',
     year: 'numeric',
@@ -156,5 +160,7 @@ export function formatSantoDomingoAST(dateInput: Date | string = new Date()): st
     second: '2-digit',
     hour12: false,
   });
-  return `${formatter.format(date).replace(',', '')} AST`;
+  const suffix = timeZone === 'America/Santo_Domingo' ? 'AST' : timeZone;
+  return `${formatter.format(date).replace(',', '')} ${suffix}`;
 }
+

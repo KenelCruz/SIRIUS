@@ -6,6 +6,8 @@ import {
   parseCadViewBox,
   parseDwgOrDxfBuffer,
   renderDwgPlanSvg,
+  unionViewBoxes,
+  type DwgParseProgress,
 } from '../../utils/dwgParser';
 
 describe('Visor CAD DWG/DXF (Arquitectura)', () => {
@@ -14,6 +16,15 @@ describe('Visor CAD DWG/DXF (Arquitectura)', () => {
     expect(detectCadFormat('ESQUEMA_VIAL.DXF')).toBe('DXF');
     expect(() => detectCadFormat('parcela.kmz')).toThrow(/Formato no compatible/);
     expect(() => detectCadFormat('plano.pdf')).toThrow(/Formato no compatible/);
+  });
+
+  it('une múltiples viewBox válidos e ignora los vacíos', () => {
+    const merged = unionViewBoxes([
+      { x: 0, y: 0, width: 0, height: 0 },
+      { x: 2, y: -10, width: 8, height: 6 },
+      { x: -1, y: -15, width: 15, height: 20 },
+    ]);
+    expect(merged).toEqual({ x: -1, y: -15, width: 15, height: 20 });
   });
 
   it('adapta colores y grosores de SVG CAD segun tema oscuro, cianotipo y blanco', () => {
@@ -44,13 +55,21 @@ describe('Visor CAD DWG/DXF (Arquitectura)', () => {
     expect(vb.height).toBeCloseTo(54, 4);
   });
 
-  it('decodifica el plano arquitectonico de ejemplo via LibreDWG WASM, extrae capas y filtra capas ocultas', async () => {
+  it('decodifica progresivamente por capas via LibreDWG WASM, emite parciales y permite toggle/encuadre instantaneo', async () => {
     const dxfContent = buildSampleArchitecturalDxfContent();
     const buffer = new TextEncoder().encode(dxfContent);
+    const progressEvents: DwgParseProgress[] = [];
 
     const parsed = await parseDwgOrDxfBuffer(buffer, 'Planta_Arquitectonica_Ejemplo.dxf', {
       wasmBasePath: './public/wasm',
+      onProgress: (ev) => progressEvents.push(ev),
     });
+
+    expect(progressEvents.some((e) => e.stage === 'reading')).toBe(true);
+    expect(progressEvents.some((e) => e.stage === 'decoding')).toBe(true);
+    expect(progressEvents.some((e) => e.stage === 'indexing' && Boolean(e.partialSvg))).toBe(true);
+    expect(progressEvents[progressEvents.length - 1]?.stage).toBe('done');
+    expect(progressEvents[progressEvents.length - 1]?.percent).toBe(100);
 
     expect(parsed.format).toBe('DXF');
     expect(parsed.version).toBeTruthy();
@@ -59,6 +78,8 @@ describe('Visor CAD DWG/DXF (Arquitectura)', () => {
     expect(parsed.viewBox.width).toBeGreaterThan(10);
     expect(parsed.viewBox.height).toBeGreaterThan(10);
     expect(parsed.totalEntities).toBeGreaterThan(20);
+    expect(Object.keys(parsed.layerBuckets)).toContain('MUROS');
+    expect(Object.keys(parsed.layerBuckets)).toContain('TEXTOS');
 
     const layerNames = parsed.layers.map((l) => l.name);
     expect(layerNames).toContain('MUROS');
@@ -74,6 +95,7 @@ describe('Visor CAD DWG/DXF (Arquitectura)', () => {
     });
     expect(fullRender.hasGeometry).toBe(true);
     expect(fullRender.svg).toContain('SALA / COMEDOR');
+    expect(fullRender.svg).toContain('data-cad-layer="MUROS"');
 
     // Ocultando capa TEXTOS ya no aparecen los rótulos de texto
     const noTextRender = await renderDwgPlanSvg(parsed, {
@@ -85,13 +107,37 @@ describe('Visor CAD DWG/DXF (Arquitectura)', () => {
     expect(noTextRender.hasGeometry).toBe(true);
     expect(noTextRender.svg).not.toContain('SALA / COMEDOR');
 
+    // Aislando solo MUROS con fitToVisibleLayers encuadra al tamaño exacto de muros (14m < 16m de lindero)
+    const murosOnly = await renderDwgPlanSvg(parsed, {
+      hiddenLayers: new Set(layerNames.filter((n) => n !== 'MUROS')),
+      fitToVisibleLayers: true,
+      theme: 'dark',
+    });
+    expect(murosOnly.hasGeometry).toBe(true);
+    expect(murosOnly.viewBox.width).toBeLessThan(fullRender.viewBox.width);
+
     // Ocultando todas las capas queda sin geometría renderizable
     const allHiddenRender = await renderDwgPlanSvg(parsed, {
       hiddenLayers: new Set(layerNames),
       theme: 'dark',
+      strokeMode: 'normal',
       wasmBasePath: './public/wasm',
     });
     expect(allHiddenRender.hasGeometry).toBe(false);
+  });
+
+  it('permite cancelar la carga progresiva mediante AbortSignal', async () => {
+    const controller = new AbortController();
+    controller.abort();
+    const dxfContent = buildSampleArchitecturalDxfContent();
+    const buffer = new TextEncoder().encode(dxfContent);
+
+    await expect(
+      parseDwgOrDxfBuffer(buffer, 'Planta_Arquitectonica_Ejemplo.dxf', {
+        wasmBasePath: './public/wasm',
+        signal: controller.signal,
+      })
+    ).rejects.toThrow(/cancelada/);
   });
 
   it('rechaza archivos DWG vacios o corruptos con mensaje claro', async () => {

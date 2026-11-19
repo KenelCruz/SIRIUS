@@ -1,26 +1,41 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { repositorioOperacion } from '../data/LocalRepositorioOperacion';
-import { calcularConteoPendientesPorTipo } from '../domain';
+import { obtenerTutorialPorPerfil } from '../data/tutoriales';
+import {
+  asegurarConfiguracionEmpresa,
+  asegurarEstadoOnboarding,
+  calcularConteoPendientesPorTipo,
+  obtenerCombustiblesVigentes,
+  obtenerFactoresTerrenoVigentes,
+  obtenerReglasViaticosVigentes,
+  obtenerServiciosVigentes,
+} from '../domain';
 import type { PayloadTransicionServicio } from '../domain/estados';
 import type {
   Asignacion,
   AvisoSobrescrituraLWW,
   BitacoraEntrada,
+  CargoConfig,
   Cliente,
   ConteoPendientesPorTipo,
   Cuadrilla,
   Empresa,
   EquipoGNSS,
   EstadoAprobacionViatico,
+  EstadoOnboardingEmpresa,
   EstadoServicio,
   Personal,
   ProyeccionSnapshotPorRol,
   Proyecto,
+  ReglasViaticosVersion,
   RepartoProyecto,
   RolEmpresa,
   Ruta,
   Servicio,
   SesionActiva,
+  TarifaServicioVersion,
+  TerrenoFactorVersion,
+  TutorialTarjeta,
   Vehiculo,
   Viatico,
 } from '../types/domain';
@@ -48,6 +63,10 @@ export function useOperacionEmpresa(isOnline: boolean) {
   const [errorSnapshot, setErrorSnapshot] = useState<string | null>(null);
   const [isSyncing, setIsSyncing] = useState(false);
   const [avisosLww, setAvisosLww] = useState<AvisoSobrescrituraLWW[]>([]);
+  const [tutorialesVistos, setTutorialesVistos] = useState<Partial<Record<RolEmpresa, boolean>>>(() => {
+    const guardada = repositorioOperacion.obtenerSesionGuardada();
+    return guardada ? repositorioOperacion.obtenerTutorialesVistos(guardada.usuario.id) : {};
+  });
 
   const isDemoActivo = useMemo(() => repositorioOperacion.esModoDemoActivo(), []);
   const cuentasDemo = useMemo(() => repositorioOperacion.listarCuentasDemo(), []);
@@ -81,7 +100,11 @@ export function useOperacionEmpresa(isOnline: boolean) {
   );
 
   useEffect(() => {
-    if (!sesion) return;
+    if (!sesion) {
+      setTutorialesVistos({});
+      return;
+    }
+    setTutorialesVistos(repositorioOperacion.obtenerTutorialesVistos(sesion.usuario.id));
     let active = true;
     (async () => {
       try {
@@ -112,6 +135,7 @@ export function useOperacionEmpresa(isOnline: boolean) {
       const lista = await repositorioOperacion.listarEmpresasDeUsuario(nuevaSesion.usuario.id);
       setEmpresasDisponibles(lista);
       setSesion(nuevaSesion);
+      setTutorialesVistos(repositorioOperacion.obtenerTutorialesVistos(nuevaSesion.usuario.id));
       if (lista.length > 1) {
         setRequiereElegirEmpresa(true);
       } else {
@@ -128,6 +152,7 @@ export function useOperacionEmpresa(isOnline: boolean) {
     if (!guardada) return null;
     setSesion(guardada);
     setRequiereElegirEmpresa(false);
+    setTutorialesVistos(repositorioOperacion.obtenerTutorialesVistos(guardada.usuario.id));
     await cargarProyeccion(guardada);
     return guardada;
   }, [cargarProyeccion]);
@@ -151,6 +176,7 @@ export function useOperacionEmpresa(isOnline: boolean) {
     setRequiereElegirEmpresa(false);
     setAvisosLww([]);
     setErrorSnapshot(null);
+    setTutorialesVistos({});
   }, []);
 
   const pendingCounts = useMemo<ConteoPendientesPorTipo>(() => {
@@ -208,6 +234,63 @@ export function useOperacionEmpresa(isOnline: boolean) {
   }, [isOnline]);
 
   const empresaId = sesion?.empresaActivaId ?? '';
+
+  const configuracion = useMemo(() => {
+    if (!proyeccion || proyeccion.rol === 'tecnico') return null;
+    return asegurarConfiguracionEmpresa(
+      proyeccion.snapshot.empresa.id,
+      proyeccion.snapshot.configuracion
+    );
+  }, [proyeccion]);
+
+  const cargos = useMemo<CargoConfig[]>(() => {
+    if (!proyeccion) return [];
+    if (proyeccion.rol === 'tecnico') return proyeccion.snapshot.cargos;
+    return configuracion?.cargos ?? [];
+  }, [proyeccion, configuracion]);
+
+  const combustiblesVigentes = useMemo(
+    () => (configuracion ? obtenerCombustiblesVigentes(configuracion) : []),
+    [configuracion]
+  );
+
+  const serviciosVigentes = useMemo(
+    () => (configuracion ? obtenerServiciosVigentes(configuracion) : []),
+    [configuracion]
+  );
+
+  const factoresTerrenoVigentes = useMemo(
+    () => (configuracion ? obtenerFactoresTerrenoVigentes(configuracion) : null),
+    [configuracion]
+  );
+
+  const reglasViaticosVigentes = useMemo(
+    () => (configuracion ? obtenerReglasViaticosVigentes(configuracion) : null),
+    [configuracion]
+  );
+
+  const onboarding = useMemo<EstadoOnboardingEmpresa | null>(() => {
+    if (!proyeccion || proyeccion.rol === 'tecnico') return null;
+    return asegurarEstadoOnboarding(
+      proyeccion.snapshot.empresa.id,
+      proyeccion.snapshot.onboarding
+    );
+  }, [proyeccion]);
+
+  const tutorialesPerfil = useMemo<TutorialTarjeta[]>(() => {
+    const rol = sesion?.rolActivo ?? 'tecnico';
+    return obtenerTutorialPorPerfil(rol);
+  }, [sesion?.rolActivo]);
+
+  const marcarTutorialVisto = useCallback(
+    (rolObjetivo?: RolEmpresa) => {
+      if (!sesion) return;
+      const rol = rolObjetivo ?? sesion.rolActivo;
+      const actualizado = repositorioOperacion.marcarTutorialVisto(sesion.usuario.id, rol);
+      setTutorialesVistos(actualizado);
+    },
+    [sesion]
+  );
 
   const actions = useMemo(
     () => ({
@@ -368,6 +451,10 @@ export function useOperacionEmpresa(isOnline: boolean) {
       actualizarEmpresa: async (emp: Empresa) => {
         const res = await repositorioOperacion.actualizarEmpresa(emp);
         await refrescar();
+        if (sesion) {
+          const lista = await repositorioOperacion.listarEmpresasDeUsuario(sesion.usuario.id);
+          setEmpresasDisponibles(lista);
+        }
         return res;
       },
       guardarMembresiaUsuario: async (params: {
@@ -384,10 +471,106 @@ export function useOperacionEmpresa(isOnline: boolean) {
         await refrescar();
         return res;
       },
+      actualizarAccesoMembresia: async (params: {
+        usuarioId: string;
+        rol: RolEmpresa;
+        activo: boolean;
+      }) => {
+        await repositorioOperacion.actualizarAccesoMembresia({
+          empresaId,
+          ...params,
+        });
+        await refrescar();
+      },
+      guardarCargoConfig: async (cargo: Pick<CargoConfig, 'codigo' | 'etiqueta' | 'activo'>) => {
+        const res = await repositorioOperacion.guardarCargoConfig(empresaId, cargo);
+        await refrescar();
+        return res;
+      },
+      eliminarCargoConfig: async (codigo: string) => {
+        const res = await repositorioOperacion.eliminarCargoConfig(empresaId, codigo);
+        await refrescar();
+        return res;
+      },
+      crearTipoCombustible: async (params: {
+        nombre: string;
+        precioGalonRD: number;
+        vigenciaDesde: string;
+      }) => {
+        const res = await repositorioOperacion.crearTipoCombustible({
+          empresaId,
+          ...params,
+        });
+        await refrescar();
+        return res;
+      },
+      agregarVigenciaCombustible: async (params: {
+        combustibleId: string;
+        precioGalonRD: number;
+        vigenciaDesde: string;
+        activo?: boolean;
+      }) => {
+        const res = await repositorioOperacion.agregarVigenciaCombustible({
+          empresaId,
+          ...params,
+        });
+        await refrescar();
+        return res;
+      },
+      crearServicioCatalogo: async (params: {
+        codigo: string;
+        nombre: string;
+        subtitulo: string;
+        tarifaInicial: Omit<TarifaServicioVersion, 'version'>;
+      }) => {
+        const res = await repositorioOperacion.crearServicioCatalogo({
+          empresaId,
+          ...params,
+        });
+        await refrescar();
+        return res;
+      },
+      agregarVigenciaServicio: async (params: {
+        servicioCodigo: string;
+        nombre?: string;
+        subtitulo?: string;
+        activo?: boolean;
+        tarifa: Omit<TarifaServicioVersion, 'version'>;
+      }) => {
+        const res = await repositorioOperacion.agregarVigenciaServicio({
+          empresaId,
+          ...params,
+        });
+        await refrescar();
+        return res;
+      },
+      agregarVigenciaFactoresTerreno: async (
+        factores: Omit<TerrenoFactorVersion, 'version'>
+      ) => {
+        const res = await repositorioOperacion.agregarVigenciaFactoresTerreno({
+          empresaId,
+          factores,
+        });
+        await refrescar();
+        return res;
+      },
+      agregarVigenciaReglasViaticos: async (reglas: Omit<ReglasViaticosVersion, 'version'>) => {
+        const res = await repositorioOperacion.agregarVigenciaReglasViaticos({
+          empresaId,
+          reglas,
+        });
+        await refrescar();
+        return res;
+      },
+      guardarOnboarding: async (nuevoEstado: EstadoOnboardingEmpresa) => {
+        const res = await repositorioOperacion.guardarOnboarding(empresaId, nuevoEstado);
+        await refrescar();
+        return res;
+      },
       cargarSnapshotParaValidacion: async () =>
         repositorioOperacion.cargarSnapshotEmpresa(empresaId),
     }),
-    [empresaId, refrescar]
+    [empresaId, refrescar, sesion]
   );
 
   return {
@@ -395,6 +578,15 @@ export function useOperacionEmpresa(isOnline: boolean) {
     empresasDisponibles,
     requiereElegirEmpresa,
     proyeccion,
+    configuracion,
+    cargos,
+    combustiblesVigentes,
+    serviciosVigentes,
+    factoresTerrenoVigentes,
+    reglasViaticosVigentes,
+    onboarding,
+    tutorialesPerfil,
+    tutorialesVistos,
     isLoadingSnapshot,
     errorSnapshot,
     isSyncing,
@@ -409,6 +601,7 @@ export function useOperacionEmpresa(isOnline: boolean) {
     cerrarSesion,
     refrescar,
     sincronizarAhora,
+    marcarTutorialVisto,
     descartarAvisosLww: () => setAvisosLww([]),
     actions,
   };

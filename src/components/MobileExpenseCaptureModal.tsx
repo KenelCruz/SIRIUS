@@ -12,11 +12,20 @@ import {
   Utensils,
   X,
 } from 'lucide-react';
-import { completarRepartoConSinAsignar, validarRepartoViatico } from '../domain';
+import {
+  CATEGORIAS_VIATICO,
+  calcularCombustibleGpsRuta,
+  completarRepartoConSinAsignar,
+  crearConfiguracionInicialEmpresa,
+  obtenerReglasViaticosVigentes,
+  validarRepartoViatico,
+} from '../domain';
 import type {
   CategoriaViatico,
   MetodoViatico,
+  PresetViaticoConfig,
   Proyecto,
+  ReglasCapturaViaticosTecnico,
   RepartoProyecto,
   Ruta,
   Viatico,
@@ -66,55 +75,23 @@ interface MobileExpenseCaptureModalProps {
   creadoPorUsuario: { id: string; nombre: string };
   baseLat?: number;
   baseLon?: number;
+  moneda?: string;
+  reglasCaptura?: ReglasCapturaViaticosTecnico;
   onAddExpense: (expense: ViaticoPayload) => Promise<void>;
   onEditExpense?: (viaticoId: string, expense: ViaticoEdicionPayload) => Promise<void>;
 }
 
-const CATEGORIES: CategoriaViatico[] = [
-  'Combustible',
-  'Dieta',
-  'Hospedaje',
-  'Peaje',
-  'Materiales',
-  'Otro',
-];
+const DEFAULT_REGLAS_SEED = obtenerReglasViaticosVigentes(
+  crearConfiguracionInicialEmpresa('default')
+);
 
-const QUICK_PRESETS: Array<{
-  label: string;
-  category: CategoriaViatico;
-  merchant: string;
-  amountRD: number;
-  notes: string;
-}> = [
-  {
-    label: 'Dieta Brigada (2 Téc.)',
-    category: 'Dieta',
-    merchant: 'Dieta Estándar Brigada Campo',
-    amountRD: 4400,
-    notes: 'Desayuno y almuerzo para 2 técnicos (RD$ 2,200 c/u)',
-  },
-  {
-    label: 'Dieta Individual',
-    category: 'Dieta',
-    merchant: 'Dieta Individual Topógrafo',
-    amountRD: 2200,
-    notes: 'Alimentación jornada completa en campo',
-  },
-  {
-    label: 'Peaje RD Vial',
-    category: 'Peaje',
-    merchant: 'RD Vial — Paso Rápido Autopista',
-    amountRD: 200,
-    notes: 'Tarifa ida/vuelta categoría 1',
-  },
-  {
-    label: 'Hospedaje Rural',
-    category: 'Hospedaje',
-    merchant: 'Hotel / Alojamiento de Brigada',
-    amountRD: 4800,
-    notes: 'Pernocta de brigada en provincia',
-  },
-];
+const FALLBACK_REGLAS_CAPTURA: ReglasCapturaViaticosTecnico = {
+  version: DEFAULT_REGLAS_SEED.version,
+  vigenciaDesde: DEFAULT_REGLAS_SEED.vigenciaDesde,
+  gpsRuta: DEFAULT_REGLAS_SEED.gpsRuta,
+  presetsRapidos: DEFAULT_REGLAS_SEED.presetsRapidos,
+  categoriasViatico: [...CATEGORIAS_VIATICO],
+};
 
 async function compressImageToBase64(file: File): Promise<{ base64: string; mimeType: string }> {
   return new Promise((resolve, reject) => {
@@ -162,9 +139,14 @@ export const MobileExpenseCaptureModal: React.FC<MobileExpenseCaptureModalProps>
   creadoPorUsuario,
   baseLat = 18.4861,
   baseLon = -69.9312,
+  moneda = 'RD$',
+  reglasCaptura = FALLBACK_REGLAS_CAPTURA,
   onAddExpense,
   onEditExpense,
 }) => {
+  const categoriasDisponibles = reglasCaptura.categoriasViatico?.length
+    ? reglasCaptura.categoriasViatico
+    : CATEGORIAS_VIATICO;
   const cameraInputRef = useRef<HTMLInputElement>(null);
   const [captureMode, setCaptureMode] = useState<'ocr' | 'gps' | 'quick'>('ocr');
   const [rutaId, setRutaId] = useState(defaultRutaId || rutas[0]?.id || '');
@@ -344,7 +326,7 @@ export const MobileExpenseCaptureModal: React.FC<MobileExpenseCaptureModalProps>
       if (ex.ncf) setNcf(ex.ncf);
       if (ex.dateIso) setDateIso(ex.dateIso);
       if (ex.notes) setNotes(ex.notes);
-      if (CATEGORIES.includes(ex.category)) setCategory(ex.category);
+      if (categoriasDisponibles.includes(ex.category)) setCategory(ex.category);
 
       setNeedsOfflineOcr(false);
       setOcrStatusMsg(
@@ -379,22 +361,27 @@ export const MobileExpenseCaptureModal: React.FC<MobileExpenseCaptureModalProps>
         haversineMeters(baseLat, baseLon, lat, lon),
         haversineMeters(baseLat, baseLon, targetLat, targetLon)
       );
-      const km = Math.max(8, Number((distMeters / 1000).toFixed(1)));
-      const fuelEstimate = Math.round(km * 26.5);
+      const distanciaOneWayKm = Number((distMeters / 1000).toFixed(1));
+      const gpsCalc = calcularCombustibleGpsRuta({
+        distanciaOneWayKm,
+        regla: reglasCaptura.gpsRuta,
+      });
 
-      setDistanceKm(km);
+      setDistanceKm(gpsCalc.distanciaCalculadaKm);
       setCategory('Combustible');
       setMerchant(`Traslado GPS Ruta · ${selectedRuta?.provincia || 'Campo'}`);
-      setAmountRD(String(fuelEstimate));
-      syncAmountIntoUniqueSplit(fuelEstimate);
+      setAmountRD(String(gpsCalc.montoRD));
+      syncAmountIntoUniqueSplit(gpsCalc.montoRD);
       setItbisRD('0');
+      const etiquetaDist =
+        gpsCalc.conceptoDistancia === 'ida_vuelta' ? 'ida y vuelta' : 'solo ida';
       setNotes(
-        `Cálculo automático ${km} km @ RD$ 26.50/km · UTM ${utm.easting.toFixed(0)}E ${utm.northing.toFixed(0)}N${
+        `Cálculo automático ${gpsCalc.distanciaCalculadaKm} km (${etiquetaDist}, mín. ${gpsCalc.minimoKm} km) @ ${formatRD(gpsCalc.tarifaPorKmRD, moneda)}/km · UTM ${utm.easting.toFixed(0)}E ${utm.northing.toFixed(0)}N${
           simulated ? ' (coordenada de parcela)' : ''
         }`
       );
       setOcrStatusMsg(
-        `Ubicación fijada en ${utm.easting.toFixed(1)}E, ${utm.northing.toFixed(1)}N (${km} km calculados).`
+        `Ubicación fijada en ${utm.easting.toFixed(1)}E, ${utm.northing.toFixed(1)}N (${gpsCalc.distanciaCalculadaKm} km calculados).`
       );
       setIsLocating(false);
     };
@@ -423,16 +410,16 @@ export const MobileExpenseCaptureModal: React.FC<MobileExpenseCaptureModalProps>
     );
   };
 
-  const handleApplyPreset = (preset: (typeof QUICK_PRESETS)[number]) => {
+  const handleApplyPreset = (preset: PresetViaticoConfig) => {
     setMethod('Dieta Automática');
-    setCategory(preset.category);
-    setMerchant(preset.merchant);
-    setAmountRD(String(preset.amountRD));
-    syncAmountIntoUniqueSplit(preset.amountRD);
+    setCategory(preset.categoria);
+    setMerchant(preset.comercio);
+    setAmountRD(String(preset.montoRD));
+    syncAmountIntoUniqueSplit(preset.montoRD);
     setItbisRD('0');
     setNcf('');
-    setNotes(preset.notes);
-    setOcrStatusMsg(`Tarifa estándar aplicada: ${formatRD(preset.amountRD)}`);
+    setNotes(preset.notas);
+    setOcrStatusMsg(`Tarifa estándar aplicada: ${formatRD(preset.montoRD, moneda)}`);
   };
 
   const handleCompletarConSinAsignar = () => {
@@ -445,7 +432,7 @@ export const MobileExpenseCaptureModal: React.FC<MobileExpenseCaptureModalProps>
     setErrorMsg(null);
     const parsedAmount = Number(amountRD);
     if (Number.isNaN(parsedAmount) || parsedAmount < 0) {
-      setErrorMsg('Ingresa un monto válido en RD$.');
+      setErrorMsg(`Ingresa un monto válido en ${moneda}.`);
       return;
     }
 
@@ -473,6 +460,13 @@ export const MobileExpenseCaptureModal: React.FC<MobileExpenseCaptureModalProps>
         pendingReceiptBase64: needsOfflineOcr ? receiptPreview ?? undefined : undefined,
         pendingReceiptMime: needsOfflineOcr ? pendingReceiptMime : undefined,
         repartos: repartosCalculados,
+        configVersion: editingViatico?.configVersion ?? reglasCaptura.version,
+        tarifaUsadaRD:
+          editingViatico?.tarifaUsadaRD ??
+          (method === 'GPS Ruta' ? reglasCaptura.gpsRuta.tarifaPorKmRD : undefined),
+        conceptoDistanciaUsado:
+          editingViatico?.conceptoDistanciaUsado ??
+          (method === 'GPS Ruta' ? reglasCaptura.gpsRuta.conceptoDistancia : undefined),
         notas: notes.trim() || undefined,
         syncStatus: needsOfflineOcr ? 'needs_ocr' : 'pending',
       };
@@ -658,23 +652,28 @@ export const MobileExpenseCaptureModal: React.FC<MobileExpenseCaptureModalProps>
                 )}
               </button>
               <p className="text-[11px] text-[#43474D]">
-                Calcula la distancia geodésica desde base hasta la parcela a razón de RD$ 26.50/km.
+                Calcula la distancia geodésica desde base hasta la parcela (
+                {reglasCaptura.gpsRuta.conceptoDistancia === 'ida_vuelta'
+                  ? 'ida y vuelta'
+                  : 'solo ida'}
+                , mínimo {reglasCaptura.gpsRuta.minimoKm} km) a razón de{' '}
+                {formatRD(reglasCaptura.gpsRuta.tarifaPorKmRD, moneda)}/km.
               </p>
             </div>
           )}
 
           {captureMode === 'quick' && (
             <div className="grid grid-cols-2 gap-2">
-              {QUICK_PRESETS.map((preset) => (
+              {reglasCaptura.presetsRapidos.map((preset) => (
                 <button
-                  key={preset.label}
+                  key={preset.id}
                   type="button"
                   onClick={() => handleApplyPreset(preset)}
                   className="rounded-sm border border-[#CBD5E1] bg-[#F8FAFC] p-3 text-left hover:border-[#0284C7] hover:bg-[#EFF4FF] transition-colors min-h-[54px]"
                 >
-                  <div className="text-xs font-semibold text-[#0F2942]">{preset.label}</div>
+                  <div className="text-xs font-semibold text-[#0F2942]">{preset.etiqueta}</div>
                   <div className="mt-0.5 font-mono text-xs font-bold text-[#0284C7] tabular-nums">
-                    {formatRD(preset.amountRD)}
+                    {formatRD(preset.montoRD, moneda)}
                   </div>
                 </button>
               ))}
@@ -703,7 +702,7 @@ export const MobileExpenseCaptureModal: React.FC<MobileExpenseCaptureModalProps>
                 onChange={(e) => setCategory(e.target.value as CategoriaViatico)}
                 className="w-full rounded-sm border border-[#CBD5E1] bg-white px-3 py-2 text-xs text-[#0D1C2F] min-h-[42px]"
               >
-                {CATEGORIES.map((c) => (
+                {categoriasDisponibles.map((c) => (
                   <option key={c} value={c}>
                     {c}
                   </option>

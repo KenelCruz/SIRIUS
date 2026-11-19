@@ -22,11 +22,21 @@ import {
 } from 'lucide-react';
 import { DwgPlanViewer } from './DwgPlanViewer';
 import type { ParsedDwgPlan } from '../utils/dwgParser';
+import {
+  calcularCotizacionServicioVigente,
+  crearConfiguracionInicialEmpresa,
+  obtenerFactoresTerrenoVigentes,
+  obtenerReglasViaticosVigentes,
+  obtenerServiciosVigentes,
+  type ServicioCatalogoVigente,
+} from '../domain';
 import type {
   CategoriaViatico,
   Proyecto,
+  ReglasViaticosVersion,
   RouteSummary,
   Ruta,
+  TerrenoFactorVersion,
   Vehiculo,
   Viatico,
 } from '../types/domain';
@@ -36,8 +46,6 @@ import {
   computeRouteViaticos,
   fetchOptimalRoutesOSM,
   SANTO_DOMINGO_ORIGIN,
-  SERVICE_CATALOG,
-  TERRAIN_MULTIPLIER,
   VEHICLE_CATALOG,
   type RouteAlternative,
   type TerrainType,
@@ -66,13 +74,24 @@ interface RouteServicesCalculatorProps {
   baseLat?: number;
   baseLon?: number;
   baseDireccion?: string;
+  serviciosVigentes?: ServicioCatalogoVigente[];
+  factoresTerreno?: TerrenoFactorVersion | null;
+  reglasViaticos?: ReglasViaticosVersion | null;
+  moneda?: string;
   onSelectRuta: (rutaId: string) => void;
   onApplyToRuta: (payload: {
     rutaId: string;
     proyectoId: string;
     budgetViaticosRD: number;
     contractValueRD: number;
-    serviciosPropuestos: Array<{ tipoServicioId: string; nombre: string; cotizacionRD: number }>;
+    serviciosPropuestos: Array<{
+      tipoServicioId: string;
+      nombre: string;
+      cotizacionRD: number;
+      configVersion?: number;
+      tarifaBaseUsadaRD?: number;
+      recargosUsadosRD?: number;
+    }>;
     routeSummary: RouteSummary;
   }) => Promise<void>;
   onRegisterKmzFromCalculator: (parsed: ParsedKmzResult) => void;
@@ -81,6 +100,11 @@ interface RouteServicesCalculatorProps {
   ) => Promise<void>;
   onOpenExpenseModal?: () => void;
 }
+
+const DEFAULT_CFG_CALC = crearConfiguracionInicialEmpresa('default');
+const DEFAULT_SERVICIOS_CALC = obtenerServiciosVigentes(DEFAULT_CFG_CALC);
+const DEFAULT_TERRENO_CALC = obtenerFactoresTerrenoVigentes(DEFAULT_CFG_CALC);
+const DEFAULT_REGLAS_CALC = obtenerReglasViaticosVigentes(DEFAULT_CFG_CALC);
 
 const DOMINICAN_PROVINCES = [
   'Distrito Nacional',
@@ -115,12 +139,22 @@ export const RouteServicesCalculator: React.FC<RouteServicesCalculatorProps> = (
   baseLat = SANTO_DOMINGO_ORIGIN.lat,
   baseLon = SANTO_DOMINGO_ORIGIN.lon,
   baseDireccion = 'Base Operativa (Santo Domingo)',
+  serviciosVigentes = DEFAULT_SERVICIOS_CALC,
+  factoresTerreno,
+  reglasViaticos,
+  moneda = 'RD$',
   onSelectRuta,
   onApplyToRuta,
   onRegisterKmzFromCalculator,
   onLogRouteExpenses,
   onOpenExpenseModal,
 }) => {
+  const activeServicios = useMemo(
+    () => serviciosVigentes.filter((s) => s.activo),
+    [serviciosVigentes]
+  );
+  const activeTerreno = factoresTerreno ?? DEFAULT_TERRENO_CALC;
+  const activeReglas = reglasViaticos ?? DEFAULT_REGLAS_CALC;
   const fileInputRef = useRef<HTMLInputElement>(null);
   const mapContainerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<L.Map | null>(null);
@@ -233,13 +267,14 @@ export const RouteServicesCalculator: React.FC<RouteServicesCalculatorProps> = (
       activeCentroid.lat,
       activeCentroid.lon,
       originPoint.lat,
-      originPoint.lon
+      originPoint.lon,
+      activeReglas
     )
       .then((res) => {
         if (!active) return;
         setRoutes(res);
         const primary = res[0];
-        if (primary && primary.distanceOneWayKm > 105) {
+        if (primary && primary.distanceOneWayKm > activeReglas.umbralHospedajeKm) {
           setIncludeLodging(true);
         } else {
           setIncludeLodging(false);
@@ -252,7 +287,7 @@ export const RouteServicesCalculator: React.FC<RouteServicesCalculatorProps> = (
     return () => {
       active = false;
     };
-  }, [activeCentroid.lat, activeCentroid.lon, originPoint.lat, originPoint.lon]);
+  }, [activeCentroid.lat, activeCentroid.lon, originPoint.lat, originPoint.lon, activeReglas]);
 
   const activeRoute = useMemo(
     () => routes.find((r) => r.id === selectedRouteId) ?? routes[0],
@@ -265,26 +300,32 @@ export const RouteServicesCalculator: React.FC<RouteServicesCalculatorProps> = (
       : activeRoute?.distanceOneWayKm ?? 12;
 
   const servicesCalculation = useMemo(() => {
-    const terrainMult = TERRAIN_MULTIPLIER[terrain];
-    const items = SERVICE_CATALOG.filter((s) => selectedServiceIds.includes(s.id)).map((svc) => {
-      const corridorExtra =
-        svc.id === 'ingenieria' && svc.perKmCorridorRD
-          ? Math.max(0, corridorKm) * svc.perKmCorridorRD
-          : 0;
-      const areaSurcharge =
-        manualAreaM2 > 10000 ? Math.round(((manualAreaM2 - 10000) / 10000) * 3500) : 0;
-      const rawSubtotal = svc.basePriceRD + corridorExtra + areaSurcharge;
-      const adjusted = Math.round(rawSubtotal * terrainMult);
-      return {
-        ...svc,
-        corridorExtra,
-        adjustedPriceRD: adjusted,
-      };
-    });
+    const items = activeServicios
+      .filter((s) => selectedServiceIds.includes(s.codigo))
+      .map((svc) => {
+        const calc = calcularCotizacionServicioVigente({
+          servicio: svc,
+          areaM2: manualAreaM2,
+          corridorKm,
+          terrain,
+          factoresTerreno: activeTerreno,
+        });
+        return {
+          id: svc.codigo,
+          name: svc.nombre,
+          subtitle: svc.subtitulo,
+          basePriceRD: svc.precioBaseRD,
+          perKmCorridorRD: svc.recargoCorredorPorKmRD,
+          version: svc.version,
+          corridorExtra: calc.corridorExtraRD,
+          areaSurcharge: calc.areaSurchargeRD,
+          adjustedPriceRD: calc.totalRD,
+        };
+      });
 
     const totalServicesRD = items.reduce((sum, item) => sum + item.adjustedPriceRD, 0);
     return { items, totalServicesRD };
-  }, [selectedServiceIds, corridorKm, terrain, manualAreaM2]);
+  }, [activeServicios, selectedServiceIds, corridorKm, terrain, manualAreaM2, activeTerreno]);
 
   const routeComparison = useMemo(() => {
     return routes.map((r) => {
@@ -303,6 +344,8 @@ export const RouteServicesCalculator: React.FC<RouteServicesCalculatorProps> = (
         areaM2: manualAreaM2,
         terrain,
         serviceCount: selectedServiceIds.length,
+        reglasViaticos: activeReglas,
+        factoresTerreno: activeTerreno,
       });
       return {
         route: r,
@@ -321,6 +364,8 @@ export const RouteServicesCalculator: React.FC<RouteServicesCalculatorProps> = (
     manualAreaM2,
     terrain,
     selectedServiceIds.length,
+    activeReglas,
+    activeTerreno,
   ]);
 
   const activeBreakdown = useMemo(() => {
@@ -337,6 +382,8 @@ export const RouteServicesCalculator: React.FC<RouteServicesCalculatorProps> = (
       areaM2: manualAreaM2,
       terrain,
       serviceCount: selectedServiceIds.length,
+      reglasViaticos: activeReglas,
+      factoresTerreno: activeTerreno,
     });
   }, [
     routeComparison,
@@ -351,6 +398,8 @@ export const RouteServicesCalculator: React.FC<RouteServicesCalculatorProps> = (
     manualAreaM2,
     terrain,
     selectedServiceIds.length,
+    activeReglas,
+    activeTerreno,
   ]);
 
   const grandTotalRD = servicesCalculation.totalServicesRD + activeBreakdown.totalViaticosRD;
@@ -679,6 +728,9 @@ export const RouteServicesCalculator: React.FC<RouteServicesCalculatorProps> = (
             tipoServicioId: item.id,
             nombre: item.name,
             cotizacionRD: item.adjustedPriceRD,
+            configVersion: item.version,
+            tarifaBaseUsadaRD: item.basePriceRD,
+            recargosUsadosRD: item.corridorExtra + item.areaSurcharge,
           })),
           routeSummary: {
             routeName: activeRoute?.name || 'Ruta Directa',
@@ -687,13 +739,17 @@ export const RouteServicesCalculator: React.FC<RouteServicesCalculatorProps> = (
             tollsRD: activeBreakdown.tollsRD,
             fuelRD: activeBreakdown.fuelRD,
             vehicleLabel: activeVehicle.label,
+            configVersion: activeReglas.version,
+            precioGalonUsadoRD: fuelPricePerGalRD,
+            mantenimientoPorKmUsadoRD: activeVehicle.maintenancePerKmRD,
           },
         });
         const proyVinculado = proyectos.find((p) => p.id === selectedRuta.proyectoId);
         setApplyFeedback(
           `Guardado en proyecto ${proyVinculado?.codigoContrato || selectedRuta.proyectoId}: Presupuesto viáticos ${formatRD(
-            activeBreakdown.totalViaticosRD
-          )} y valor contrato ${formatRD(grandTotalRD)}.`
+            activeBreakdown.totalViaticosRD,
+            moneda
+          )} y valor contrato ${formatRD(grandTotalRD, moneda)}.`
         );
       } finally {
         setIsApplying(false);
@@ -732,7 +788,9 @@ export const RouteServicesCalculator: React.FC<RouteServicesCalculatorProps> = (
           northing: activeCentroid.northing,
         },
         repartos: [{ proyectoId: target.proyectoId, montoRD: activeBreakdown.fuelRD }],
-        notas: `${activeBreakdown.roundTripKm} km ida y vuelta · ${activeBreakdown.gallonsNeeded} gal @ RD$ ${fuelPricePerGalRD}`,
+        configVersion: activeReglas.version,
+        tarifaUsadaRD: fuelPricePerGalRD,
+        notas: `${activeBreakdown.roundTripKm} km ida y vuelta · ${activeBreakdown.gallonsNeeded} gal @ ${formatRD(fuelPricePerGalRD, moneda)}`,
         syncStatus: 'pending',
       });
     }
@@ -757,6 +815,7 @@ export const RouteServicesCalculator: React.FC<RouteServicesCalculatorProps> = (
           northing: activeCentroid.northing,
         },
         repartos: [{ proyectoId: target.proyectoId, montoRD: activeBreakdown.tollsRD }],
+        configVersion: activeReglas.version,
         notas: `Peajes ida y vuelta (${activeRoute?.name || 'Ruta'})`,
         syncStatus: 'pending',
       });
@@ -775,6 +834,7 @@ export const RouteServicesCalculator: React.FC<RouteServicesCalculatorProps> = (
         itbisRD: 0,
         metodo: 'Dieta Automática',
         repartos: [{ proyectoId: target.proyectoId, montoRD: activeBreakdown.perDiemRD }],
+        configVersion: activeReglas.version,
         notas: `Cálculo automático para terreno ${terrain}`,
         syncStatus: 'pending',
       });
@@ -896,13 +956,13 @@ export const RouteServicesCalculator: React.FC<RouteServicesCalculatorProps> = (
           </p>
 
           <div className="space-y-2 pt-1">
-            {SERVICE_CATALOG.map((svc) => {
-              const checked = selectedServiceIds.includes(svc.id);
+            {activeServicios.map((svc) => {
+              const checked = selectedServiceIds.includes(svc.codigo);
               return (
                 <button
-                  key={svc.id}
+                  key={svc.codigo}
                   type="button"
-                  onClick={() => handleToggleService(svc.id)}
+                  onClick={() => handleToggleService(svc.codigo)}
                   className={`w-full flex items-center justify-between gap-2 rounded-sm border px-3 py-2.5 text-left transition-colors ${
                     checked
                       ? 'border-[#0F2942] bg-[#0F2942] text-white'
@@ -920,13 +980,13 @@ export const RouteServicesCalculator: React.FC<RouteServicesCalculatorProps> = (
                       {checked && <Check className="h-3 w-3 stroke-[3]" />}
                     </span>
                     <div className="min-w-0">
-                      <div className="text-xs font-bold leading-tight">{svc.name}</div>
+                      <div className="text-xs font-bold leading-tight">{svc.nombre}</div>
                       <div
                         className={`text-[11px] ${
                           checked ? 'text-[#CBD5E1]' : 'text-[#43474D]'
                         }`}
                       >
-                        {svc.subtitle}
+                        {svc.subtitulo}
                       </div>
                     </div>
                   </div>
@@ -935,18 +995,29 @@ export const RouteServicesCalculator: React.FC<RouteServicesCalculatorProps> = (
                       checked ? 'text-[#FBBF24]' : 'text-[#0F2942]'
                     }`}
                   >
-                    + {formatRD(svc.basePriceRD).replace('.00', '')}
+                    + {formatRD(svc.precioBaseRD, moneda).replace('.00', '')}
                   </span>
                 </button>
               );
             })}
           </div>
 
-          {selectedServiceIds.includes('ingenieria') && (
+          {activeServicios.some(
+            (s) => selectedServiceIds.includes(s.codigo) && s.recargoCorredorPorKmRD > 0
+          ) && (
             <div className="rounded-sm border border-[#CBD5E1] bg-[#F8FAFC] p-3 space-y-1.5">
               <div className="flex items-center justify-between text-[11px]">
                 <span className="font-semibold text-[#0F2942]">Longitud de corredor vial (km)</span>
-                <span className="font-mono text-[#0284C7]">RD$ 10,000 / km</span>
+                <span className="font-mono text-[#0284C7]">
+                  {formatRD(
+                    activeServicios.find(
+                      (s) =>
+                        selectedServiceIds.includes(s.codigo) && s.recargoCorredorPorKmRD > 0
+                    )?.recargoCorredorPorKmRD ?? 0,
+                    moneda
+                  )}{' '}
+                  / km
+                </span>
               </div>
               <input
                 type="number"

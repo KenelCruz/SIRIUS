@@ -1,4 +1,16 @@
 import { haversineMeters } from './geodesy';
+import {
+  crearConfiguracionInicialEmpresa,
+  obtenerCombustiblesVigentes,
+  obtenerFactoresTerrenoVigentes,
+  obtenerReglasViaticosVigentes,
+  obtenerServiciosVigentes,
+} from '../domain/configuracion';
+import type {
+  PeajesCorredorConfig,
+  ReglasViaticosVersion,
+  TerrenoFactorVersion,
+} from '../types/domain';
 
 export interface ServiceOption {
   id: string;
@@ -8,46 +20,26 @@ export interface ServiceOption {
   perKmCorridorRD?: number;
 }
 
-export const SERVICE_CATALOG: ServiceOption[] = [
-  {
-    id: 'rtk',
-    name: 'RTK',
-    subtitle: 'Topografía GNSS',
-    basePriceRD: 20000,
-  },
-  {
-    id: 'drone_lidar',
-    name: 'Dron & LiDAR',
-    subtitle: 'Fotogrametría MDT',
-    basePriceRD: 35000,
-  },
-  {
-    id: 'deslinde',
-    name: 'Deslinde',
-    subtitle: 'Catastro y Mensuras',
-    basePriceRD: 75000,
-  },
-  {
-    id: 'ingenieria',
-    name: 'Ingeniería',
-    subtitle: 'Vial y Nivelación',
-    basePriceRD: 30000,
-    perKmCorridorRD: 10000,
-  },
-  {
-    id: 'arquitectura',
-    name: 'Arquitectura',
-    subtitle: 'Diseño BIM / Planos',
-    basePriceRD: 20000,
-  },
-];
+const DEFAULT_CONFIG = crearConfiguracionInicialEmpresa('default');
+const DEFAULT_SERVICIOS_VIGENTES = obtenerServiciosVigentes(DEFAULT_CONFIG, '2026-01-01');
+const DEFAULT_TERRENO_VIGENTE = obtenerFactoresTerrenoVigentes(DEFAULT_CONFIG, '2026-01-01');
+const DEFAULT_COMBUSTIBLES_VIGENTES = obtenerCombustiblesVigentes(DEFAULT_CONFIG, '2026-01-01');
+export const DEFAULT_REGLAS_VIATICOS = obtenerReglasViaticosVigentes(DEFAULT_CONFIG, '2026-01-01');
+
+export const SERVICE_CATALOG: ServiceOption[] = DEFAULT_SERVICIOS_VIGENTES.map((s) => ({
+  id: s.codigo,
+  name: s.nombre,
+  subtitle: s.subtitulo,
+  basePriceRD: s.precioBaseRD,
+  ...(s.recargoCorredorPorKmRD > 0 ? { perKmCorridorRD: s.recargoCorredorPorKmRD } : {}),
+}));
 
 export type TerrainType = 'Llano' | 'Ondulado' | 'Montañoso';
 
 export const TERRAIN_MULTIPLIER: Record<TerrainType, number> = {
-  Llano: 1.0,
-  Ondulado: 1.2,
-  Montañoso: 1.45,
+  Llano: DEFAULT_TERRENO_VIGENTE.Llano,
+  Ondulado: DEFAULT_TERRENO_VIGENTE.Ondulado,
+  Montañoso: DEFAULT_TERRENO_VIGENTE.Montañoso,
 };
 
 export interface VehiclePreset {
@@ -63,24 +55,24 @@ export const VEHICLE_CATALOG: VehiclePreset[] = [
   {
     id: 'hilux_diesel',
     label: 'Camioneta 4x4 Doble Cabina · Diésel Óptimo',
-    fuelName: 'Diésel Óptimo',
-    fuelPricePerGalRD: 239.1,
+    fuelName: DEFAULT_COMBUSTIBLES_VIGENTES[0]?.nombre ?? 'Diésel Óptimo',
+    fuelPricePerGalRD: DEFAULT_COMBUSTIBLES_VIGENTES[0]?.precioGalonRD ?? 239.1,
     kmPerGal: 32,
     maintenancePerKmRD: 15,
   },
   {
     id: 'pickup_regular',
     label: 'Pickup 4x2 Ligera · Gasolina Regular',
-    fuelName: 'Gasolina Regular',
-    fuelPricePerGalRD: 272.5,
+    fuelName: DEFAULT_COMBUSTIBLES_VIGENTES[1]?.nombre ?? 'Gasolina Regular',
+    fuelPricePerGalRD: DEFAULT_COMBUSTIBLES_VIGENTES[1]?.precioGalonRD ?? 272.5,
     kmPerGal: 36,
     maintenancePerKmRD: 12,
   },
   {
     id: 'suv_premium',
     label: 'SUV Brigada Técnica · Gasolina Premium',
-    fuelName: 'Gasolina Premium',
-    fuelPricePerGalRD: 290.1,
+    fuelName: DEFAULT_COMBUSTIBLES_VIGENTES[2]?.nombre ?? 'Gasolina Premium',
+    fuelPricePerGalRD: DEFAULT_COMBUSTIBLES_VIGENTES[2]?.precioGalonRD ?? 290.1,
     kmPerGal: 34,
     maintenancePerKmRD: 14,
   },
@@ -109,14 +101,16 @@ function estimateCorridorTolls(
   destLat: number,
   destLon: number,
   distanceKm: number,
-  mode: 'economica' | 'rapida'
+  mode: 'economica' | 'rapida',
+  peajes: PeajesCorredorConfig = DEFAULT_REGLAS_VIATICOS.peajesCorredor,
+  umbralDistanciaUrbanaKm: number = DEFAULT_REGLAS_VIATICOS.umbralDistanciaUrbanaKm
 ): { oneWayTollRD: number; tollNote: string; corridorDesc: string } {
   const isEast = destLon > -69.75;
   const isNorth = destLat > 18.72;
   const isSouthWest = destLon < -70.05 && destLat < 18.65;
 
   if (mode === 'economica') {
-    if (distanceKm <= 28) {
+    if (distanceKm <= umbralDistanciaUrbanaKm) {
       return {
         oneWayTollRD: 0,
         tollNote: 'Sin peajes',
@@ -125,58 +119,59 @@ function estimateCorridorTolls(
     }
     if (isEast) {
       return {
-        oneWayTollRD: 100,
-        tollNote: '1 estación RD Vial (RD$ 100/vía)',
+        oneWayTollRD: peajes.nacionalBaseRD,
+        tollNote: `1 estación RD Vial (RD$ ${peajes.nacionalBaseRD}/vía)`,
         corridorDesc: 'Carretera Mella / Autovía del Este (tramo libre)',
       };
     }
     if (isNorth) {
       return {
-        oneWayTollRD: 100,
-        tollNote: 'Peaje Duarte (RD$ 100/vía)',
+        oneWayTollRD: peajes.nacionalBaseRD,
+        tollNote: `Peaje Duarte (RD$ ${peajes.nacionalBaseRD}/vía)`,
         corridorDesc: 'Autopista Duarte · Tramo Nacional',
       };
     }
     return {
-      oneWayTollRD: 100,
-      tollNote: 'Peaje 6 de Noviembre (RD$ 100/vía)',
+      oneWayTollRD: peajes.nacionalBaseRD,
+      tollNote: `Peaje 6 de Noviembre (RD$ ${peajes.nacionalBaseRD}/vía)`,
       corridorDesc: 'Carretera Sánchez / Vía Regional',
     };
   }
 
   // Express / Ring Road route
-  if (distanceKm <= 28) {
+  if (distanceKm <= umbralDistanciaUrbanaKm) {
     return {
-      oneWayTollRD: 150,
-      tollNote: 'Peaje Circunvalación (RD$ 150/vía)',
+      oneWayTollRD: peajes.urbanoExpresoRD,
+      tollNote: `Peaje Circunvalación (RD$ ${peajes.urbanoExpresoRD}/vía)`,
       corridorDesc: 'Circunvalación Santo Domingo (tránsito fluido)',
     };
   }
   if (isEast) {
-    const stations = destLon > -68.8 ? 4 : 2;
+    const stations = destLon > -68.8 ? peajes.esteEstacionesLejos : peajes.esteEstacionesCerca;
+    const totalEste = stations * peajes.estePorEstacionRD;
     return {
-      oneWayTollRD: stations * 100,
-      tollNote: `${stations} peajes Autovía / Coral (RD$ ${stations * 100}/vía)`,
+      oneWayTollRD: totalEste,
+      tollNote: `${stations} peajes Autovía / Coral (RD$ ${totalEste}/vía)`,
       corridorDesc: 'Expreso Las Américas · Autovía del Este / Coral',
     };
   }
   if (isNorth) {
     return {
-      oneWayTollRD: 250,
-      tollNote: 'Circunvalación + Peaje Duarte (RD$ 250/vía)',
+      oneWayTollRD: peajes.norteExpresoRD,
+      tollNote: `Circunvalación + Peaje Duarte (RD$ ${peajes.norteExpresoRD}/vía)`,
       corridorDesc: 'Circunvalación Norte · Autopista Duarte Expresa',
     };
   }
   if (isSouthWest) {
     return {
-      oneWayTollRD: 250,
-      tollNote: 'Circunvalación + 6 de Noviembre (RD$ 250/vía)',
+      oneWayTollRD: peajes.suroesteExpresoRD,
+      tollNote: `Circunvalación + 6 de Noviembre (RD$ ${peajes.suroesteExpresoRD}/vía)`,
       corridorDesc: 'Circunvalación · Autopista 6 de Noviembre',
     };
   }
   return {
-    oneWayTollRD: 200,
-    tollNote: 'Peajes expresos (RD$ 200/vía)',
+    oneWayTollRD: peajes.otroExpresoRD,
+    tollNote: `Peajes expresos (RD$ ${peajes.otroExpresoRD}/vía)`,
     corridorDesc: 'Corredor Expreso RD Vial',
   };
 }
@@ -203,7 +198,8 @@ export async function fetchOptimalRoutesOSM(
   destLat: number,
   destLon: number,
   originLat: number = SANTO_DOMINGO_ORIGIN.lat,
-  originLon: number = SANTO_DOMINGO_ORIGIN.lon
+  originLon: number = SANTO_DOMINGO_ORIGIN.lon,
+  reglasViaticos: ReglasViaticosVersion = DEFAULT_REGLAS_VIATICOS
 ): Promise<RouteAlternative[]> {
   const straightKm = Math.max(
     4,
@@ -214,14 +210,31 @@ export async function fetchOptimalRoutesOSM(
   const fallbackDirectKm = Number((straightKm * 1.24).toFixed(1));
   const fallbackFastKm = Number((straightKm * 1.38 + (straightKm < 25 ? 8 : 2)).toFixed(1));
 
-  const econToll = estimateCorridorTolls(destLat, destLon, fallbackDirectKm, 'economica');
-  const fastToll = estimateCorridorTolls(destLat, destLon, fallbackFastKm, 'rapida');
+  const econToll = estimateCorridorTolls(
+    destLat,
+    destLon,
+    fallbackDirectKm,
+    'economica',
+    reglasViaticos.peajesCorredor,
+    reglasViaticos.umbralDistanciaUrbanaKm
+  );
+  const fastToll = estimateCorridorTolls(
+    destLat,
+    destLon,
+    fallbackFastKm,
+    'rapida',
+    reglasViaticos.peajesCorredor,
+    reglasViaticos.umbralDistanciaUrbanaKm
+  );
 
   const fallbackRoutes: RouteAlternative[] = [
     {
       id: 'economica',
       badge: 'Menor peaje / Libre',
-      name: fallbackDirectKm <= 28 ? 'Corredor Urbano Directo' : 'Ruta Nacional / Menor Peaje',
+      name:
+        fallbackDirectKm <= reglasViaticos.umbralDistanciaUrbanaKm
+          ? 'Corredor Urbano Directo'
+          : 'Ruta Nacional / Menor Peaje',
       corridorDesc: econToll.corridorDesc,
       distanceOneWayKm: fallbackDirectKm,
       durationMin: Math.round(fallbackDirectKm * 1.55),
@@ -294,14 +307,31 @@ export async function fetchOptimalRoutesOSM(
           -0.08
         );
 
-    const toll0 = estimateCorridorTolls(destLat, destLon, d0Km, 'economica');
-    const toll1 = estimateCorridorTolls(destLat, destLon, d1Km, 'rapida');
+    const toll0 = estimateCorridorTolls(
+      destLat,
+      destLon,
+      d0Km,
+      'economica',
+      reglasViaticos.peajesCorredor,
+      reglasViaticos.umbralDistanciaUrbanaKm
+    );
+    const toll1 = estimateCorridorTolls(
+      destLat,
+      destLon,
+      d1Km,
+      'rapida',
+      reglasViaticos.peajesCorredor,
+      reglasViaticos.umbralDistanciaUrbanaKm
+    );
 
     return [
       {
         id: 'economica',
         badge: 'Menor peaje / Libre',
-        name: d0Km <= 28 ? 'Corredor Urbano Directo' : 'Ruta OSRM Menor Peaje',
+        name:
+          d0Km <= reglasViaticos.umbralDistanciaUrbanaKm
+            ? 'Corredor Urbano Directo'
+            : 'Ruta OSRM Menor Peaje',
         corridorDesc: toll0.corridorDesc,
         distanceOneWayKm: d0Km,
         durationMin: t0Min,
@@ -351,7 +381,12 @@ export function computeRouteViaticos(params: {
   areaM2: number;
   terrain: TerrainType;
   serviceCount: number;
+  reglasViaticos?: ReglasViaticosVersion;
+  factoresTerreno?: TerrenoFactorVersion;
 }): ViaticosRouteBreakdown {
+  const reglas = params.reglasViaticos ?? DEFAULT_REGLAS_VIATICOS;
+  const factores = params.factoresTerreno ?? DEFAULT_TERRENO_VIGENTE;
+
   const roundTripKm = Number((params.distanceOneWayKm * 2).toFixed(1));
   const safeKmPerGal = Math.max(5, params.kmPerGal);
   const gallonsNeeded = Number((roundTripKm / safeKmPerGal).toFixed(2));
@@ -359,18 +394,20 @@ export function computeRouteViaticos(params: {
   const tollsRD = params.includeTolls ? Math.round(params.oneWayTollRD * 2) : 0;
 
   const hectares = params.areaM2 / 10000;
-  const terrainFactor = TERRAIN_MULTIPLIER[params.terrain];
+  const terrainFactor = factores[params.terrain] ?? 1.0;
   const serviceComplexity = Math.max(0, params.serviceCount - 1) * 0.35;
   const fieldDays = Math.max(
     1,
     Math.min(7, Math.ceil((hectares / 18 + 0.5 + serviceComplexity) * terrainFactor))
   );
 
-  // If short local distance (< 30km) and 1 day -> half/urban per-diem RD$ 1,200; full field day -> RD$ 2,200/day
-  const perDiemRate = params.distanceOneWayKm < 28 && fieldDays === 1 ? 1200 : 2200;
+  const perDiemRate =
+    params.distanceOneWayKm < reglas.umbralDistanciaUrbanaKm && fieldDays === 1
+      ? reglas.dietaUrbanaRD
+      : reglas.dietaCampoRD;
   const perDiemRD = fieldDays * perDiemRate;
   const maintenanceRD = Math.round(roundTripKm * params.maintenancePerKmRD);
-  const lodgingRD = params.includeLodging ? Math.max(1, fieldDays) * 4800 : 0;
+  const lodgingRD = params.includeLodging ? Math.max(1, fieldDays) * reglas.hospedajePorNocheRD : 0;
 
   return {
     roundTripKm,
@@ -384,3 +421,4 @@ export function computeRouteViaticos(params: {
     fieldDays,
   };
 }
+

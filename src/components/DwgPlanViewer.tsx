@@ -1,7 +1,8 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   AlertTriangle,
   Compass,
+  Crosshair,
   Download,
   Eye,
   EyeOff,
@@ -10,20 +11,25 @@ import {
   Image as ImageIcon,
   Layers,
   Loader2,
+  Map as MapIcon,
   Maximize2,
   Minimize2,
   RotateCcw,
+  Search,
   Trash2,
   UploadCloud,
+  X,
   ZoomIn,
   ZoomOut,
 } from 'lucide-react';
 import {
+  adaptCadSvg,
   buildSampleArchitecturalDxfFile,
   parseDwgOrDxfFile,
   renderDwgPlanSvg,
   type CadStrokeMode,
   type CadTheme,
+  type DwgParseProgress,
   type DwgViewBox,
   type ParsedDwgPlan,
 } from '../utils/dwgParser';
@@ -35,6 +41,10 @@ interface DwgPlanViewerProps {
   title?: string;
   subtitle?: string;
 }
+
+const MIN_ZOOM = 0.1;
+const MAX_ZOOM = 40;
+const ZOOM_PRESETS = [0.25, 0.5, 1, 2, 4, 8];
 
 const THEME_CONFIG: Record<
   CadTheme,
@@ -60,15 +70,20 @@ const THEME_CONFIG: Record<
   },
 };
 
+function clampZoom(value: number): number {
+  return Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, Number(value.toFixed(4))));
+}
+
 export const DwgPlanViewer: React.FC<DwgPlanViewerProps> = ({
   plan: controlledPlan,
   onPlanLoaded,
   compact = false,
   title = 'Visor de Planos Arquitectónicos (.DWG / .DXF)',
-  subtitle = 'Renderizado vectorial local (LibreDWG WebAssembly) con control de capas, zoom, paneo y exportación.',
+  subtitle = 'Carga progresiva WebAssembly con zoom de precisión, paneo táctil/ratón y control de capas.',
 }) => {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const viewportRef = useRef<HTMLDivElement>(null);
+  const abortControllerRef = useRef<AbortController | null>(null);
 
   const [internalPlan, setInternalPlan] = useState<ParsedDwgPlan | null>(null);
   const activePlan = controlledPlan !== undefined ? controlledPlan : internalPlan;
@@ -81,11 +96,16 @@ export const DwgPlanViewer: React.FC<DwgPlanViewerProps> = ({
   };
 
   const [isLoading, setIsLoading] = useState(false);
+  const [loadProgress, setLoadProgress] = useState<DwgParseProgress | null>(null);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+
   const [theme, setTheme] = useState<CadTheme>('dark');
   const [strokeMode, setStrokeMode] = useState<CadStrokeMode>('normal');
   const [showGrid, setShowGrid] = useState(true);
   const [showLayersPanel, setShowLayersPanel] = useState(!compact);
+  const [showMinimap, setShowMinimap] = useState(true);
+  const [fitToVisibleLayers, setFitToVisibleLayers] = useState(false);
+  const [layerSearch, setLayerSearch] = useState('');
   const [isExpanded, setIsExpanded] = useState(false);
 
   const [hiddenLayers, setHiddenLayers] = useState<Set<string>>(new Set());
@@ -98,13 +118,32 @@ export const DwgPlanViewer: React.FC<DwgPlanViewerProps> = ({
   });
   const [hasGeometry, setHasGeometry] = useState(false);
 
-  // Pan & Zoom state
+  // Enhanced Pan & Zoom state
   const [zoom, setZoom] = useState(1);
   const [pan, setPan] = useState({ x: 0, y: 0 });
   const [isDragging, setIsDragging] = useState(false);
-  const dragStartRef = useRef<{ x: number; y: number; panX: number; panY: number } | null>(null);
 
-  // Reset hidden layers & pan/zoom when plan changes
+  const zoomRef = useRef(zoom);
+  const panRef = useRef(pan);
+  zoomRef.current = zoom;
+  panRef.current = pan;
+
+  // Multi-pointer tracking (1 pointer = pan, 2 pointers = pinch-zoom + pan)
+  const activePointersRef = useRef<Map<number, { x: number; y: number }>>(new Map());
+  const pinchStateRef = useRef<{
+    initialDistance: number;
+    initialZoom: number;
+    initialMidpoint: { x: number; y: number };
+    initialPan: { x: number; y: number };
+  } | null>(null);
+
+  useEffect(() => {
+    return () => {
+      abortControllerRef.current?.abort();
+    };
+  }, []);
+
+  // Reset layers & view when a new plan finishes loading
   useEffect(() => {
     if (!activePlan) {
       setHiddenLayers(new Set());
@@ -112,10 +151,10 @@ export const DwgPlanViewer: React.FC<DwgPlanViewerProps> = ({
       setHasGeometry(false);
       setZoom(1);
       setPan({ x: 0, y: 0 });
+      setLayerSearch('');
       return;
     }
 
-    // Respect layers marked OFF or FROZEN initially only if drawing has other active layers
     const offByDefault = new Set(
       activePlan.layers.filter((l) => l.off || l.frozen).map((l) => l.name)
     );
@@ -123,9 +162,16 @@ export const DwgPlanViewer: React.FC<DwgPlanViewerProps> = ({
     setHiddenLayers(hasAnyVisible ? offByDefault : new Set());
     setZoom(1);
     setPan({ x: 0, y: 0 });
+    setLayerSearch('');
   }, [activePlan]);
 
-  // Re-render SVG whenever plan, hiddenLayers, theme, or strokeMode change
+  // Progressive partial SVG adaptation while loading heavy drawings
+  const livePartialAdapted = useMemo(() => {
+    if (!isLoading || !loadProgress?.partialSvg) return null;
+    return adaptCadSvg(loadProgress.partialSvg, { theme, strokeMode });
+  }, [isLoading, loadProgress?.partialSvg, theme, strokeMode]);
+
+  // Instant layer/theme/stroke SVG assembly once loaded
   useEffect(() => {
     let alive = true;
     if (!activePlan) return;
@@ -134,6 +180,7 @@ export const DwgPlanViewer: React.FC<DwgPlanViewerProps> = ({
       hiddenLayers,
       theme,
       strokeMode,
+      fitToVisibleLayers,
     })
       .then((res) => {
         if (!alive) return;
@@ -151,21 +198,57 @@ export const DwgPlanViewer: React.FC<DwgPlanViewerProps> = ({
     return () => {
       alive = false;
     };
-  }, [activePlan, hiddenLayers, theme, strokeMode]);
+  }, [activePlan, hiddenLayers, theme, strokeMode, fitToVisibleLayers]);
 
   const handleFile = async (file: File) => {
+    abortControllerRef.current?.abort();
+    const controller = new AbortController();
+    abortControllerRef.current = controller;
+
     setErrorMsg(null);
     setIsLoading(true);
+    setZoom(1);
+    setPan({ x: 0, y: 0 });
+    setLoadProgress({
+      stage: 'reading',
+      percent: 4,
+      message: `Leyendo ${file.name}...`,
+      processedEntities: 0,
+      totalEntities: 0,
+    });
+
     try {
-      const parsed = await parseDwgOrDxfFile(file);
-      setActivePlan(parsed);
+      const parsed = await parseDwgOrDxfFile(file, {
+        signal: controller.signal,
+        onProgress: (prog) => {
+          if (!controller.signal.aborted) {
+            setLoadProgress(prog);
+          }
+        },
+      });
+      if (!controller.signal.aborted) {
+        setActivePlan(parsed);
+      }
     } catch (err: unknown) {
+      if (err instanceof DOMException && err.name === 'AbortError') {
+        return;
+      }
       setErrorMsg(
         err instanceof Error ? err.message : 'No se pudo procesar el archivo .DWG / .DXF.'
       );
     } finally {
-      setIsLoading(false);
+      if (abortControllerRef.current === controller) {
+        setIsLoading(false);
+        setLoadProgress(null);
+      }
     }
+  };
+
+  const handleCancelLoading = () => {
+    abortControllerRef.current?.abort();
+    abortControllerRef.current = null;
+    setIsLoading(false);
+    setLoadProgress(null);
   };
 
   const handleLoadSample = async () => {
@@ -173,54 +256,149 @@ export const DwgPlanViewer: React.FC<DwgPlanViewerProps> = ({
     await handleFile(sampleFile);
   };
 
-  const handleResetView = () => {
+  const handleResetView = useCallback(() => {
     setZoom(1);
     setPan({ x: 0, y: 0 });
-  };
+  }, []);
+
+  // Cursor/anchor-aware zoom helper
+  const zoomAnchoredAtViewportPoint = useCallback(
+    (nextZoomRaw: number, clientX?: number, clientY?: number) => {
+      const nextZoom = clampZoom(nextZoomRaw);
+      const prevZoom = zoomRef.current;
+      if (Math.abs(nextZoom - prevZoom) < 1e-6) return;
+
+      const el = viewportRef.current;
+      if (!el || clientX === undefined || clientY === undefined) {
+        const ratio = nextZoom / prevZoom;
+        setPan((prev) => ({
+          x: prev.x * ratio,
+          y: prev.y * ratio,
+        }));
+        setZoom(nextZoom);
+        return;
+      }
+
+      const rect = el.getBoundingClientRect();
+      const px = clientX - (rect.left + rect.width / 2);
+      const py = clientY - (rect.top + rect.height / 2);
+      const ratio = nextZoom / prevZoom;
+
+      setPan((prev) => ({
+        x: px - (px - prev.x) * ratio,
+        y: py - (py - prev.y) * ratio,
+      }));
+      setZoom(nextZoom);
+    },
+    []
+  );
 
   const handleZoomBy = (factor: number) => {
-    setZoom((prev) => Math.min(20, Math.max(0.25, Number((prev * factor).toFixed(3)))));
+    zoomAnchoredAtViewportPoint(zoomRef.current * factor);
   };
 
   const handleWheel = (e: React.WheelEvent<HTMLDivElement>) => {
-    if (!activePlan) return;
+    if (!activePlan && !livePartialAdapted) return;
     e.preventDefault();
-    const factor = e.deltaY < 0 ? 1.14 : 0.88;
-    setZoom((prev) => Math.min(20, Math.max(0.25, Number((prev * factor).toFixed(3)))));
+    const intensity = e.ctrlKey ? 0.01 : 0.0018;
+    const factor = Math.exp(-e.deltaY * intensity);
+    zoomAnchoredAtViewportPoint(zoomRef.current * factor, e.clientX, e.clientY);
   };
 
   const handlePointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
-    if (!activePlan || e.button !== 0) return;
-    e.currentTarget.setPointerCapture(e.pointerId);
-    setIsDragging(true);
-    dragStartRef.current = {
-      x: e.clientX,
-      y: e.clientY,
-      panX: pan.x,
-      panY: pan.y,
-    };
+    if ((!activePlan && !livePartialAdapted) || (e.pointerType === 'mouse' && e.button !== 0)) {
+      return;
+    }
+    try {
+      e.currentTarget.setPointerCapture(e.pointerId);
+    } catch {
+      // ignore synthetic events
+    }
+
+    activePointersRef.current.set(e.pointerId, { x: e.clientX, y: e.clientY });
+
+    if (activePointersRef.current.size === 1) {
+      setIsDragging(true);
+      pinchStateRef.current = null;
+    } else if (activePointersRef.current.size === 2) {
+      const pts = Array.from(activePointersRef.current.values());
+      const dist = Math.hypot(pts[1].x - pts[0].x, pts[1].y - pts[0].y);
+      const mid = { x: (pts[0].x + pts[1].x) / 2, y: (pts[0].y + pts[1].y) / 2 };
+      pinchStateRef.current = {
+        initialDistance: Math.max(10, dist),
+        initialZoom: zoomRef.current,
+        initialMidpoint: mid,
+        initialPan: { ...panRef.current },
+      };
+      setIsDragging(true);
+    }
   };
 
   const handlePointerMove = (e: React.PointerEvent<HTMLDivElement>) => {
-    if (!isDragging || !dragStartRef.current) return;
-    const dx = e.clientX - dragStartRef.current.x;
-    const dy = e.clientY - dragStartRef.current.y;
-    setPan({
-      x: dragStartRef.current.panX + dx,
-      y: dragStartRef.current.panY + dy,
-    });
+    const prevPt = activePointersRef.current.get(e.pointerId);
+    if (!prevPt) return;
+
+    const nextPt = { x: e.clientX, y: e.clientY };
+    activePointersRef.current.set(e.pointerId, nextPt);
+
+    if (activePointersRef.current.size === 1) {
+      const dx = nextPt.x - prevPt.x;
+      const dy = nextPt.y - prevPt.y;
+      setPan((prev) => ({ x: prev.x + dx, y: prev.y + dy }));
+    } else if (activePointersRef.current.size === 2 && pinchStateRef.current) {
+      const pts = Array.from(activePointersRef.current.values());
+      const dist = Math.hypot(pts[1].x - pts[0].x, pts[1].y - pts[0].y);
+      const mid = { x: (pts[0].x + pts[1].x) / 2, y: (pts[0].y + pts[1].y) / 2 };
+      const { initialDistance, initialZoom, initialMidpoint, initialPan } = pinchStateRef.current;
+
+      const scaleFactor = dist / initialDistance;
+      const targetZoom = clampZoom(initialZoom * scaleFactor);
+      const ratio = targetZoom / initialZoom;
+
+      const el = viewportRef.current;
+      if (el) {
+        const rect = el.getBoundingClientRect();
+        const anchorX = initialMidpoint.x - (rect.left + rect.width / 2);
+        const anchorY = initialMidpoint.y - (rect.top + rect.height / 2);
+        const panDeltaX = mid.x - initialMidpoint.x;
+        const panDeltaY = mid.y - initialMidpoint.y;
+
+        setPan({
+          x: anchorX - (anchorX - initialPan.x) * ratio + panDeltaX,
+          y: anchorY - (anchorY - initialPan.y) * ratio + panDeltaY,
+        });
+      }
+      setZoom(targetZoom);
+    }
   };
 
   const handlePointerUp = (e: React.PointerEvent<HTMLDivElement>) => {
-    if (isDragging) {
-      try {
-        e.currentTarget.releasePointerCapture(e.pointerId);
-      } catch {
-        // ignore
-      }
+    activePointersRef.current.delete(e.pointerId);
+    try {
+      e.currentTarget.releasePointerCapture(e.pointerId);
+    } catch {
+      // ignore
     }
-    setIsDragging(false);
-    dragStartRef.current = null;
+
+    if (activePointersRef.current.size < 2) {
+      pinchStateRef.current = null;
+    }
+    if (activePointersRef.current.size === 0) {
+      setIsDragging(false);
+    }
+  };
+
+  const handleMinimapNavigate = (e: React.MouseEvent<HTMLDivElement>) => {
+    const vp = viewportRef.current;
+    if (!vp) return;
+    const rect = e.currentTarget.getBoundingClientRect();
+    const relX = (e.clientX - rect.left) / rect.width - 0.5;
+    const relY = (e.clientY - rect.top) / rect.height - 0.5;
+    const vpRect = vp.getBoundingClientRect();
+    setPan({
+      x: -relX * vpRect.width * zoomRef.current,
+      y: -relY * vpRect.height * zoomRef.current,
+    });
   };
 
   const toggleLayer = (layerName: string) => {
@@ -235,10 +413,43 @@ export const DwgPlanViewer: React.FC<DwgPlanViewerProps> = ({
     });
   };
 
+  const isolateLayer = (layerName: string) => {
+    if (!activePlan) return;
+    setHiddenLayers(
+      new Set(activePlan.layers.filter((l) => l.name !== layerName).map((l) => l.name))
+    );
+    setFitToVisibleLayers(true);
+    setZoom(1);
+    setPan({ x: 0, y: 0 });
+  };
+
+  const invertLayers = () => {
+    if (!activePlan) return;
+    setHiddenLayers((prev) => {
+      const next = new Set<string>();
+      for (const l of activePlan.layers) {
+        if (!prev.has(l.name)) {
+          next.add(l.name);
+        }
+      }
+      return next;
+    });
+  };
+
+  const showAllLayers = () => {
+    setHiddenLayers(new Set());
+  };
+
+  const hideAllLayers = () => {
+    if (!activePlan) return;
+    setHiddenLayers(new Set(activePlan.layers.map((l) => l.name)));
+  };
+
   const buildExportableSvgString = (widthPx = 1800): { svgText: string; width: number; height: number } => {
-    const vb = renderedViewBox.width > 0 && renderedViewBox.height > 0
-      ? renderedViewBox
-      : { x: 0, y: 0, width: 1000, height: 700 };
+    const vb =
+      renderedViewBox.width > 0 && renderedViewBox.height > 0
+        ? renderedViewBox
+        : { x: 0, y: 0, width: 1000, height: 700 };
     const aspect = vb.height / vb.width;
     const heightPx = Math.max(400, Math.min(2800, Math.round(widthPx * aspect)));
     const bgHex = THEME_CONFIG[theme].bgHex;
@@ -247,7 +458,6 @@ export const DwgPlanViewer: React.FC<DwgPlanViewerProps> = ({
       .replace(/width="100%"/i, `width="${widthPx}"`)
       .replace(/height="100%"/i, `height="${heightPx}"`);
 
-    // Inject background rect right after opening <svg ...> tag
     out = out.replace(
       /(<svg\b[^>]*>)/i,
       `$1\n  <rect x="${vb.x - vb.width * 0.2}" y="${vb.y - vb.height * 0.2}" width="${
@@ -309,6 +519,13 @@ export const DwgPlanViewer: React.FC<DwgPlanViewerProps> = ({
     return activePlan.layers.filter((l) => !hiddenLayers.has(l.name)).length;
   }, [activePlan, hiddenLayers]);
 
+  const filteredLayers = useMemo(() => {
+    if (!activePlan) return [];
+    const q = layerSearch.trim().toLowerCase();
+    if (!q) return activePlan.layers;
+    return activePlan.layers.filter((l) => l.name.toLowerCase().includes(q));
+  }, [activePlan, layerSearch]);
+
   const entityChips = useMemo(() => {
     if (!activePlan) return [];
     return Object.entries(activePlan.entitySummary)
@@ -316,7 +533,31 @@ export const DwgPlanViewer: React.FC<DwgPlanViewerProps> = ({
       .slice(0, 8);
   }, [activePlan]);
 
+  const displaySvg = isLoading ? livePartialAdapted?.svg ?? '' : renderedSvg;
+  const displayHasGeometry = isLoading
+    ? Boolean(livePartialAdapted?.hasGeometry)
+    : hasGeometry;
+
   const themeCfg = THEME_CONFIG[theme];
+
+  // Minimap viewport indicator math
+  const minimapBoxStyle = useMemo(() => {
+    const vp = viewportRef.current;
+    const widthPct = Math.min(100, Math.max(8, 100 / zoom));
+    const heightPct = Math.min(100, Math.max(8, 100 / zoom));
+    const vpW = vp?.clientWidth || 800;
+    const vpH = vp?.clientHeight || 500;
+    const offsetXPct = (-pan.x / (vpW * zoom)) * 100;
+    const offsetYPct = (-pan.y / (vpH * zoom)) * 100;
+    const leftPct = Math.min(100 - widthPct, Math.max(0, 50 - widthPct / 2 + offsetXPct));
+    const topPct = Math.min(100 - heightPct, Math.max(0, 50 - heightPct / 2 + offsetYPct));
+    return {
+      left: `${leftPct}%`,
+      top: `${topPct}%`,
+      width: `${widthPct}%`,
+      height: `${heightPct}%`,
+    };
+  }, [zoom, pan]);
 
   return (
     <div className="rounded-md border border-[#CBD5E1] bg-white overflow-hidden">
@@ -355,19 +596,29 @@ export const DwgPlanViewer: React.FC<DwgPlanViewerProps> = ({
             {activePlan ? 'Abrir otro .DWG / .DXF' : 'Cargar plano .DWG / .DXF'}
           </button>
 
-          {!activePlan && (
+          {!activePlan && !isLoading && (
             <button
               type="button"
               onClick={handleLoadSample}
-              disabled={isLoading}
-              className="inline-flex items-center gap-1.5 rounded-sm border border-[#CBD5E1] bg-white px-3 py-1.5 text-xs font-semibold text-[#0F2942] hover:bg-[#EFF4FF] disabled:opacity-60 transition-colors min-h-[34px]"
+              className="inline-flex items-center gap-1.5 rounded-sm border border-[#CBD5E1] bg-white px-3 py-1.5 text-xs font-semibold text-[#0F2942] hover:bg-[#EFF4FF] transition-colors min-h-[34px]"
             >
               <FileCode2 className="h-3.5 w-3.5 text-[#0284C7]" />
               Plano de ejemplo
             </button>
           )}
 
-          {activePlan && (
+          {isLoading && (
+            <button
+              type="button"
+              onClick={handleCancelLoading}
+              className="inline-flex items-center gap-1 rounded-sm border border-[#FCA5A5] bg-[#FEF2F2] px-2.5 py-1.5 text-xs font-semibold text-[#991B1B] hover:bg-[#FEE2E2] min-h-[34px]"
+            >
+              <X className="h-3.5 w-3.5" />
+              Cancelar carga
+            </button>
+          )}
+
+          {activePlan && !isLoading && (
             <button
               type="button"
               onClick={() => {
@@ -383,6 +634,29 @@ export const DwgPlanViewer: React.FC<DwgPlanViewerProps> = ({
           )}
         </div>
       </div>
+
+      {/* Progressive Loading Bar */}
+      {isLoading && loadProgress && (
+        <div className="border-b border-[#1E3A5F] bg-[#0F2942] px-4 py-2.5 text-white space-y-1.5">
+          <div className="flex flex-wrap items-center justify-between gap-2 text-xs">
+            <div className="flex items-center gap-2 min-w-0">
+              <Loader2 className="h-3.5 w-3.5 animate-spin text-[#38BDF8] shrink-0" />
+              <span className="font-semibold truncate">{loadProgress.message}</span>
+            </div>
+            <span className="font-mono text-[11px] font-bold text-[#FBBF24] tabular-nums shrink-0">
+              {loadProgress.percent}%
+              {loadProgress.totalEntities > 0 &&
+                ` · ${loadProgress.processedEntities.toLocaleString('en-US')}/${loadProgress.totalEntities.toLocaleString('en-US')}`}
+            </span>
+          </div>
+          <div className="h-1.5 w-full rounded-full bg-[#091A2C] overflow-hidden">
+            <div
+              className="h-full bg-[#38BDF8] transition-all duration-150"
+              style={{ width: `${Math.min(100, Math.max(4, loadProgress.percent))}%` }}
+            />
+          </div>
+        </div>
+      )}
 
       {errorMsg && (
         <div className="flex items-center gap-2 border-b border-[#FCA5A5] bg-[#FEF2F2] px-4 py-2.5 text-xs text-[#991B1B]">
@@ -408,77 +682,66 @@ export const DwgPlanViewer: React.FC<DwgPlanViewerProps> = ({
             Arrastra un plano AutoCAD (.DWG o .DXF) o haz clic para seleccionarlo
           </div>
           <p className="mt-1 text-xs text-[#43474D] max-w-xl mx-auto">
-            Compatible con versiones AutoCAD R12 hasta 2018+ (2D arquitectura, plantas, ejes, cotas y linderos). Procesado 100% en tu navegador sin subir archivos a servidores externos.
+            Compatible con versiones AutoCAD R12 hasta 2018+ (2D arquitectura, plantas, ejes, cotas y linderos). Carga progresiva por capas 100% en tu navegador.
           </p>
         </div>
       )}
 
-      {/* Loading WASM State */}
-      {isLoading && (
-        <div className="flex flex-col items-center justify-center gap-2.5 py-14 px-4 bg-[#0B1320] text-white">
-          <Loader2 className="h-7 w-7 animate-spin text-[#38BDF8]" />
-          <div className="text-xs font-semibold">
-            Decodificando geometría CAD (.DWG / .DXF)...
-          </div>
-          <div className="text-[11px] text-[#94A3B8]">
-            Inicializando motor vectorial LibreDWG WebAssembly
-          </div>
-        </div>
-      )}
-
-      {/* Active CAD Viewer */}
-      {activePlan && !isLoading && (
+      {/* Active or Progressively Rendering CAD Viewer */}
+      {(activePlan || isLoading) && (
         <>
           {/* Metadata Strip */}
-          <div className="grid grid-cols-2 sm:grid-cols-5 border-b border-[#E2E8F0] bg-white divide-y sm:divide-y-0 sm:divide-x divide-[#E2E8F0] text-xs">
-            <div className="px-3.5 py-2 min-w-0">
-              <div className="text-[10px] font-semibold uppercase tracking-wide text-[#64748B]">
-                Archivo ({activePlan.format})
+          {activePlan && !isLoading && (
+            <div className="grid grid-cols-2 sm:grid-cols-5 border-b border-[#E2E8F0] bg-white divide-y sm:divide-y-0 sm:divide-x divide-[#E2E8F0] text-xs">
+              <div className="px-3.5 py-2 min-w-0">
+                <div className="text-[10px] font-semibold uppercase tracking-wide text-[#64748B]">
+                  Archivo ({activePlan.format})
+                </div>
+                <div className="mt-0.5 font-bold text-[#0F2942] truncate" title={activePlan.fileName}>
+                  {activePlan.fileName}
+                </div>
               </div>
-              <div className="mt-0.5 font-bold text-[#0F2942] truncate" title={activePlan.fileName}>
-                {activePlan.fileName}
-              </div>
-            </div>
 
-            <div className="px-3.5 py-2">
-              <div className="text-[10px] font-semibold uppercase tracking-wide text-[#64748B]">
-                Versión CAD
+              <div className="px-3.5 py-2">
+                <div className="text-[10px] font-semibold uppercase tracking-wide text-[#64748B]">
+                  Versión CAD
+                </div>
+                <div className="mt-0.5 font-mono text-[11px] font-semibold text-[#0D1C2F] truncate">
+                  {activePlan.version}
+                </div>
               </div>
-              <div className="mt-0.5 font-mono text-[11px] font-semibold text-[#0D1C2F] truncate">
-                {activePlan.version}
-              </div>
-            </div>
 
-            <div className="px-3.5 py-2">
-              <div className="text-[10px] font-semibold uppercase tracking-wide text-[#64748B]">
-                Dimensiones Dibujo
+              <div className="px-3.5 py-2">
+                <div className="text-[10px] font-semibold uppercase tracking-wide text-[#64748B]">
+                  Dimensiones Dibujo
+                </div>
+                <div className="mt-0.5 font-mono text-[11px] font-semibold text-[#0284C7] tabular-nums">
+                  {activePlan.viewBox.width > 0
+                    ? `${activePlan.viewBox.width.toFixed(2)} × ${activePlan.viewBox.height.toFixed(2)}`
+                    : 'N/D'}{' '}
+                  <span className="text-[#64748B] font-normal">({activePlan.insUnitsLabel})</span>
+                </div>
               </div>
-              <div className="mt-0.5 font-mono text-[11px] font-semibold text-[#0284C7] tabular-nums">
-                {activePlan.viewBox.width > 0
-                  ? `${activePlan.viewBox.width.toFixed(2)} × ${activePlan.viewBox.height.toFixed(2)}`
-                  : 'N/D'}{' '}
-                <span className="text-[#64748B] font-normal">({activePlan.insUnitsLabel})</span>
-              </div>
-            </div>
 
-            <div className="px-3.5 py-2">
-              <div className="text-[10px] font-semibold uppercase tracking-wide text-[#64748B]">
-                Entidades / Bloques
+              <div className="px-3.5 py-2">
+                <div className="text-[10px] font-semibold uppercase tracking-wide text-[#64748B]">
+                  Entidades / Bloques
+                </div>
+                <div className="mt-0.5 font-mono text-[11px] font-semibold text-[#0D1C2F] tabular-nums">
+                  {activePlan.totalEntities.toLocaleString('en-US')} ent. · {activePlan.blocksCount} blq.
+                </div>
               </div>
-              <div className="mt-0.5 font-mono text-[11px] font-semibold text-[#0D1C2F] tabular-nums">
-                {activePlan.totalEntities.toLocaleString('en-US')} ent. · {activePlan.blocksCount} blq.
-              </div>
-            </div>
 
-            <div className="px-3.5 py-2">
-              <div className="text-[10px] font-semibold uppercase tracking-wide text-[#64748B]">
-                Capas Activas
-              </div>
-              <div className="mt-0.5 font-mono text-[11px] font-semibold text-[#0D1C2F] tabular-nums">
-                {visibleLayerCount} / {activePlan.layers.length} visibles
+              <div className="px-3.5 py-2">
+                <div className="text-[10px] font-semibold uppercase tracking-wide text-[#64748B]">
+                  Capas Activas
+                </div>
+                <div className="mt-0.5 font-mono text-[11px] font-semibold text-[#0D1C2F] tabular-nums">
+                  {visibleLayerCount} / {activePlan.layers.length} visibles
+                </div>
               </div>
             </div>
-          </div>
+          )}
 
           {/* Canvas Controls Bar */}
           <div className="flex flex-wrap items-center justify-between gap-2 border-b border-[#1E3A5F] bg-[#0F2942] px-3 py-2 text-white text-xs">
@@ -543,19 +806,37 @@ export const DwgPlanViewer: React.FC<DwgPlanViewerProps> = ({
               <div className="inline-flex items-center rounded-sm bg-[#091A2C] border border-[#1E3A5F]">
                 <button
                   type="button"
-                  onClick={() => handleZoomBy(0.8)}
+                  onClick={() => handleZoomBy(0.75)}
                   className="px-2 py-1 text-[#CBD5E1] hover:text-white"
                   aria-label="Alejar plano"
                   title="Alejar"
                 >
                   <ZoomOut className="h-3.5 w-3.5" />
                 </button>
-                <span className="px-1.5 font-mono text-[11px] text-[#93CCFF] tabular-nums min-w-[46px] text-center">
-                  {Math.round(zoom * 100)}%
-                </span>
+                <select
+                  aria-label="Nivel de zoom del plano"
+                  value={ZOOM_PRESETS.includes(zoom) ? String(zoom) : '__custom__'}
+                  onChange={(e) => {
+                    if (e.target.value !== '__custom__') {
+                      zoomAnchoredAtViewportPoint(Number(e.target.value));
+                    }
+                  }}
+                  className="bg-transparent px-1 py-1 font-mono text-[11px] text-[#93CCFF] tabular-nums focus:outline-none cursor-pointer"
+                >
+                  {!ZOOM_PRESETS.includes(zoom) && (
+                    <option value="__custom__" className="text-[#0D1C2F]">
+                      {Math.round(zoom * 100)}%
+                    </option>
+                  )}
+                  {ZOOM_PRESETS.map((z) => (
+                    <option key={z} value={String(z)} className="text-[#0D1C2F]">
+                      {Math.round(z * 100)}%
+                    </option>
+                  ))}
+                </select>
                 <button
                   type="button"
-                  onClick={() => handleZoomBy(1.25)}
+                  onClick={() => handleZoomBy(1.3333)}
                   className="px-2 py-1 text-[#CBD5E1] hover:text-white"
                   aria-label="Acercar plano"
                   title="Acercar"
@@ -566,24 +847,58 @@ export const DwgPlanViewer: React.FC<DwgPlanViewerProps> = ({
                   type="button"
                   onClick={handleResetView}
                   className="border-l border-[#1E3A5F] px-2 py-1 text-[11px] font-semibold text-[#CBD5E1] hover:text-white inline-flex items-center gap-1"
-                  title="Centrar y ajustar vista"
+                  title="Centrar y ajustar vista completa"
                 >
                   <RotateCcw className="h-3 w-3" />
                   Ajustar
                 </button>
               </div>
 
+              {activePlan && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setFitToVisibleLayers((prev) => !prev);
+                    handleResetView();
+                  }}
+                  className={`inline-flex items-center gap-1 rounded-sm border px-2 py-1 text-[11px] font-semibold transition-colors ${
+                    fitToVisibleLayers
+                      ? 'border-[#38BDF8] bg-[#0284C7]/25 text-[#E0F2FE]'
+                      : 'border-[#334155] bg-[#091A2C] text-[#CBD5E1] hover:text-white'
+                  }`}
+                  title="Encuadrar automáticamente según las capas visibles"
+                >
+                  <Crosshair className="h-3.5 w-3.5" />
+                  <span className="hidden sm:inline">Encuadrar visibles</span>
+                </button>
+              )}
+
+              {activePlan && (
+                <button
+                  type="button"
+                  onClick={() => setShowLayersPanel((prev) => !prev)}
+                  className={`inline-flex items-center gap-1 rounded-sm border px-2.5 py-1 text-[11px] font-semibold transition-colors ${
+                    showLayersPanel
+                      ? 'border-[#38BDF8] bg-[#0284C7] text-white'
+                      : 'border-[#334155] bg-[#091A2C] text-[#CBD5E1] hover:text-white'
+                  }`}
+                >
+                  <Layers className="h-3.5 w-3.5" />
+                  Capas ({visibleLayerCount}/{activePlan.layers.length})
+                </button>
+              )}
+
               <button
                 type="button"
-                onClick={() => setShowLayersPanel((prev) => !prev)}
-                className={`inline-flex items-center gap-1 rounded-sm border px-2.5 py-1 text-[11px] font-semibold transition-colors ${
-                  showLayersPanel
-                    ? 'border-[#38BDF8] bg-[#0284C7] text-white'
-                    : 'border-[#334155] bg-[#091A2C] text-[#CBD5E1] hover:text-white'
+                onClick={() => setShowMinimap((prev) => !prev)}
+                className={`inline-flex items-center gap-1 rounded-sm border px-2 py-1 text-[11px] font-semibold transition-colors ${
+                  showMinimap
+                    ? 'border-[#38BDF8] bg-[#0284C7]/25 text-[#E0F2FE]'
+                    : 'border-[#334155] bg-[#091A2C] text-[#94A3B8]'
                 }`}
+                title="Mostrar u ocultar miniatura de navegación"
               >
-                <Layers className="h-3.5 w-3.5" />
-                Capas ({activePlan.layers.length})
+                <MapIcon className="h-3.5 w-3.5" />
               </button>
 
               <button
@@ -595,35 +910,39 @@ export const DwgPlanViewer: React.FC<DwgPlanViewerProps> = ({
                 {isExpanded ? <Minimize2 className="h-3.5 w-3.5" /> : <Maximize2 className="h-3.5 w-3.5" />}
               </button>
 
-              <button
-                type="button"
-                onClick={handleExportSvg}
-                disabled={!hasGeometry}
-                className="inline-flex items-center gap-1 rounded-sm border border-[#334155] bg-[#091A2C] px-2.5 py-1 text-[11px] font-semibold text-[#CBD5E1] hover:text-white disabled:opacity-40"
-                title="Descargar SVG vectorial"
-              >
-                <Download className="h-3.5 w-3.5" />
-                SVG
-              </button>
+              {activePlan && (
+                <>
+                  <button
+                    type="button"
+                    onClick={handleExportSvg}
+                    disabled={!hasGeometry || isLoading}
+                    className="inline-flex items-center gap-1 rounded-sm border border-[#334155] bg-[#091A2C] px-2.5 py-1 text-[11px] font-semibold text-[#CBD5E1] hover:text-white disabled:opacity-40"
+                    title="Descargar SVG vectorial con capas visibles"
+                  >
+                    <Download className="h-3.5 w-3.5" />
+                    SVG
+                  </button>
 
-              <button
-                type="button"
-                onClick={handleExportPng}
-                disabled={!hasGeometry}
-                className="inline-flex items-center gap-1 rounded-sm border border-[#334155] bg-[#091A2C] px-2.5 py-1 text-[11px] font-semibold text-[#CBD5E1] hover:text-white disabled:opacity-40"
-                title="Descargar imagen PNG"
-              >
-                <ImageIcon className="h-3.5 w-3.5" />
-                PNG
-              </button>
+                  <button
+                    type="button"
+                    onClick={handleExportPng}
+                    disabled={!hasGeometry || isLoading}
+                    className="inline-flex items-center gap-1 rounded-sm border border-[#334155] bg-[#091A2C] px-2.5 py-1 text-[11px] font-semibold text-[#CBD5E1] hover:text-white disabled:opacity-40"
+                    title="Descargar imagen PNG con capas visibles"
+                  >
+                    <ImageIcon className="h-3.5 w-3.5" />
+                    PNG
+                  </button>
+                </>
+              )}
             </div>
           </div>
 
-          {/* Main Split: CAD Viewport + Optional Layers Drawer */}
+          {/* Main Split: CAD Viewport + Collapsible Toggleable Layers Drawer */}
           <div className="grid grid-cols-1 lg:grid-cols-12">
             <div
               className={`${
-                showLayersPanel ? 'lg:col-span-9' : 'lg:col-span-12'
+                showLayersPanel && activePlan ? 'lg:col-span-9' : 'lg:col-span-12'
               } relative overflow-hidden select-none`}
               style={{
                 backgroundColor: themeCfg.bgHex,
@@ -636,7 +955,13 @@ export const DwgPlanViewer: React.FC<DwgPlanViewerProps> = ({
               <div
                 ref={viewportRef}
                 onWheel={handleWheel}
-                onDoubleClick={handleResetView}
+                onDoubleClick={(e) => {
+                  if (zoomRef.current < 1.8) {
+                    zoomAnchoredAtViewportPoint(2.2, e.clientX, e.clientY);
+                  } else {
+                    handleResetView();
+                  }
+                }}
                 onPointerDown={handlePointerDown}
                 onPointerMove={handlePointerMove}
                 onPointerUp={handlePointerUp}
@@ -647,23 +972,31 @@ export const DwgPlanViewer: React.FC<DwgPlanViewerProps> = ({
                   const f = e.dataTransfer.files?.[0];
                   if (f) handleFile(f);
                 }}
-                className={`w-full flex items-center justify-center overflow-hidden ${
+                className={`w-full flex items-center justify-center overflow-hidden touch-none ${
                   isExpanded
                     ? 'h-[540px] sm:h-[640px]'
                     : compact
                     ? 'h-[320px] sm:h-[380px]'
-                    : 'h-[400px] sm:h-[500px]'
+                    : 'h-[420px] sm:h-[520px]'
                 } ${isDragging ? 'cursor-grabbing' : 'cursor-grab'}`}
               >
-                {hasGeometry ? (
+                {displayHasGeometry ? (
                   <div
-                    className="w-full h-full flex items-center justify-center p-4 transition-transform duration-75"
+                    className="w-full h-full flex items-center justify-center p-4 pointer-events-none"
                     style={{
-                      transform: `translate(${pan.x}px, ${pan.y}px) scale(${zoom})`,
+                      transform: `translate3d(${pan.x}px, ${pan.y}px, 0) scale(${zoom})`,
                       transformOrigin: 'center center',
+                      willChange: 'transform',
                     }}
-                    dangerouslySetInnerHTML={{ __html: renderedSvg }}
+                    dangerouslySetInnerHTML={{ __html: displaySvg }}
                   />
+                ) : isLoading ? (
+                  <div className={`text-center px-6 py-8 ${themeCfg.textClass}`}>
+                    <Loader2 className="mx-auto h-8 w-8 animate-spin text-[#38BDF8]" />
+                    <div className="mt-2.5 text-xs font-semibold">
+                      {loadProgress?.message || 'Preparando geometría CAD...'}
+                    </div>
+                  </div>
                 ) : (
                   <div
                     className={`max-w-md mx-auto text-center px-6 py-8 rounded-sm border border-dashed ${
@@ -687,102 +1020,183 @@ export const DwgPlanViewer: React.FC<DwgPlanViewerProps> = ({
                 )}
               </div>
 
+              {/* Interactive Corner Minimap (shown when zoomed in) */}
+              {showMinimap && activePlan && displayHasGeometry && zoom > 1.25 && (
+                <div
+                  onClick={handleMinimapNavigate}
+                  title="Haz clic para saltar a esta zona del plano"
+                  className="absolute bottom-3 right-3 z-20 w-36 h-24 rounded-sm border border-[#38BDF8]/60 shadow-lg overflow-hidden cursor-crosshair"
+                  style={{ backgroundColor: themeCfg.bgHex }}
+                >
+                  <div
+                    className="w-full h-full p-1 pointer-events-none opacity-85"
+                    dangerouslySetInnerHTML={{ __html: displaySvg }}
+                  />
+                  <div
+                    className="absolute border-2 border-[#38BDF8] bg-[#38BDF8]/15 pointer-events-none"
+                    style={minimapBoxStyle}
+                  />
+                </div>
+              )}
+
               {/* Corner CAD Hint */}
               <div className="pointer-events-none absolute bottom-2.5 left-3 rounded-sm bg-[#0F2942]/90 px-2.5 py-1 font-mono text-[10px] text-[#CBD5E1] shadow">
-                Arrastra para mover · Rueda para zoom · Doble clic para centrar
+                Arrastra / pellizca para mover · Rueda para zoom al cursor · Doble clic para ampliar/ajustar
               </div>
             </div>
 
-            {showLayersPanel && (
-              <aside className="lg:col-span-3 border-t lg:border-t-0 lg:border-l border-[#CBD5E1] bg-[#F8FAFC] flex flex-col max-h-[500px]">
-                <div className="flex items-center justify-between border-b border-[#E2E8F0] px-3 py-2.5 bg-white">
-                  <span className="text-xs font-bold text-[#0F2942]">Capas del Plano</span>
-                  <div className="flex items-center gap-1.5 text-[11px]">
-                    <button
-                      type="button"
-                      onClick={() => setHiddenLayers(new Set())}
-                      className="font-semibold text-[#0284C7] hover:underline"
-                    >
-                      Todas
-                    </button>
-                    <span className="text-[#CBD5E1]">|</span>
-                    <button
-                      type="button"
-                      onClick={() =>
-                        setHiddenLayers(new Set(activePlan.layers.map((l) => l.name)))
-                      }
-                      className="font-semibold text-[#64748B] hover:underline"
-                    >
-                      Ninguna
-                    </button>
+            {showLayersPanel && activePlan && (
+              <aside className="lg:col-span-3 border-t lg:border-t-0 lg:border-l border-[#CBD5E1] bg-[#F8FAFC] flex flex-col max-h-[520px]">
+                <div className="border-b border-[#E2E8F0] px-3 py-2.5 bg-white space-y-2">
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="text-xs font-bold text-[#0F2942]">
+                      Capas ({visibleLayerCount}/{activePlan.layers.length})
+                    </span>
+                    <div className="flex items-center gap-1.5 text-[11px]">
+                      <button
+                        type="button"
+                        onClick={showAllLayers}
+                        className="font-semibold text-[#0284C7] hover:underline"
+                      >
+                        Todas
+                      </button>
+                      <span className="text-[#CBD5E1]">|</span>
+                      <button
+                        type="button"
+                        onClick={hideAllLayers}
+                        className="font-semibold text-[#64748B] hover:underline"
+                      >
+                        Ninguna
+                      </button>
+                      <span className="text-[#CBD5E1]">|</span>
+                      <button
+                        type="button"
+                        onClick={invertLayers}
+                        className="font-semibold text-[#0F2942] hover:underline"
+                      >
+                        Invertir
+                      </button>
+                    </div>
                   </div>
+
+                  {activePlan.layers.length > 5 && (
+                    <div className="relative">
+                      <Search className="pointer-events-none absolute left-2 top-1/2 -translate-y-1/2 h-3 w-3 text-[#64748B]" />
+                      <input
+                        type="text"
+                        value={layerSearch}
+                        onChange={(e) => setLayerSearch(e.target.value)}
+                        placeholder="Filtrar capa..."
+                        aria-label="Filtrar capa del plano"
+                        className="w-full rounded-sm border border-[#CBD5E1] bg-[#F8FAFC] pl-6 pr-6 py-1 text-[11px] text-[#0D1C2F] placeholder:text-[#94A3B8]"
+                      />
+                      {layerSearch && (
+                        <button
+                          type="button"
+                          onClick={() => setLayerSearch('')}
+                          aria-label="Limpiar filtro de capas"
+                          className="absolute right-1.5 top-1/2 -translate-y-1/2 text-[#64748B] hover:text-[#0F2942]"
+                        >
+                          <X className="h-3 w-3" />
+                        </button>
+                      )}
+                    </div>
+                  )}
                 </div>
 
                 <div className="flex-1 overflow-y-auto divide-y divide-[#E2E8F0]">
-                  {activePlan.layers.map((layer) => {
-                    const isHidden = hiddenLayers.has(layer.name);
-                    return (
-                      <button
-                        key={layer.name}
-                        type="button"
-                        onClick={() => toggleLayer(layer.name)}
-                        className={`w-full flex items-center justify-between gap-2 px-3 py-2 text-left text-xs transition-colors ${
-                          isHidden
-                            ? 'bg-[#F1F5F9] text-[#94A3B8]'
-                            : 'bg-white text-[#0D1C2F] hover:bg-[#EFF4FF]'
-                        }`}
-                      >
-                        <div className="flex items-center gap-2 min-w-0">
-                          <span
-                            className="h-2.5 w-2.5 rounded-full shrink-0 border border-black/15"
-                            style={{ backgroundColor: layer.colorHex }}
-                          />
-                          <span className="truncate font-medium">{layer.name}</span>
+                  {filteredLayers.length === 0 ? (
+                    <div className="px-3 py-6 text-center text-[11px] text-[#64748B]">
+                      No hay capas que coincidan con "{layerSearch}".
+                    </div>
+                  ) : (
+                    filteredLayers.map((layer) => {
+                      const isHidden = hiddenLayers.has(layer.name);
+                      return (
+                        <div
+                          key={layer.name}
+                          className={`group flex items-center justify-between gap-1.5 px-2.5 py-2 text-xs transition-colors ${
+                            isHidden
+                              ? 'bg-[#F1F5F9] text-[#94A3B8]'
+                              : 'bg-white text-[#0D1C2F] hover:bg-[#EFF4FF]'
+                          }`}
+                        >
+                          <button
+                            type="button"
+                            onClick={() => toggleLayer(layer.name)}
+                            aria-pressed={!isHidden}
+                            aria-label={`${isHidden ? 'Mostrar' : 'Ocultar'} capa ${layer.name}`}
+                            className="flex flex-1 items-center gap-2 min-w-0 text-left"
+                          >
+                            <span
+                              className="h-2.5 w-2.5 rounded-full shrink-0 border border-black/15"
+                              style={{ backgroundColor: layer.colorHex }}
+                            />
+                            <span className="truncate font-medium">{layer.name}</span>
+                          </button>
+
+                          <div className="flex items-center gap-1.5 shrink-0">
+                            <button
+                              type="button"
+                              onClick={() => isolateLayer(layer.name)}
+                              title={`Mostrar solo la capa ${layer.name}`}
+                              className="rounded-sm border border-[#CBD5E1] bg-white px-1.5 py-0.5 font-mono text-[9px] font-semibold text-[#475569] hover:border-[#0284C7] hover:text-[#0284C7] opacity-70 group-hover:opacity-100"
+                            >
+                              Solo
+                            </button>
+                            <span className="font-mono text-[10px] text-[#64748B] tabular-nums min-w-[24px] text-right">
+                              {layer.entityCount}
+                            </span>
+                            <button
+                              type="button"
+                              onClick={() => toggleLayer(layer.name)}
+                              aria-label={`${isHidden ? 'Activar' : 'Desactivar'} capa ${layer.name}`}
+                              className="p-0.5"
+                            >
+                              {isHidden ? (
+                                <EyeOff className="h-3.5 w-3.5 text-[#94A3B8]" />
+                              ) : (
+                                <Eye className="h-3.5 w-3.5 text-[#0284C7]" />
+                              )}
+                            </button>
+                          </div>
                         </div>
-                        <div className="flex items-center gap-2 shrink-0">
-                          <span className="font-mono text-[10px] text-[#64748B] tabular-nums">
-                            {layer.entityCount}
-                          </span>
-                          {isHidden ? (
-                            <EyeOff className="h-3.5 w-3.5 text-[#94A3B8]" />
-                          ) : (
-                            <Eye className="h-3.5 w-3.5 text-[#0284C7]" />
-                          )}
-                        </div>
-                      </button>
-                    );
-                  })}
+                      );
+                    })
+                  )}
                 </div>
               </aside>
             )}
           </div>
 
           {/* Footer Entity Summary */}
-          <div className="flex flex-wrap items-center justify-between gap-2 border-t border-[#E2E8F0] bg-[#F8FAFC] px-4 py-2 text-[11px] text-[#43474D]">
-            <div className="flex flex-wrap items-center gap-1.5">
-              <span className="font-semibold text-[#0F2942]">Entidades:</span>
-              {entityChips.length > 0 ? (
-                entityChips.map(([type, count]) => (
-                  <span
-                    key={type}
-                    className="rounded-sm border border-[#CBD5E1] bg-white px-1.5 py-0.5 font-mono text-[10px] text-[#334155]"
-                  >
-                    {type}: {count}
+          {activePlan && (
+            <div className="flex flex-wrap items-center justify-between gap-2 border-t border-[#E2E8F0] bg-[#F8FAFC] px-4 py-2 text-[11px] text-[#43474D]">
+              <div className="flex flex-wrap items-center gap-1.5">
+                <span className="font-semibold text-[#0F2942]">Entidades:</span>
+                {entityChips.length > 0 ? (
+                  entityChips.map(([type, count]) => (
+                    <span
+                      key={type}
+                      className="rounded-sm border border-[#CBD5E1] bg-white px-1.5 py-0.5 font-mono text-[10px] text-[#334155]"
+                    >
+                      {type}: {count}
+                    </span>
+                  ))
+                ) : (
+                  <span>Sin resumen</span>
+                )}
+                {activePlan.unknownEntityCount > 0 && (
+                  <span className="font-mono text-[10px] text-[#B45309]">
+                    ({activePlan.unknownEntityCount} objetos no estándar omitidos)
                   </span>
-                ))
-              ) : (
-                <span>Sin resumen</span>
-              )}
-              {activePlan.unknownEntityCount > 0 && (
-                <span className="font-mono text-[10px] text-[#B45309]">
-                  ({activePlan.unknownEntityCount} objetos no estándar omitidos)
-                </span>
-              )}
+                )}
+              </div>
+              <span className="font-mono text-[10px] text-[#64748B]">
+                LibreDWG WASM · Carga Progresiva por Capas
+              </span>
             </div>
-            <span className="font-mono text-[10px] text-[#64748B]">
-              LibreDWG WASM · Procesamiento Local
-            </span>
-          </div>
+          )}
         </>
       )}
     </div>

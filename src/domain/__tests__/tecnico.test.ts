@@ -31,6 +31,8 @@ function buildSnapshotBase(): EstadoEmpresaSnapshot {
       baseLon: -69.9312,
       planMensualRD: 14500,
       estadoSuscripcion: 'activa',
+      zonaHoraria: 'America/Santo_Domingo',
+      moneda: 'RD$',
       fechaAlta: '2026-01-15',
     },
     membresias: [
@@ -384,6 +386,13 @@ describe('Aislamiento estricto y SnapshotTecnico (proyectarSnapshotParaRol)', ()
     expect(tecSnap.rutas[0].routeSummary).toBeDefined();
     expect('fuelRD' in (tecSnap.rutas[0].routeSummary ?? {})).toBe(false);
     expect('tollsRD' in (tecSnap.rutas[0].routeSummary ?? {})).toBe(false);
+
+    // Cargos activos y reglas no financieras de captura para técnico
+    expect(tecSnap.cargos.length).toBeGreaterThanOrEqual(4);
+    expect(tecSnap.reglasCapturaViaticos.gpsRuta.minimoKm).toBe(12);
+    expect(tecSnap.reglasCapturaViaticos.gpsRuta.tarifaPorKmRD).toBe(26.5);
+    expect(tecSnap.reglasCapturaViaticos.gpsRuta.conceptoDistancia).toBe('ida_vuelta');
+    expect('tarifaBaseRD' in tecSnap).toBe(false);
   });
 
   it('Admin y Coordinador reciben el snapshot completo sin recortes', () => {

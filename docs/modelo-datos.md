@@ -9,7 +9,8 @@ Este documento describe el esquema relacional y las políticas de Row-Level Secu
 ```sql
 create type rol_empresa as enum ('admin', 'coordinador', 'tecnico');
 
-create type cargo_personal as enum ('tecnico', 'ingeniero', 'jefe_brigada', 'chofer');
+-- Nota A1: `cargo_personal` pasa de enum cerrado a texto referenciado a `cargos_empresa(empresa_id, codigo)`
+-- para permitir cargos extensibles conservando los cuatro códigos base ('tecnico', 'ingeniero', 'jefe_brigada', 'chofer').
 
 create type estado_recurso as enum ('disponible', 'en_mantenimiento', 'fuera_servicio');
 
@@ -50,7 +51,19 @@ create table empresas (
   base_lon double precision not null,
   plan_mensual_rd numeric(12,2) not null default 0,
   estado_suscripcion text not null default 'activa' check (estado_suscripcion in ('activa', 'prueba', 'suspendida')),
+  zona_horaria text not null default 'America/Santo_Domingo',
+  moneda text not null default 'RD$',
   fecha_alta date not null default current_date
+);
+
+create table cargos_empresa (
+  id uuid primary key default gen_random_uuid(),
+  empresa_id uuid not null references empresas(id) on delete cascade,
+  codigo text not null,
+  etiqueta text not null,
+  es_base boolean not null default false,
+  activo boolean not null default true,
+  unique (empresa_id, codigo)
 );
 
 create table usuarios (
@@ -65,9 +78,10 @@ create table personal (
   empresa_id uuid not null references empresas(id) on delete cascade,
   usuario_id uuid references usuarios(id) on delete set null,
   nombre text not null,
-  cargo cargo_personal not null,
+  cargo text not null,
   telefono text,
-  activo boolean not null default true
+  activo boolean not null default true,
+  foreign key (empresa_id, cargo) references cargos_empresa(empresa_id, codigo) on update cascade on delete restrict
 );
 
 create table membresias_empresa (
@@ -85,6 +99,7 @@ create table vehiculos (
   empresa_id uuid not null references empresas(id) on delete cascade,
   etiqueta text not null,
   placa text not null,
+  tipo_combustible_id text,
   tipo_combustible text not null,
   precio_galon_rd numeric(10,2) not null,
   km_por_gal numeric(8,2) not null,
@@ -168,6 +183,9 @@ create table servicios (
   tipo_servicio_id text not null,
   nombre text not null,
   cotizacion_rd numeric(12,2) not null,
+  config_version integer,
+  tarifa_base_usada_rd numeric(12,2),
+  recargos_usados_rd numeric(12,2),
   estado estado_servicio not null default 'cotizado',
   fecha_real_inicio date,
   fecha_real_fin date,
@@ -224,6 +242,9 @@ create table viaticos (
   metodo metodo_viatico not null,
   gps_coords_json jsonb,
   distance_km numeric(8,2),
+  config_version integer,
+  tarifa_usada_rd numeric(12,2),
+  concepto_distancia_usado text check (concepto_distancia_usado in ('ida_vuelta', 'solo_ida')),
   comprobante_storage_path text,
   estado_aprobacion estado_aprobacion_viatico not null default 'pendiente',
   motivo_rechazo text,
@@ -241,6 +262,38 @@ create table viatico_repartos (
   proyecto_id uuid references proyectos(id) on delete cascade, -- NULL representa 'sin_asignar'
   monto_rd numeric(12,2) not null check (monto_rd >= 0),
   unique (viatico_id, proyecto_id)
+);
+
+create table configuracion_empresa (
+  id uuid primary key default gen_random_uuid(),
+  empresa_id uuid not null references empresas(id) on delete cascade,
+  clave text not null, -- ej. 'categorias_viatico', 'catalogo_servicios', 'catalogo_combustibles'
+  valor jsonb not null,
+  vigencia_desde date not null default '2026-01-01',
+  updated_at timestamptz not null default now(),
+  unique (empresa_id, clave, vigencia_desde)
+);
+
+create table tarifas (
+  id uuid primary key default gen_random_uuid(),
+  empresa_id uuid not null references empresas(id) on delete cascade,
+  concepto text not null, -- ej. 'combustible:diesel_optimo', 'servicio:deslinde', 'factores_terreno', 'reglas_viaticos'
+  version integer not null check (version >= 1),
+  valor jsonb not null,
+  vigencia_desde date not null,
+  creado_por_usuario_id uuid references usuarios(id),
+  created_at timestamptz not null default now(),
+  unique (empresa_id, concepto, version),
+  unique (empresa_id, concepto, vigencia_desde) -- Evita solapamiento de vigencias en la misma fecha
+);
+
+create table onboarding_empresa (
+  empresa_id uuid primary key references empresas(id) on delete cascade,
+  paso_actual text not null default 'empresa',
+  pasos_json jsonb not null,
+  cerrado_en_hoy boolean not null default false,
+  completado_en timestamptz,
+  updated_at timestamptz not null default now()
 );
 
 create table historial_eventos (
@@ -266,6 +319,8 @@ create index idx_asignaciones_rango on asignaciones (empresa_id, fecha_inicio, f
 create index idx_viaticos_empresa_estado on viaticos (empresa_id, estado_aprobacion, fecha_iso);
 create index idx_repartos_proyecto on viatico_repartos (empresa_id, proyecto_id);
 create index idx_historial_empresa on historial_eventos (empresa_id, fecha_ast desc);
+create index idx_tarifas_vigencia on tarifas (empresa_id, concepto, vigencia_desde desc);
+create index idx_cargos_empresa on cargos_empresa (empresa_id, activo);
 ```
 
 ## 4. Políticas RLS (Row-Level Security) por `empresa_id` y `rol`
@@ -300,10 +355,13 @@ $$;
 
 Políticas base:
 - **Todas las tablas multi-tenant** habilitan `alter table ... enable row level security;`.
-- **`admin`**: lectura/escritura completa en su `empresa_id`, incluida la tabla `empresas` y `membresias_empresa`.
-- **`coordinador`**: lectura/escritura operativa en su `empresa_id` (`clientes`, `proyectos`, `rutas`, `servicios`, `asignaciones`, `personal`, `vehiculos`, `equipos_gnss`, `cuadrillas`, `viaticos`, `viatico_repartos`, `historial_eventos`).
+- **`admin`**: lectura/escritura completa en su `empresa_id`, incluidas `empresas`, `membresias_empresa`, `cargos_empresa`, `configuracion_empresa`, `tarifas` y `onboarding_empresa`. Los campos de suscripción (`plan_mensual_rd`, `estado_suscripcion`) se protegen mediante trigger/privilegios de servidor para que no puedan alterarse desde el cliente.
+- **`coordinador`**:
+  - Lectura/escritura operativa en su `empresa_id` (`clientes`, `proyectos`, `rutas`, `servicios`, `asignaciones`, `personal`, `vehiculos`, `equipos_gnss`, `cuadrillas`, `viaticos`, `viatico_repartos`, `historial_eventos`).
+  - Solo lectura (`SELECT`) sobre `cargos_empresa`, `configuracion_empresa` y `tarifas` para servicios, terreno y combustibles; sin escritura en configuración ni onboarding.
 - **`tecnico`**:
   - `SELECT` en `rutas`, `servicios`, `bitacoras` filtrado por `app_es_ruta_asignada_a_usuario(ruta_id)`.
   - `UPDATE` en `servicios` restringido a cambios `programado -> en_campo -> procesando` en rutas asignadas.
   - `INSERT` en `bitacoras` únicamente sobre servicios en rutas asignadas.
   - `SELECT` / `INSERT` en `viaticos` donde `creado_por_usuario_id = auth.uid()`; sin permisos de aprobación/rechazo ni eliminación de aprobados.
+  - `SELECT` únicamente sobre `cargos_empresa` (etiquetas activas) y proyección segura de reglas no financieras de captura (`gpsRuta` y presets rápidos). Sin acceso a `tarifas` de servicios/combustible ni `onboarding_empresa`.

@@ -1,30 +1,33 @@
 import React, { useState } from 'react';
-import { Building2, Car, Compass, Plus, Shield, UserCheck, Users, Wrench } from 'lucide-react';
-import { puedeGestionarCatalogos, puedeGestionarEmpresa } from '../domain';
+import { Building2, Car, Compass, Plus, UserCheck, Users, Wrench } from 'lucide-react';
+import {
+  puedeGestionarCatalogos,
+  resolverEtiquetaCargo,
+  type CombustibleVigente,
+} from '../domain';
 import type {
+  CargoConfig,
   CargoPersonal,
   Cliente,
   Cuadrilla,
-  Empresa,
   EquipoGNSS,
   EstadoRecurso,
-  MembresiaEmpresa,
   Personal,
   RolEmpresa,
-  Usuario,
   Vehiculo,
 } from '../types/domain';
+import { formatRD } from '../utils/geodesy';
 
 interface CatalogosViewProps {
   rol: RolEmpresa;
-  empresa: Empresa;
-  membresias: MembresiaEmpresa[];
-  usuarios: Usuario[];
   clientes: Cliente[];
   personal: Personal[];
+  cargos: CargoConfig[];
   vehiculos: Vehiculo[];
+  combustiblesVigentes: CombustibleVigente[];
   equipos: EquipoGNSS[];
   cuadrillas: Cuadrilla[];
+  moneda?: string;
   onCrearCliente: (datos: Omit<Cliente, 'id' | 'empresaId'>) => Promise<void>;
   onGuardarPersonal: (
     item: Omit<Personal, 'id' | 'empresaId'> & { id?: string }
@@ -38,38 +41,29 @@ interface CatalogosViewProps {
   onGuardarCuadrilla: (
     item: Omit<Cuadrilla, 'id' | 'empresaId'> & { id?: string }
   ) => Promise<void>;
-  onActualizarEmpresa: (empresa: Empresa) => Promise<void>;
-  onGuardarMembresiaUsuario: (params: {
-    email: string;
-    nombre: string;
-    rol: RolEmpresa;
-    personalId?: string;
-    activo: boolean;
-  }) => Promise<void>;
 }
 
-type SubTab = 'clientes' | 'personal' | 'vehiculos' | 'equipos' | 'cuadrillas' | 'empresa';
+type SubTab = 'clientes' | 'personal' | 'vehiculos' | 'equipos' | 'cuadrillas';
 
 export const CatalogosView: React.FC<CatalogosViewProps> = ({
   rol,
-  empresa,
-  membresias,
-  usuarios,
   clientes,
   personal,
+  cargos,
   vehiculos,
+  combustiblesVigentes,
   equipos,
   cuadrillas,
+  moneda = 'RD$',
   onCrearCliente,
   onGuardarPersonal,
   onGuardarVehiculo,
   onGuardarEquipo,
   onGuardarCuadrilla,
-  onActualizarEmpresa,
-  onGuardarMembresiaUsuario,
 }) => {
   const canManageCatalogs = puedeGestionarCatalogos(rol);
-  const isAdmin = puedeGestionarEmpresa(rol);
+  const cargosActivos = cargos.filter((c) => c.activo);
+  const combustiblesActivos = combustiblesVigentes.filter((c) => c.activo);
 
   const [subTab, setSubTab] = useState<SubTab>('personal');
   const [error, setError] = useState<string | null>(null);
@@ -82,13 +76,24 @@ export const CatalogosView: React.FC<CatalogosViewProps> = ({
 
   // Personal form
   const [perNombre, setPerNombre] = useState('');
-  const [perCargo, setPerCargo] = useState<CargoPersonal>('tecnico');
+  const [perCargo, setPerCargo] = useState<CargoPersonal>(
+    cargosActivos[0]?.codigo ?? 'tecnico'
+  );
   const [perTelefono, setPerTelefono] = useState('');
 
-  // Vehiculo form
+  // Vehiculo form & edición inline
   const [vehEtiqueta, setVehEtiqueta] = useState('');
   const [vehPlaca, setVehPlaca] = useState('');
+  const [vehCombId, setVehCombId] = useState(
+    combustiblesActivos[0]?.id ?? combustiblesVigentes[0]?.id ?? ''
+  );
   const [vehKmGal, setVehKmGal] = useState('34');
+  const [vehMantKm, setVehMantKm] = useState('9.5');
+
+  const [editingVehId, setEditingVehId] = useState<string | null>(null);
+  const [editVehCombId, setEditVehCombId] = useState('');
+  const [editVehKmGal, setEditVehKmGal] = useState('');
+  const [editVehMantKm, setEditVehMantKm] = useState('');
 
   // Equipo form
   const [eqNombre, setEqNombre] = useState('');
@@ -100,18 +105,6 @@ export const CatalogosView: React.FC<CatalogosViewProps> = ({
     personal.find((p) => p.activo)?.id || personal[0]?.id || ''
   );
   const [cuaMiembros, setCuaMiembros] = useState<string[]>([]);
-
-  // Empresa form (Admin)
-  const [empNombre, setEmpNombre] = useState(empresa.nombre);
-  const [empRnc, setEmpRnc] = useState(empresa.rnc);
-  const [empDireccion, setEmpDireccion] = useState(empresa.direccionBase);
-  const [empPlan, setEmpPlan] = useState(String(empresa.planMensualRD));
-
-  // Usuario/Membresia form (Admin)
-  const [usrEmail, setUsrEmail] = useState('');
-  const [usrNombre, setUsrNombre] = useState('');
-  const [usrRol, setUsrRol] = useState<RolEmpresa>('tecnico');
-  const [usrPersonalId, setUsrPersonalId] = useState('');
 
   const notify = (msg: string) => {
     setError(null);
@@ -173,9 +166,6 @@ export const CatalogosView: React.FC<CatalogosViewProps> = ({
             { id: 'vehiculos', label: `Vehículos (${vehiculos.length})`, icon: Car },
             { id: 'equipos', label: `Equipos GNSS (${equipos.length})`, icon: Compass },
             { id: 'clientes', label: `Clientes (${clientes.length})`, icon: Building2 },
-            ...(isAdmin
-              ? [{ id: 'empresa' as const, label: 'Empresa y Usuarios (Admin)', icon: Shield }]
-              : []),
           ] as const
         ).map((tab) => {
           const Icon = tab.icon;
@@ -212,15 +202,42 @@ export const CatalogosView: React.FC<CatalogosViewProps> = ({
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-4">
           <div className="lg:col-span-8 rounded-md border border-[#E2E8F0] bg-white divide-y divide-[#E2E8F0]">
             {personal.map((p) => (
-              <div key={p.id} className="p-3.5 flex items-center justify-between gap-3 text-xs">
+              <div key={p.id} className="p-3.5 flex flex-wrap items-center justify-between gap-3 text-xs">
                 <div>
                   <div className="font-bold text-[#0D1C2F]">{p.nombre}</div>
                   <div className="text-[11px] text-[#43474D]">
-                    Cargo: <span className="font-semibold uppercase">{p.cargo}</span>
+                    Cargo:{' '}
+                    <span className="font-semibold">
+                      {resolverEtiquetaCargo(p.cargo, cargos)}
+                    </span>
                     {p.telefono ? ` · ${p.telefono}` : ''}
                   </div>
                 </div>
                 <div className="flex items-center gap-2 shrink-0">
+                  {canManageCatalogs && (
+                    <select
+                      aria-label={`Cargo de ${p.nombre}`}
+                      value={p.cargo}
+                      onChange={async (e) => {
+                        try {
+                          await onGuardarPersonal({ ...p, cargo: e.target.value });
+                          notify(`Cargo de ${p.nombre} actualizado.`);
+                        } catch (err: unknown) {
+                          setError(err instanceof Error ? err.message : 'Error actualizando cargo.');
+                        }
+                      }}
+                      className="rounded-sm border border-[#CBD5E1] bg-white px-2 py-1 text-[11px] font-medium"
+                    >
+                      {cargosActivos.map((c) => (
+                        <option key={c.codigo} value={c.codigo}>
+                          {c.etiqueta}
+                        </option>
+                      ))}
+                      {!cargosActivos.some((c) => c.codigo === p.cargo) && (
+                        <option value={p.cargo}>{resolverEtiquetaCargo(p.cargo, cargos)}</option>
+                      )}
+                    </select>
+                  )}
                   <span
                     className={`rounded-sm border px-2 py-0.5 text-[11px] font-semibold ${
                       p.activo
@@ -278,10 +295,11 @@ export const CatalogosView: React.FC<CatalogosViewProps> = ({
                 onChange={(e) => setPerCargo(e.target.value as CargoPersonal)}
                 className="w-full rounded-sm border border-[#CBD5E1] bg-white px-3 py-2"
               >
-                <option value="tecnico">Técnico</option>
-                <option value="ingeniero">Ingeniero</option>
-                <option value="jefe_brigada">Jefe de Brigada</option>
-                <option value="chofer">Chofer</option>
+                {cargosActivos.map((c) => (
+                  <option key={c.codigo} value={c.codigo}>
+                    {c.etiqueta}
+                  </option>
+                ))}
               </select>
               <input
                 type="text"
@@ -390,7 +408,7 @@ export const CatalogosView: React.FC<CatalogosViewProps> = ({
                     .filter((p) => p.activo)
                     .map((p) => (
                       <option key={p.id} value={p.id}>
-                        {p.nombre} ({p.cargo})
+                        {p.nombre} ({resolverEtiquetaCargo(p.cargo, cargos)})
                       </option>
                     ))}
                 </select>
@@ -432,53 +450,155 @@ export const CatalogosView: React.FC<CatalogosViewProps> = ({
       {subTab === 'vehiculos' && (
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-4">
           <div className="lg:col-span-8 space-y-2.5">
-            {vehiculos.map((v) => (
-              <div
-                key={v.id}
-                className="rounded-md border border-[#CBD5E1] bg-white p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs"
-              >
-                <div>
-                  <div className="font-bold text-[#0D1C2F]">
-                    {v.etiqueta} <span className="font-mono text-[#0284C7]">({v.placa})</span>
+            {vehiculos.map((v) => {
+              const isEditing = editingVehId === v.id;
+              return (
+                <div
+                  key={v.id}
+                  className="rounded-md border border-[#CBD5E1] bg-white p-4 space-y-3 text-xs"
+                >
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                    <div>
+                      <div className="font-bold text-[#0D1C2F]">
+                        {v.etiqueta}{' '}
+                        <span className="font-mono text-[#0284C7]">({v.placa})</span>
+                      </div>
+                      <div className="font-mono text-[11px] text-[#43474D]">
+                        {v.tipoCombustible} · {v.kmPorGal} km/gal ·{' '}
+                        {formatRD(v.precioGalonRD, moneda)}/gal · Mant.{' '}
+                        {formatRD(v.mantenimientoPorKmRD, moneda)}/km
+                      </div>
+                    </div>
+                    {canManageCatalogs ? (
+                      <div className="flex items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            if (isEditing) {
+                              setEditingVehId(null);
+                            } else {
+                              setEditingVehId(v.id);
+                              setEditVehCombId(
+                                v.tipoCombustibleId ||
+                                  combustiblesVigentes.find((c) => c.nombre === v.tipoCombustible)?.id ||
+                                  combustiblesVigentes[0]?.id ||
+                                  ''
+                              );
+                              setEditVehKmGal(String(v.kmPorGal));
+                              setEditVehMantKm(String(v.mantenimientoPorKmRD));
+                            }
+                          }}
+                          className="rounded-sm border border-[#CBD5E1] bg-white px-2.5 py-1.5 text-[11px] font-semibold text-[#334155] hover:bg-[#F8FAFC] whitespace-nowrap"
+                        >
+                          {isEditing ? 'Cerrar' : 'Editar tarifas'}
+                        </button>
+                        <div className="flex items-center gap-1.5">
+                          <Wrench className="h-3.5 w-3.5 text-[#43474D]" />
+                          <select
+                            value={v.estado}
+                            onChange={(e) =>
+                              handleToggleVehiculoEstado(v, e.target.value as EstadoRecurso)
+                            }
+                            className="rounded-sm border border-[#CBD5E1] bg-white px-2.5 py-1.5 text-xs font-semibold"
+                          >
+                            <option value="disponible">Disponible</option>
+                            <option value="en_mantenimiento">En mantenimiento</option>
+                            <option value="fuera_servicio">Fuera de servicio</option>
+                          </select>
+                        </div>
+                      </div>
+                    ) : (
+                      <span className="font-mono font-semibold">{v.estado}</span>
+                    )}
                   </div>
-                  <div className="font-mono text-[11px] text-[#43474D]">
-                    {v.tipoCombustible} · {v.kmPorGal} km/gal · RD$ {v.precioGalonRD}/gal
-                  </div>
+
+                  {isEditing && canManageCatalogs && (
+                    <div className="border-t border-[#E2E8F0] pt-3 grid grid-cols-1 sm:grid-cols-4 gap-2 items-end">
+                      <label className="block">
+                        <span className="text-[11px] font-semibold text-[#43474D]">Combustible</span>
+                        <select
+                          value={editVehCombId}
+                          onChange={(e) => setEditVehCombId(e.target.value)}
+                          className="mt-1 w-full rounded-sm border border-[#CBD5E1] bg-white px-2 py-1.5 text-xs"
+                        >
+                          {combustiblesVigentes.map((c) => (
+                            <option key={c.id} value={c.id}>
+                              {c.nombre} ({formatRD(c.precioGalonRD, moneda)}/gal)
+                            </option>
+                          ))}
+                        </select>
+                      </label>
+                      <label className="block">
+                        <span className="text-[11px] font-semibold text-[#43474D]">km / galón</span>
+                        <input
+                          type="number"
+                          step="0.5"
+                          min={1}
+                          value={editVehKmGal}
+                          onChange={(e) => setEditVehKmGal(e.target.value)}
+                          className="mt-1 w-full rounded-sm border border-[#CBD5E1] px-2 py-1.5 font-mono text-xs"
+                        />
+                      </label>
+                      <label className="block">
+                        <span className="text-[11px] font-semibold text-[#43474D]">Mant. / km ({moneda})</span>
+                        <input
+                          type="number"
+                          step="0.5"
+                          min={0}
+                          value={editVehMantKm}
+                          onChange={(e) => setEditVehMantKm(e.target.value)}
+                          className="mt-1 w-full rounded-sm border border-[#CBD5E1] px-2 py-1.5 font-mono text-xs"
+                        />
+                      </label>
+                      <button
+                        type="button"
+                        onClick={async () => {
+                          const fuel = combustiblesVigentes.find((c) => c.id === editVehCombId);
+                          try {
+                            await onGuardarVehiculo({
+                              ...v,
+                              tipoCombustibleId: fuel?.id ?? v.tipoCombustibleId,
+                              tipoCombustible: fuel?.nombre ?? v.tipoCombustible,
+                              precioGalonRD: fuel?.precioGalonRD ?? v.precioGalonRD,
+                              kmPorGal: Number(editVehKmGal),
+                              mantenimientoPorKmRD: Number(editVehMantKm),
+                            });
+                            setEditingVehId(null);
+                            notify(`Parámetros de ${v.etiqueta} actualizados.`);
+                          } catch (err: unknown) {
+                            setError(err instanceof Error ? err.message : 'Error actualizando vehículo.');
+                          }
+                        }}
+                        className="rounded-sm bg-[#0F2942] px-3 py-1.5 font-semibold text-white hover:bg-[#0284C7]"
+                      >
+                        Guardar
+                      </button>
+                    </div>
+                  )}
                 </div>
-                {canManageCatalogs ? (
-                  <div className="flex items-center gap-1.5">
-                    <Wrench className="h-3.5 w-3.5 text-[#43474D]" />
-                    <select
-                      value={v.estado}
-                      onChange={(e) =>
-                        handleToggleVehiculoEstado(v, e.target.value as EstadoRecurso)
-                      }
-                      className="rounded-sm border border-[#CBD5E1] bg-white px-2.5 py-1.5 text-xs font-semibold"
-                    >
-                      <option value="disponible">Disponible</option>
-                      <option value="en_mantenimiento">En mantenimiento</option>
-                      <option value="fuera_servicio">Fuera de servicio</option>
-                    </select>
-                  </div>
-                ) : (
-                  <span className="font-mono font-semibold">{v.estado}</span>
-                )}
-              </div>
-            ))}
+              );
+            })}
           </div>
 
           {canManageCatalogs && (
             <form
               onSubmit={async (e) => {
                 e.preventDefault();
+                const fuel =
+                  combustiblesVigentes.find((c) => c.id === vehCombId) ?? combustiblesVigentes[0];
+                if (!fuel) {
+                  setError('Configura al menos un tipo de combustible en Configuración primero.');
+                  return;
+                }
                 try {
                   await onGuardarVehiculo({
                     etiqueta: vehEtiqueta,
                     placa: vehPlaca,
-                    tipoCombustible: 'Diésel Óptimo',
-                    precioGalonRD: 239.1,
-                    kmPorGal: Number(vehKmGal) || 34,
-                    mantenimientoPorKmRD: 9.5,
+                    tipoCombustibleId: fuel.id,
+                    tipoCombustible: fuel.nombre,
+                    precioGalonRD: fuel.precioGalonRD,
+                    kmPorGal: Number(vehKmGal),
+                    mantenimientoPorKmRD: Number(vehMantKm),
                     estado: 'disponible',
                   });
                   setVehEtiqueta('');
@@ -507,14 +627,46 @@ export const CatalogosView: React.FC<CatalogosViewProps> = ({
                 onChange={(e) => setVehPlaca(e.target.value)}
                 className="w-full rounded-sm border border-[#CBD5E1] px-3 py-2 font-mono"
               />
-              <input
-                type="number"
-                min={5}
-                placeholder="Rendimiento (km/gal)"
-                value={vehKmGal}
-                onChange={(e) => setVehKmGal(e.target.value)}
-                className="w-full rounded-sm border border-[#CBD5E1] px-3 py-2 font-mono"
-              />
+              <label className="block">
+                <span className="text-[11px] font-semibold text-[#334155]">Tipo de combustible vigente</span>
+                <select
+                  value={vehCombId}
+                  onChange={(e) => setVehCombId(e.target.value)}
+                  className="mt-1 w-full rounded-sm border border-[#CBD5E1] bg-white px-3 py-2"
+                >
+                  {combustiblesActivos.map((c) => (
+                    <option key={c.id} value={c.id}>
+                      {c.nombre} ({formatRD(c.precioGalonRD, moneda)}/gal)
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <div className="grid grid-cols-2 gap-2">
+                <label className="block">
+                  <span className="text-[11px] font-semibold text-[#334155]">Rendimiento (km/gal)</span>
+                  <input
+                    type="number"
+                    min={1}
+                    step="0.5"
+                    required
+                    value={vehKmGal}
+                    onChange={(e) => setVehKmGal(e.target.value)}
+                    className="mt-1 w-full rounded-sm border border-[#CBD5E1] px-3 py-2 font-mono"
+                  />
+                </label>
+                <label className="block">
+                  <span className="text-[11px] font-semibold text-[#334155]">Mant./km ({moneda})</span>
+                  <input
+                    type="number"
+                    min={0}
+                    step="0.5"
+                    required
+                    value={vehMantKm}
+                    onChange={(e) => setVehMantKm(e.target.value)}
+                    className="mt-1 w-full rounded-sm border border-[#CBD5E1] px-3 py-2 font-mono"
+                  />
+                </label>
+              </div>
               <button
                 type="submit"
                 className="w-full inline-flex items-center justify-center gap-1.5 rounded-sm bg-[#0F2942] py-2 font-semibold text-white hover:bg-[#0284C7]"
@@ -680,169 +832,6 @@ export const CatalogosView: React.FC<CatalogosViewProps> = ({
               </button>
             </form>
           )}
-        </div>
-      )}
-
-      {/* EMPRESA & USUARIOS (SOLO ADMIN) */}
-      {subTab === 'empresa' && isAdmin && (
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-4">
-          <form
-            onSubmit={async (e) => {
-              e.preventDefault();
-              try {
-                await onActualizarEmpresa({
-                  ...empresa,
-                  nombre: empNombre,
-                  rnc: empRnc,
-                  direccionBase: empDireccion,
-                  planMensualRD: Number(empPlan) || empresa.planMensualRD,
-                });
-                notify('Datos de empresa actualizados.');
-              } catch (err: unknown) {
-                setError(err instanceof Error ? err.message : 'Error actualizando empresa.');
-              }
-            }}
-            className="lg:col-span-5 rounded-md border border-[#CBD5E1] bg-white p-4 space-y-3 text-xs"
-          >
-            <h3 className="font-bold text-[#0F2942]">Configuración de Empresa (Suscripción SaaS)</h3>
-            <div>
-              <label className="block font-semibold text-[#334155] mb-1">Nombre Empresa</label>
-              <input
-                type="text"
-                required
-                value={empNombre}
-                onChange={(e) => setEmpNombre(e.target.value)}
-                className="w-full rounded-sm border border-[#CBD5E1] px-3 py-2"
-              />
-            </div>
-            <div>
-              <label className="block font-semibold text-[#334155] mb-1">RNC</label>
-              <input
-                type="text"
-                required
-                value={empRnc}
-                onChange={(e) => setEmpRnc(e.target.value)}
-                className="w-full rounded-sm border border-[#CBD5E1] px-3 py-2 font-mono"
-              />
-            </div>
-            <div>
-              <label className="block font-semibold text-[#334155] mb-1">Dirección Base</label>
-              <input
-                type="text"
-                required
-                value={empDireccion}
-                onChange={(e) => setEmpDireccion(e.target.value)}
-                className="w-full rounded-sm border border-[#CBD5E1] px-3 py-2"
-              />
-            </div>
-            <div>
-              <label className="block font-semibold text-[#334155] mb-1">
-                Plan Mensual (RD$)
-              </label>
-              <input
-                type="number"
-                value={empPlan}
-                onChange={(e) => setEmpPlan(e.target.value)}
-                className="w-full rounded-sm border border-[#CBD5E1] px-3 py-2 font-mono"
-              />
-            </div>
-            <button
-              type="submit"
-              className="w-full rounded-sm bg-[#0F2942] py-2 font-semibold text-white hover:bg-[#0284C7]"
-            >
-              Guardar Empresa
-            </button>
-          </form>
-
-          <div className="lg:col-span-7 space-y-4">
-            <div className="rounded-md border border-[#E2E8F0] bg-white divide-y divide-[#E2E8F0]">
-              {membresias.map((m) => {
-                const u = usuarios.find((x) => x.id === m.usuarioId);
-                const per = personal.find((p) => p.id === m.personalId);
-                return (
-                  <div key={m.id} className="p-3.5 flex items-center justify-between gap-3 text-xs">
-                    <div>
-                      <div className="font-bold text-[#0D1C2F]">{u?.nombre || m.usuarioId}</div>
-                      <div className="font-mono text-[11px] text-[#43474D]">
-                        {u?.email} {per ? `· Personal: ${per.nombre}` : ''}
-                      </div>
-                    </div>
-                    <span className="font-mono text-xs font-bold uppercase text-[#0284C7]">
-                      {m.rol}
-                    </span>
-                  </div>
-                );
-              })}
-            </div>
-
-            <form
-              onSubmit={async (e) => {
-                e.preventDefault();
-                try {
-                  await onGuardarMembresiaUsuario({
-                    email: usrEmail,
-                    nombre: usrNombre,
-                    rol: usrRol,
-                    personalId: usrPersonalId || undefined,
-                    activo: true,
-                  });
-                  setUsrEmail('');
-                  setUsrNombre('');
-                  notify('Membresía y rol de usuario guardados.');
-                } catch (err: unknown) {
-                  setError(err instanceof Error ? err.message : 'Error guardando usuario.');
-                }
-              }}
-              className="rounded-md border border-[#CBD5E1] bg-white p-4 space-y-3 text-xs"
-            >
-              <h3 className="font-bold text-[#0F2942]">Agregar o Actualizar Rol de Usuario</h3>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
-                <input
-                  type="email"
-                  required
-                  placeholder="correo@empresa.do"
-                  value={usrEmail}
-                  onChange={(e) => setUsrEmail(e.target.value)}
-                  className="rounded-sm border border-[#CBD5E1] px-3 py-2"
-                />
-                <input
-                  type="text"
-                  required
-                  placeholder="Nombre completo"
-                  value={usrNombre}
-                  onChange={(e) => setUsrNombre(e.target.value)}
-                  className="rounded-sm border border-[#CBD5E1] px-3 py-2"
-                />
-                <select
-                  value={usrRol}
-                  onChange={(e) => setUsrRol(e.target.value as RolEmpresa)}
-                  className="rounded-sm border border-[#CBD5E1] bg-white px-3 py-2"
-                >
-                  <option value="admin">Admin</option>
-                  <option value="coordinador">Coordinador</option>
-                  <option value="tecnico">Técnico</option>
-                </select>
-                <select
-                  value={usrPersonalId}
-                  onChange={(e) => setUsrPersonalId(e.target.value)}
-                  className="rounded-sm border border-[#CBD5E1] bg-white px-3 py-2"
-                >
-                  <option value="">Sin vincular a ficha de personal</option>
-                  {personal.map((p) => (
-                    <option key={p.id} value={p.id}>
-                      {p.nombre}
-                    </option>
-                  ))}
-                </select>
-              </div>
-              <button
-                type="submit"
-                className="rounded-sm bg-[#0F2942] px-4 py-2 font-semibold text-white hover:bg-[#0284C7]"
-              >
-                Guardar Acceso
-              </button>
-            </form>
-          </div>
         </div>
       )}
     </section>

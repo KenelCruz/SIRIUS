@@ -15,6 +15,7 @@ import {
   Users,
   WifiOff,
 } from 'lucide-react';
+import { resolverEtiquetaCargo } from '../../domain';
 import type { AreaUnit, GeoPoint, SnapshotTecnico } from '../../types/domain';
 import { KmzOsmViewer } from '../KmzOsmViewer';
 import { WorkflowBadge } from '../WorkflowBadge';
@@ -240,7 +241,9 @@ export const TecnicoRutaDetalleView: React.FC<TecnicoRutaDetalleViewProps> = ({
                     >
                       <span>
                         {p.nombre}{' '}
-                        <span className="text-[11px] text-[#64748B]">({p.cargo.replace('_', ' ')})</span>
+                        <span className="text-[11px] text-[#64748B]">
+                          ({resolverEtiquetaCargo(p.cargo, snapshot.cargos)})
+                        </span>
                       </span>
                       {p.telefono && (
                         <span className="inline-flex items-center gap-1 font-mono text-[11px] text-[#0284C7]">

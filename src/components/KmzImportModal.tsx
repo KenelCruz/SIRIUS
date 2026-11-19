@@ -19,6 +19,14 @@ import {
   UploadCloud,
   X,
 } from 'lucide-react';
+import {
+  calcularCotizacionServicioVigente,
+  crearConfiguracionInicialEmpresa,
+  obtenerFactoresTerrenoVigentes,
+  obtenerReglasViaticosVigentes,
+  obtenerServiciosVigentes,
+  type ServicioCatalogoVigente,
+} from '../domain';
 import type {
   AreaUnit,
   CategoriaViatico,
@@ -27,8 +35,10 @@ import type {
   EquipoGNSS,
   EstadoServicio,
   Proyecto,
+  ReglasViaticosVersion,
   Ruta,
   Servicio,
+  TerrenoFactorVersion,
   Vehiculo,
   Viatico,
 } from '../types/domain';
@@ -54,8 +64,6 @@ import {
   computeRouteViaticos,
   fetchOptimalRoutesOSM,
   SANTO_DOMINGO_ORIGIN,
-  SERVICE_CATALOG,
-  TERRAIN_MULTIPLIER,
   VEHICLE_CATALOG,
   type RouteAlternative,
   type TerrainType,
@@ -76,6 +84,10 @@ interface KmzImportModalProps {
   baseLat?: number;
   baseLon?: number;
   baseDireccion?: string;
+  serviciosVigentes?: ServicioCatalogoVigente[];
+  factoresTerreno?: TerrenoFactorVersion | null;
+  reglasViaticos?: ReglasViaticosVersion | null;
+  moneda?: string;
   onCrearClienteYProyectoRapido: (datos: {
     clienteIdExistente?: string;
     clienteNombre: string;
@@ -104,6 +116,11 @@ interface KmzImportModalProps {
   }) => Promise<void>;
 }
 
+const DEFAULT_CFG_KMZ = crearConfiguracionInicialEmpresa('default');
+const DEFAULT_SERVICIOS_KMZ = obtenerServiciosVigentes(DEFAULT_CFG_KMZ);
+const DEFAULT_TERRENO_KMZ = obtenerFactoresTerrenoVigentes(DEFAULT_CFG_KMZ);
+const DEFAULT_REGLAS_KMZ = obtenerReglasViaticosVigentes(DEFAULT_CFG_KMZ);
+
 export const KmzImportModal: React.FC<KmzImportModalProps> = ({
   isOpen,
   onClose,
@@ -118,9 +135,19 @@ export const KmzImportModal: React.FC<KmzImportModalProps> = ({
   baseLat = SANTO_DOMINGO_ORIGIN.lat,
   baseLon = SANTO_DOMINGO_ORIGIN.lon,
   baseDireccion = 'Base Operativa (Santo Domingo)',
+  serviciosVigentes = DEFAULT_SERVICIOS_KMZ,
+  factoresTerreno,
+  reglasViaticos,
+  moneda = 'RD$',
   onCrearClienteYProyectoRapido,
   onCreateRutaCompleta,
 }) => {
+  const activeServicios = useMemo(
+    () => serviciosVigentes.filter((s) => s.activo),
+    [serviciosVigentes]
+  );
+  const activeTerreno = factoresTerreno ?? DEFAULT_TERRENO_KMZ;
+  const activeReglas = reglasViaticos ?? DEFAULT_REGLAS_KMZ;
   const fileInputRef = useRef<HTMLInputElement>(null);
   const originMapRef = useRef<HTMLDivElement>(null);
   const originLeafletRef = useRef<L.Map | null>(null);
@@ -228,22 +255,31 @@ export const KmzImportModal: React.FC<KmzImportModalProps> = ({
 
   const servicesSummary = useMemo(() => {
     const areaM2 = parsed?.totalAreaM2 ?? 0;
-    const terrainMult = TERRAIN_MULTIPLIER[terrain];
-    const items = SERVICE_CATALOG.filter((s) => selectedServiceIds.includes(s.id)).map((svc) => {
-      const corridorExtra =
-        svc.id === 'ingenieria' && svc.perKmCorridorRD
-          ? Math.max(0, corridorKm) * svc.perKmCorridorRD
-          : 0;
-      const areaSurcharge =
-        areaM2 > 10000 ? Math.round(((areaM2 - 10000) / 10000) * 3500) : 0;
-      const totalRD = Math.round((svc.basePriceRD + corridorExtra + areaSurcharge) * terrainMult);
-      return { ...svc, totalRD };
-    });
+    const items = activeServicios
+      .filter((s) => selectedServiceIds.includes(s.codigo))
+      .map((svc) => {
+        const calc = calcularCotizacionServicioVigente({
+          servicio: svc,
+          areaM2,
+          corridorKm,
+          terrain,
+          factoresTerreno: activeTerreno,
+        });
+        return {
+          id: svc.codigo,
+          name: svc.nombre,
+          subtitle: svc.subtitulo,
+          version: svc.version,
+          precioBaseRD: svc.precioBaseRD,
+          recargosRD: calc.corridorExtraRD + calc.areaSurchargeRD,
+          totalRD: calc.totalRD,
+        };
+      });
     return {
       items,
       totalServicesRD: items.reduce((sum, i) => sum + i.totalRD, 0),
     };
-  }, [parsed?.totalAreaM2, selectedServiceIds, corridorKm, terrain]);
+  }, [parsed?.totalAreaM2, activeServicios, selectedServiceIds, corridorKm, terrain, activeTerreno]);
 
   const routeBreakdown = useMemo(() => {
     const dist = activeRoute?.distanceOneWayKm ?? parsed?.estimatedViaticos.distanceFromBaseKm ?? 20;
@@ -258,6 +294,8 @@ export const KmzImportModal: React.FC<KmzImportModalProps> = ({
       areaM2: parsed?.totalAreaM2 ?? 2500,
       terrain,
       serviceCount: selectedServiceIds.length,
+      reglasViaticos: activeReglas,
+      factoresTerreno: activeTerreno,
     });
   }, [
     activeRoute,
@@ -270,6 +308,8 @@ export const KmzImportModal: React.FC<KmzImportModalProps> = ({
     activeVehicleConfig.maintenancePerKmRD,
     terrain,
     selectedServiceIds.length,
+    activeReglas,
+    activeTerreno,
   ]);
 
   const totalContractRD = servicesSummary.totalServicesRD + routeBreakdown.totalViaticosRD;
@@ -320,12 +360,13 @@ export const KmzImportModal: React.FC<KmzImportModalProps> = ({
       parsed.centroid.lat,
       parsed.centroid.lon,
       originPoint.lat,
-      originPoint.lon
+      originPoint.lon,
+      activeReglas
     )
       .then((r) => {
         if (!active) return;
         setRoutes(r);
-        if (r[0] && r[0].distanceOneWayKm > 105) {
+        if (r[0] && r[0].distanceOneWayKm > activeReglas.umbralHospedajeKm) {
           setIncludeLodging(true);
         } else {
           setIncludeLodging(false);
@@ -337,7 +378,7 @@ export const KmzImportModal: React.FC<KmzImportModalProps> = ({
     return () => {
       active = false;
     };
-  }, [parsed, originPoint.lat, originPoint.lon]);
+  }, [parsed, originPoint.lat, originPoint.lon, activeReglas]);
 
   const setPinOriginFromCoords = async (lat: number, lon: number) => {
     setOriginResults([]);
@@ -527,6 +568,8 @@ export const KmzImportModal: React.FC<KmzImportModalProps> = ({
           northing: parsed.centroid.northing,
         },
         repartos: [{ proyectoId: targetProyectoId, montoRD: routeBreakdown.fuelRD }],
+        configVersion: activeReglas.version,
+        tarifaUsadaRD: fuelPricePerGalRD,
         notas: `${routeBreakdown.roundTripKm} km ida y vuelta (${routeBreakdown.gallonsNeeded} gal)`,
         syncStatus: 'pending',
       });
@@ -551,6 +594,7 @@ export const KmzImportModal: React.FC<KmzImportModalProps> = ({
           northing: parsed.centroid.northing,
         },
         repartos: [{ proyectoId: targetProyectoId, montoRD: routeBreakdown.tollsRD }],
+        configVersion: activeReglas.version,
         notas: 'Peajes ida y vuelta',
         syncStatus: 'pending',
       });
@@ -568,6 +612,7 @@ export const KmzImportModal: React.FC<KmzImportModalProps> = ({
         itbisRD: 0,
         metodo: 'Dieta Automática',
         repartos: [{ proyectoId: targetProyectoId, montoRD: routeBreakdown.perDiemRD }],
+        configVersion: activeReglas.version,
         notas: `Terreno ${terrain} · Servicios: ${selectedServiceIds.join(', ')}`,
         syncStatus: 'pending',
       });
@@ -611,6 +656,9 @@ export const KmzImportModal: React.FC<KmzImportModalProps> = ({
         tipoServicioId: item.id,
         nombre: item.name,
         cotizacionRD: item.totalRD,
+        configVersion: item.version,
+        tarifaBaseUsadaRD: item.precioBaseRD,
+        recargosUsadosRD: item.recargosRD,
         estado: estadoInicialServicio,
         notas: `${item.subtitle} · Terreno ${terrain}`,
       }));
@@ -637,6 +685,9 @@ export const KmzImportModal: React.FC<KmzImportModalProps> = ({
             tollsRD: routeBreakdown.tollsRD,
             fuelRD: routeBreakdown.fuelRD,
             vehicleLabel: activeVehicleConfig.label,
+            configVersion: activeReglas.version,
+            precioGalonUsadoRD: fuelPricePerGalRD,
+            mantenimientoPorKmUsadoRD: activeVehicleConfig.maintenancePerKmRD,
           },
         },
         servicios: serviciosPayload,
@@ -1027,17 +1078,17 @@ export const KmzImportModal: React.FC<KmzImportModalProps> = ({
                   </span>
                 </div>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                  {SERVICE_CATALOG.map((svc) => {
-                    const checked = selectedServiceIds.includes(svc.id);
+                  {activeServicios.map((svc) => {
+                    const checked = selectedServiceIds.includes(svc.codigo);
                     return (
                       <button
-                        key={svc.id}
+                        key={svc.codigo}
                         type="button"
                         onClick={() =>
                           setSelectedServiceIds((prev) =>
-                            prev.includes(svc.id)
-                              ? prev.filter((x) => x !== svc.id)
-                              : [...prev, svc.id]
+                            prev.includes(svc.codigo)
+                              ? prev.filter((x) => x !== svc.codigo)
+                              : [...prev, svc.codigo]
                           )
                         }
                         className={`flex items-center justify-between gap-2 rounded-sm border px-3 py-2 text-left transition-colors ${
@@ -1057,13 +1108,13 @@ export const KmzImportModal: React.FC<KmzImportModalProps> = ({
                             {checked && <Check className="h-3 w-3 stroke-[3]" />}
                           </span>
                           <div className="min-w-0">
-                            <div className="text-xs font-bold">{svc.name}</div>
+                            <div className="text-xs font-bold">{svc.nombre}</div>
                             <div
                               className={`text-[11px] ${
                                 checked ? 'text-[#CBD5E1]' : 'text-[#43474D]'
                               }`}
                             >
-                              {svc.subtitle}
+                              {svc.subtitulo}
                             </div>
                           </div>
                         </div>
@@ -1072,17 +1123,27 @@ export const KmzImportModal: React.FC<KmzImportModalProps> = ({
                             checked ? 'text-[#FBBF24]' : 'text-[#0F2942]'
                           }`}
                         >
-                          + {formatRD(svc.basePriceRD).replace('.00', '')}
+                          + {formatRD(svc.precioBaseRD, moneda).replace('.00', '')}
                         </span>
                       </button>
                     );
                   })}
                 </div>
 
-                {selectedServiceIds.includes('ingenieria') && (
+                {activeServicios.some(
+                  (s) => selectedServiceIds.includes(s.codigo) && s.recargoCorredorPorKmRD > 0
+                ) && (
                   <div className="mt-2 flex items-center justify-between gap-3 rounded-sm border border-[#CBD5E1] bg-[#F8FAFC] px-3 py-2 text-xs">
                     <span className="font-semibold text-[#0F2942]">
-                      Longitud corredor vial (km @ RD$ 10,000/km):
+                      Longitud corredor vial (km @{' '}
+                      {formatRD(
+                        activeServicios.find(
+                          (s) =>
+                            selectedServiceIds.includes(s.codigo) && s.recargoCorredorPorKmRD > 0
+                        )?.recargoCorredorPorKmRD ?? 0,
+                        moneda
+                      )}
+                      /km):
                     </span>
                     <input
                       type="number"
@@ -1303,6 +1364,8 @@ export const KmzImportModal: React.FC<KmzImportModalProps> = ({
                       areaM2: parsed.totalAreaM2,
                       terrain,
                       serviceCount: selectedServiceIds.length,
+                      reglasViaticos: activeReglas,
+                      factoresTerreno: activeTerreno,
                     });
                     const active = r.id === activeRoute?.id;
                     return (

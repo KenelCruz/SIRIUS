@@ -15,13 +15,18 @@ import {
   X,
 } from 'lucide-react';
 import {
+  calcularCotizacionServicioVigente,
   calcularEstadoProyecto,
   calcularGastoPorProyecto,
+  crearConfiguracionInicialEmpresa,
   ESTADOS_SERVICIO,
   ETIQUETA_ESTADO,
   obtenerEstadosSiguientesPermitidos,
+  obtenerFactoresTerrenoVigentes,
+  obtenerServiciosVigentes,
   puedeCrearOEditarOperacion,
   puedeRegistrarBitacoraEnServicio,
+  type ServicioCatalogoVigente,
 } from '../domain';
 import type { PayloadTransicionServicio } from '../domain/estados';
 import type {
@@ -33,6 +38,7 @@ import type {
   RolEmpresa,
   Ruta,
   Servicio,
+  TerrenoFactorVersion,
   Viatico,
 } from '../types/domain';
 import { formatArea, formatPerimeter, formatRD } from '../utils/geodesy';
@@ -51,6 +57,9 @@ interface ProyectosViewProps {
   rutasAsignadasIds: Set<string>;
   areaUnit: AreaUnit;
   pendingSyncCount: number;
+  serviciosCatalogo?: ServicioCatalogoVigente[];
+  factoresTerreno?: TerrenoFactorVersion | null;
+  moneda?: string;
   onChangeAreaUnit: (u: AreaUnit) => void;
   onCrearCliente: (datos: Omit<Cliente, 'id' | 'empresaId'>) => Promise<void>;
   onCrearProyecto: (
@@ -75,6 +84,10 @@ interface ProyectosViewProps {
   onCalcularRuta: (rutaId: string) => void;
   onReportarViaticoEnRuta: (rutaId: string, proyectoId: string) => void;
 }
+
+const DEFAULT_CFG_PROY = crearConfiguracionInicialEmpresa('default');
+const DEFAULT_SERVICIOS_PROY = obtenerServiciosVigentes(DEFAULT_CFG_PROY);
+const DEFAULT_TERRENO_PROY = obtenerFactoresTerrenoVigentes(DEFAULT_CFG_PROY);
 
 async function compressPhoto(file: File): Promise<string> {
   return new Promise((resolve, reject) => {
@@ -120,6 +133,9 @@ export const ProyectosView: React.FC<ProyectosViewProps> = ({
   rutasAsignadasIds,
   areaUnit,
   pendingSyncCount,
+  serviciosCatalogo = DEFAULT_SERVICIOS_PROY,
+  factoresTerreno = DEFAULT_TERRENO_PROY,
+  moneda = 'RD$',
   onChangeAreaUnit,
   onCrearCliente,
   onCrearProyecto,
@@ -133,6 +149,11 @@ export const ProyectosView: React.FC<ProyectosViewProps> = ({
 }) => {
   const canEdit = puedeCrearOEditarOperacion(rol);
   const canViewFinances = rol === 'admin' || rol === 'coordinador';
+  const serviciosActivos = useMemo(
+    () => serviciosCatalogo.filter((s) => s.activo),
+    [serviciosCatalogo]
+  );
+  const terrenoActivo = factoresTerreno ?? DEFAULT_TERRENO_PROY;
   const [searchQuery, setSearchQuery] = useState('');
   const [estadoFiltro, setEstadoFiltro] = useState<EstadoServicio | 'ALL'>('ALL');
   const [actionError, setActionError] = useState<string | null>(null);
@@ -154,10 +175,12 @@ export const ProyectosView: React.FC<ProyectosViewProps> = ({
   const [proyValor, setProyValor] = useState('120000');
   const [proyNotas, setProyNotas] = useState('');
 
-  // Modal F4 agregar servicio a ruta
+  // Modal F4 agregar servicio a ruta (lee catálogo configurable)
+  const primerServicio = serviciosActivos[0] ?? DEFAULT_SERVICIOS_PROY[0];
   const [rutaParaServicio, setRutaParaServicio] = useState<Ruta | null>(null);
-  const [srvNombre, setSrvNombre] = useState('Deslinde y Replanteo');
-  const [srvCotizacion, setSrvCotizacion] = useState('45000');
+  const [srvTipoCodigo, setSrvTipoCodigo] = useState(primerServicio.codigo);
+  const [srvNombre, setSrvNombre] = useState(primerServicio.nombre);
+  const [srvCotizacion, setSrvCotizacion] = useState(String(primerServicio.precioBaseRD));
 
   // Modal transición de estado (especialmente fechas reales y cobro)
   const [transicionTarget, setTransicionTarget] = useState<{
@@ -276,12 +299,24 @@ export const ProyectosView: React.FC<ProyectosViewProps> = ({
     e.preventDefault();
     if (!rutaParaServicio) return;
     setModalError(null);
+    const svcCat =
+      serviciosActivos.find((s) => s.codigo === srvTipoCodigo) ?? primerServicio;
+    const cotizacionCalc = calcularCotizacionServicioVigente({
+      servicio: svcCat,
+      areaM2: rutaParaServicio.totalAreaM2,
+      corridorKm: 0,
+      terrain: 'Llano',
+      factoresTerreno: terrenoActivo,
+    });
     try {
       await onAgregarServicioARuta({
         rutaId: rutaParaServicio.id,
-        tipoServicioId: 'custom',
-        nombre: srvNombre.trim() || 'Levantamiento Técnico',
-        cotizacionRD: Number(srvCotizacion) || 0,
+        tipoServicioId: svcCat.codigo,
+        nombre: srvNombre.trim() || svcCat.nombre,
+        cotizacionRD: Number(srvCotizacion) || cotizacionCalc.totalRD,
+        configVersion: svcCat.version,
+        tarifaBaseUsadaRD: svcCat.precioBaseRD,
+        recargosUsadosRD: cotizacionCalc.areaSurchargeRD + cotizacionCalc.corridorExtraRD,
         estado: 'cotizado',
       });
       setRutaParaServicio(null);
@@ -1001,7 +1036,38 @@ export const ProyectosView: React.FC<ProyectosViewProps> = ({
             <form onSubmit={handleConfirmAgregarServicio} className="space-y-3 text-xs">
               <div>
                 <label className="block font-semibold text-[#334155] mb-1">
-                  Nombre del Servicio Técnico
+                  Servicio del catálogo vigente
+                </label>
+                <select
+                  value={srvTipoCodigo}
+                  onChange={(e) => {
+                    const nextCode = e.target.value;
+                    setSrvTipoCodigo(nextCode);
+                    const svc = serviciosActivos.find((s) => s.codigo === nextCode);
+                    if (svc && rutaParaServicio) {
+                      setSrvNombre(svc.nombre);
+                      const calc = calcularCotizacionServicioVigente({
+                        servicio: svc,
+                        areaM2: rutaParaServicio.totalAreaM2,
+                        corridorKm: 0,
+                        terrain: 'Llano',
+                        factoresTerreno: terrenoActivo,
+                      });
+                      setSrvCotizacion(String(calc.totalRD));
+                    }
+                  }}
+                  className="w-full rounded-sm border border-[#CBD5E1] bg-white px-3 py-2"
+                >
+                  {serviciosActivos.map((s) => (
+                    <option key={s.codigo} value={s.codigo}>
+                      {s.nombre} — Base {formatRD(s.precioBaseRD, moneda)} (v{s.version})
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="block font-semibold text-[#334155] mb-1">
+                  Nombre visible en contrato
                 </label>
                 <input
                   type="text"
@@ -1012,7 +1078,9 @@ export const ProyectosView: React.FC<ProyectosViewProps> = ({
                 />
               </div>
               <div>
-                <label className="block font-semibold text-[#334155] mb-1">Cotización (RD$)</label>
+                <label className="block font-semibold text-[#334155] mb-1">
+                  Cotización ({moneda})
+                </label>
                 <input
                   type="number"
                   min={0}

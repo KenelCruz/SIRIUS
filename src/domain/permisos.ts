@@ -20,6 +20,10 @@ import type {
   VehiculoTecnico,
   Viatico,
 } from '../types/domain';
+import {
+  asegurarConfiguracionEmpresa,
+  obtenerReglasViaticosVigentes,
+} from './configuracion';
 
 export function puedeGestionarEmpresa(rol: RolEmpresa): boolean {
   return rol === 'admin';
@@ -253,6 +257,8 @@ function sanitizarEmpresaParaTecnico(empresa: EstadoEmpresaSnapshot['empresa']):
     direccionBase: empresa.direccionBase,
     baseLat: empresa.baseLat,
     baseLon: empresa.baseLon,
+    zonaHoraria: empresa.zonaHoraria || 'America/Santo_Domingo',
+    moneda: empresa.moneda || 'RD$',
   };
 }
 
@@ -374,10 +380,13 @@ export function proyectarSnapshotParaRol(params: {
   const equiposTecnico = snapshot.equipos.filter((e) => equiposAsignadosIds.has(e.id));
 
   const viaticosTecnico = filtrarViaticosParaUsuario('tecnico', snapshot.viaticos, usuarioId);
+  const configEmpresa = asegurarConfiguracionEmpresa(snapshot.empresa.id, snapshot.configuracion);
+  const reglasVigentes = obtenerReglasViaticosVigentes(configEmpresa);
 
   const snapshotTecnico: SnapshotTecnico = {
     empresa: sanitizarEmpresaParaTecnico(snapshot.empresa),
     personal: personalTecnico,
+    cargos: configEmpresa.cargos.filter((c) => c.activo),
     vehiculos: vehiculosTecnico,
     equipos: equiposTecnico,
     cuadrillas: cuadrillasUsuario,
@@ -388,6 +397,13 @@ export function proyectarSnapshotParaRol(params: {
     bitacoras: bitacorasTecnico,
     asignaciones: asignacionesTecnico,
     viaticos: viaticosTecnico,
+    reglasCapturaViaticos: {
+      version: reglasVigentes.version,
+      vigenciaDesde: reglasVigentes.vigenciaDesde,
+      gpsRuta: reglasVigentes.gpsRuta,
+      presetsRapidos: reglasVigentes.presetsRapidos,
+      categoriasViatico: configEmpresa.categoriasViatico,
+    },
     lastSyncedAt: snapshot.lastSyncedAt,
   };
 

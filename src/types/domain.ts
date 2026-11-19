@@ -12,7 +12,159 @@ export type EstadoServicio =
 
 export type RolEmpresa = 'admin' | 'coordinador' | 'tecnico';
 
-export type CargoPersonal = 'tecnico' | 'ingeniero' | 'jefe_brigada' | 'chofer';
+export type CargoBasePersonal = 'tecnico' | 'ingeniero' | 'jefe_brigada' | 'chofer';
+
+export type CargoPersonal = CargoBasePersonal | (string & {});
+
+export type ConceptoDistanciaGps = 'ida_vuelta' | 'solo_ida';
+
+export type SeccionConfiguracion =
+  | 'empresa'
+  | 'usuarios'
+  | 'cargos'
+  | 'flota'
+  | 'servicios'
+  | 'viaticos_reglas'
+  | 'viaticos_categorias'
+  | 'ensayos'
+  | 'ayuda';
+
+export interface CargoConfig {
+  codigo: string;
+  etiqueta: string;
+  esBase: boolean;
+  activo: boolean;
+}
+
+export interface TarifaCombustibleVersion {
+  version: number;
+  vigenciaDesde: string;
+  precioGalonRD: number;
+}
+
+export interface TipoCombustibleConfig {
+  id: string;
+  nombre: string;
+  activo: boolean;
+  versiones: TarifaCombustibleVersion[];
+}
+
+export interface TarifaServicioVersion {
+  version: number;
+  vigenciaDesde: string;
+  precioBaseRD: number;
+  recargoCorredorPorKmRD: number;
+  recargoAreaPorHaExtraRD: number;
+  umbralAreaBaseM2: number;
+}
+
+export interface ServicioCatalogoConfig {
+  codigo: string;
+  nombre: string;
+  subtitulo: string;
+  activo: boolean;
+  versiones: TarifaServicioVersion[];
+}
+
+export interface TerrenoFactorVersion {
+  version: number;
+  vigenciaDesde: string;
+  Llano: number;
+  Ondulado: number;
+  Montañoso: number;
+}
+
+export interface ReglaGpsRutaConfig {
+  tarifaPorKmRD: number;
+  minimoKm: number;
+  conceptoDistancia: ConceptoDistanciaGps;
+}
+
+export interface PeajesCorredorConfig {
+  urbanoExpresoRD: number;
+  nacionalBaseRD: number;
+  norteExpresoRD: number;
+  suroesteExpresoRD: number;
+  otroExpresoRD: number;
+  esteEstacionesCerca: number;
+  esteEstacionesLejos: number;
+  estePorEstacionRD: number;
+}
+
+export interface PresetViaticoConfig {
+  id: string;
+  etiqueta: string;
+  categoria: CategoriaViatico;
+  comercio: string;
+  montoRD: number;
+  notas: string;
+}
+
+export interface ReglasViaticosVersion {
+  version: number;
+  vigenciaDesde: string;
+  gpsRuta: ReglaGpsRutaConfig;
+  dietaUrbanaRD: number;
+  dietaCampoRD: number;
+  umbralDistanciaUrbanaKm: number;
+  hospedajePorNocheRD: number;
+  umbralHospedajeKm: number;
+  kmzPeajeUmbralKm: number;
+  kmzPeajePorTramo50KmRD: number;
+  kmzPersonasDietaDefault: number;
+  peajesCorredor: PeajesCorredorConfig;
+  presetsRapidos: PresetViaticoConfig[];
+}
+
+export interface ConfiguracionEmpresa {
+  empresaId: string;
+  cargos: CargoConfig[];
+  combustibles: TipoCombustibleConfig[];
+  servicios: ServicioCatalogoConfig[];
+  factoresTerreno: TerrenoFactorVersion[];
+  reglasViaticos: ReglasViaticosVersion[];
+  categoriasViatico: CategoriaViatico[];
+  versionGlobal: number;
+}
+
+export type OnboardingPasoId =
+  | 'empresa'
+  | 'personal_cargos'
+  | 'flota'
+  | 'servicios'
+  | 'cliente_proyecto'
+  | 'kmz_demo';
+
+export type OnboardingEstadoPaso = 'pendiente' | 'completo' | 'saltado';
+
+export interface EstadoOnboardingEmpresa {
+  empresaId: string;
+  pasoActual: OnboardingPasoId;
+  pasos: Record<OnboardingPasoId, OnboardingEstadoPaso>;
+  completadoEn?: string;
+  cerradoEnHoy: boolean;
+  updatedAt: string;
+}
+
+export interface TutorialTarjeta {
+  id: string;
+  titulo: string;
+  fraseCorta: string;
+  pantallaClave:
+    | 'admin_hoy'
+    | 'admin_config'
+    | 'admin_kmz'
+    | 'admin_viaticos'
+    | 'coord_proyectos'
+    | 'coord_agenda'
+    | 'coord_rutas'
+    | 'coord_viaticos'
+    | 'tec_hoy'
+    | 'tec_detalle'
+    | 'tec_bitacora'
+    | 'tec_viaticos';
+  destacados: string[];
+}
 
 export type EstadoRecurso = 'disponible' | 'en_mantenimiento' | 'fuera_servicio';
 
@@ -38,6 +190,8 @@ export interface Empresa {
   direccionBase: string;
   baseLat: number;
   baseLon: number;
+  zonaHoraria: string;
+  moneda: string;
   planMensualRD: number;
   estadoSuscripcion: 'activa' | 'prueba' | 'suspendida';
   fechaAlta: string;
@@ -83,6 +237,7 @@ export interface Vehiculo {
   empresaId: string;
   etiqueta: string;
   placa: string;
+  tipoCombustibleId?: string;
   tipoCombustible: string;
   precioGalonRD: number;
   kmPorGal: number;
@@ -140,6 +295,9 @@ export interface RouteSummary {
   tollsRD: number;
   fuelRD: number;
   vehicleLabel: string;
+  configVersion?: number;
+  precioGalonUsadoRD?: number;
+  mantenimientoPorKmUsadoRD?: number;
 }
 
 export interface Ruta {
@@ -169,6 +327,9 @@ export interface Servicio {
   tipoServicioId: string;
   nombre: string;
   cotizacionRD: number;
+  configVersion?: number;
+  tarifaBaseUsadaRD?: number;
+  recargosUsadosRD?: number;
   estado: EstadoServicio;
   fechaRealInicio?: string;
   fechaRealFin?: string;
@@ -250,6 +411,9 @@ export interface Viatico {
   aprobadoPorUsuarioId?: string;
   aprobadoEn?: string;
   repartos: RepartoProyecto[];
+  configVersion?: number;
+  tarifaUsadaRD?: number;
+  conceptoDistanciaUsado?: ConceptoDistanciaGps;
   notas?: string;
   version: number;
   updatedAt: string;
@@ -311,20 +475,22 @@ export interface EstadoEmpresaSnapshot {
   asignaciones: Asignacion[];
   viaticos: Viatico[];
   historial: HistorialEvento[];
+  configuracion?: ConfiguracionEmpresa;
+  onboarding?: EstadoOnboardingEmpresa;
   lastSyncedAt?: string;
 }
 
 // Tipos proyectados estrictamente para el rol Técnico (el compilador impide exponer presupuestos, contratos, tarifas o personal ajeno)
 export type EmpresaTecnico = Pick<
   Empresa,
-  'id' | 'nombre' | 'rnc' | 'telefono' | 'direccionBase' | 'baseLat' | 'baseLon'
+  'id' | 'nombre' | 'rnc' | 'telefono' | 'direccionBase' | 'baseLat' | 'baseLon' | 'zonaHoraria' | 'moneda'
 >;
 
 export type ProyectoTecnico = Omit<Proyecto, 'presupuestoViaticosRD' | 'valorContratoRD'>;
 
 export type ServicioTecnico = Omit<
   Servicio,
-  'cotizacionRD' | 'montoCobradoRD' | 'fechaPago'
+  'cotizacionRD' | 'montoCobradoRD' | 'fechaPago' | 'tarifaBaseUsadaRD' | 'recargosUsadosRD'
 >;
 
 export type VehiculoTecnico = Pick<
@@ -332,15 +498,27 @@ export type VehiculoTecnico = Pick<
   'id' | 'empresaId' | 'etiqueta' | 'placa' | 'estado'
 >;
 
-export type RouteSummaryTecnico = Omit<RouteSummary, 'tollsRD' | 'fuelRD'>;
+export type RouteSummaryTecnico = Omit<
+  RouteSummary,
+  'tollsRD' | 'fuelRD' | 'precioGalonUsadoRD' | 'mantenimientoPorKmUsadoRD'
+>;
 
 export type RutaTecnico = Omit<Ruta, 'routeSummary'> & {
   routeSummary?: RouteSummaryTecnico;
 };
 
+export interface ReglasCapturaViaticosTecnico {
+  version: number;
+  vigenciaDesde: string;
+  gpsRuta: ReglaGpsRutaConfig;
+  presetsRapidos: PresetViaticoConfig[];
+  categoriasViatico: CategoriaViatico[];
+}
+
 export interface SnapshotTecnico {
   empresa: EmpresaTecnico;
   personal: Personal[];
+  cargos: CargoConfig[];
   vehiculos: VehiculoTecnico[];
   equipos: EquipoGNSS[];
   cuadrillas: Cuadrilla[];
@@ -351,6 +529,7 @@ export interface SnapshotTecnico {
   bitacoras: BitacoraEntrada[];
   asignaciones: Asignacion[];
   viaticos: Viatico[];
+  reglasCapturaViaticos: ReglasCapturaViaticosTecnico;
   lastSyncedAt?: string;
 }
 

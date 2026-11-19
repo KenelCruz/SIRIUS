@@ -1,7 +1,27 @@
-import type { DwgDatabase, LibreDwgEx } from '@mlightcad/libredwg-web';
+import type { DwgDatabase, DwgEntity, LibreDwgEx } from '@mlightcad/libredwg-web';
 
 export type CadTheme = 'dark' | 'light' | 'blueprint';
 export type CadStrokeMode = 'thin' | 'normal' | 'thick';
+
+export type DwgLoadStage = 'reading' | 'decoding' | 'indexing' | 'done';
+
+export interface DwgViewBox {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}
+
+export interface DwgParseProgress {
+  stage: DwgLoadStage;
+  percent: number;
+  message: string;
+  processedEntities: number;
+  totalEntities: number;
+  currentLayer?: string;
+  partialSvg?: string;
+  partialViewBox?: DwgViewBox;
+}
 
 export interface DwgLayerInfo {
   name: string;
@@ -11,11 +31,9 @@ export interface DwgLayerInfo {
   frozen: boolean;
 }
 
-export interface DwgViewBox {
-  x: number;
-  y: number;
-  width: number;
-  height: number;
+export interface LayerSvgBucket {
+  innerSvg: string;
+  viewBox: DwgViewBox;
 }
 
 export interface ParsedDwgPlan {
@@ -24,6 +42,8 @@ export interface ParsedDwgPlan {
   version: string;
   insUnitsLabel: string;
   db: DwgDatabase;
+  defsSvg: string;
+  layerBuckets: Record<string, LayerSvgBucket>;
   rawSvg: string;
   viewBox: DwgViewBox;
   layers: DwgLayerInfo[];
@@ -72,6 +92,9 @@ const ACI_SWATCH_MAP: Record<number, string> = {
   9: '#CBD5E1',
 };
 
+const SVG_ROOT_GROUP_MARKER =
+  '<g stroke="#000000" stroke-width="0.1%" fill="none" transform="matrix(1,0,0,-1,0,0)">';
+
 const libredwgCache = new Map<string, Promise<LibreDwgEx>>();
 
 async function getLibreDwgInstance(wasmBasePath = '/wasm'): Promise<LibreDwgEx> {
@@ -92,6 +115,20 @@ async function getLibreDwgInstance(wasmBasePath = '/wasm'): Promise<LibreDwgEx> 
 
   libredwgCache.set(normalizedBase, loaderPromise);
   return loaderPromise;
+}
+
+function yieldToMain(): Promise<void> {
+  return new Promise((resolve) => {
+    setTimeout(resolve, 0);
+  });
+}
+
+function escapeXmlAttr(value: string): string {
+  return value
+    .replace(/&/g, '&amp;')
+    .replace(/"/g, '&quot;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;');
 }
 
 export function detectCadFormat(fileName: string): 'DWG' | 'DXF' {
@@ -121,6 +158,43 @@ export function parseCadViewBox(svg: string): DwgViewBox {
   };
 }
 
+export function isValidViewBox(vb: DwgViewBox): boolean {
+  return (
+    Number.isFinite(vb.x) &&
+    Number.isFinite(vb.y) &&
+    Number.isFinite(vb.width) &&
+    Number.isFinite(vb.height) &&
+    vb.width > 0 &&
+    vb.height > 0
+  );
+}
+
+export function unionViewBoxes(boxes: DwgViewBox[]): DwgViewBox {
+  const valid = boxes.filter(isValidViewBox);
+  if (valid.length === 0) {
+    return { x: 0, y: 0, width: 0, height: 0 };
+  }
+  let minX = valid[0].x;
+  let minY = valid[0].y;
+  let maxX = valid[0].x + valid[0].width;
+  let maxY = valid[0].y + valid[0].height;
+
+  for (let i = 1; i < valid.length; i++) {
+    const b = valid[i];
+    if (b.x < minX) minX = b.x;
+    if (b.y < minY) minY = b.y;
+    if (b.x + b.width > maxX) maxX = b.x + b.width;
+    if (b.y + b.height > maxY) maxY = b.y + b.height;
+  }
+
+  return {
+    x: minX,
+    y: minY,
+    width: maxX - minX,
+    height: maxY - minY,
+  };
+}
+
 function aciOrRgbToSwatchHex(colorIndex?: number, rgbNumber?: number): string {
   if (typeof colorIndex === 'number') {
     const abs = Math.abs(colorIndex);
@@ -131,6 +205,47 @@ function aciOrRgbToSwatchHex(colorIndex?: number, rgbNumber?: number): string {
     return `#${hex}`;
   }
   return '#64748B';
+}
+
+function extractDefsInner(svg: string): string {
+  const start = svg.indexOf('<defs>');
+  const end = svg.indexOf('</defs>');
+  if (start === -1 || end === -1 || end <= start) {
+    return '';
+  }
+  return svg.slice(start + '<defs>'.length, end);
+}
+
+function extractRootGroupInner(svg: string): string {
+  const markerIdx = svg.indexOf(SVG_ROOT_GROUP_MARKER);
+  if (markerIdx === -1) {
+    return '';
+  }
+  const contentStart = markerIdx + SVG_ROOT_GROUP_MARKER.length;
+  const svgCloseIdx = svg.lastIndexOf('</svg>');
+  const lastGroupCloseIdx = svg.lastIndexOf('</g>', svgCloseIdx === -1 ? undefined : svgCloseIdx);
+  if (lastGroupCloseIdx === -1 || lastGroupCloseIdx <= contentStart) {
+    return '';
+  }
+  const inner = svg.slice(contentStart, lastGroupCloseIdx).trim();
+  // Avoid duplicate id="*MODEL_SPACE" when assembling multiple layer chunks
+  return inner.replace(/^<g id="\*MODEL_SPACE">/i, '<g>').trim();
+}
+
+function assembleRawSvg(defsSvg: string, viewBox: DwgViewBox, bodyChunks: string[]): string {
+  return `<?xml version="1.0"?>
+<svg
+  xmlns="http://www.w3.org/2000/svg"
+  xmlns:xlink="http://www.w3.org/1999/xlink" version="1.1"
+  preserveAspectRatio="xMinYMin meet"
+  viewBox="${viewBox.x} ${viewBox.y} ${viewBox.width} ${viewBox.height}"
+  width="100%" height="100%"
+>
+  <defs>${defsSvg}</defs>
+  ${SVG_ROOT_GROUP_MARKER}
+    ${bodyChunks.join('\n')}
+  </g>
+</svg>`;
 }
 
 export function adaptCadSvg(
@@ -146,7 +261,6 @@ export function adaptCadSvg(
 
   let svg = rawSvg;
 
-  // Replace root SVG group stroke width and add clean line caps/joins
   svg = svg.replace(
     /(<g\b[^>]*stroke=")([^"]+)("[^>]*stroke-width=")([^"]+)(")/i,
     (_m, p1, _defaultStroke, p3, _defaultWidth, p5) => {
@@ -170,7 +284,6 @@ export function adaptCadSvg(
       .replace(/rgb\(\s*0\s*,\s*0\s*,\s*255\s*\)/gi, '#7DD3FC')
       .replace(/rgb\(\s*0\s*,\s*255\s*,\s*255\s*\)/gi, '#38BDF8');
   } else {
-    // light / white architectural paper
     svg = svg
       .replace(/rgb\(\s*255\s*,\s*255\s*,\s*255\s*\)/gi, '#0F172A')
       .replace(/#ffffff\b/gi, '#0F172A')
@@ -179,7 +292,6 @@ export function adaptCadSvg(
       .replace(/rgb\(\s*0\s*,\s*255\s*,\s*0\s*\)/gi, '#15803D');
   }
 
-  // Pad viewBox slightly (4%) so outer boundary walls/frames aren't clipped at edges
   if (viewBox.width > 0 && viewBox.height > 0) {
     const padX = viewBox.width * 0.04;
     const padY = viewBox.height * 0.04;
@@ -203,37 +315,39 @@ export function adaptCadSvg(
   return { svg, viewBox, hasGeometry };
 }
 
-function filterDatabaseByHiddenLayers(
-  db: DwgDatabase,
-  hiddenLayers: Set<string>
-): DwgDatabase {
-  if (hiddenLayers.size === 0) return db;
+function collectReferencedBlocks(
+  entities: DwgEntity[],
+  blocksByName: Map<string, DwgDatabase['tables']['BLOCK_RECORD']['entries'][number]>
+): DwgDatabase['tables']['BLOCK_RECORD']['entries'] {
+  const visited = new Set<string>();
+  const collected: DwgDatabase['tables']['BLOCK_RECORD']['entries'] = [];
+  const queue: string[] = [];
 
-  const filteredEntries = db.tables.BLOCK_RECORD.entries.map((block) => {
-    if (block.name?.toUpperCase() !== '*MODEL_SPACE') {
-      return block;
+  const enqueueFromEntities = (list: DwgEntity[]) => {
+    for (const ent of list) {
+      if (ent.type === 'INSERT' || ent.type === 'DIMENSION') {
+        const blockName = (ent as { name?: unknown }).name;
+        if (typeof blockName === 'string' && blockName && !visited.has(blockName)) {
+          visited.add(blockName);
+          queue.push(blockName);
+        }
+      }
     }
-    return {
-      ...block,
-      entities: (block.entities || []).filter(
-        (entity) => !hiddenLayers.has(entity.layer || '0')
-      ),
-    };
-  });
-
-  return {
-    ...db,
-    entities: (db.entities || []).filter(
-      (entity) => !hiddenLayers.has(entity.layer || '0')
-    ),
-    tables: {
-      ...db.tables,
-      BLOCK_RECORD: {
-        ...db.tables.BLOCK_RECORD,
-        entries: filteredEntries,
-      },
-    },
   };
+
+  enqueueFromEntities(entities);
+
+  while (queue.length > 0) {
+    const name = queue.shift()!;
+    const block = blocksByName.get(name);
+    if (!block) continue;
+    collected.push(block);
+    if (block.entities?.length) {
+      enqueueFromEntities(block.entities);
+    }
+  }
+
+  return collected;
 }
 
 export async function renderDwgPlanSvg(
@@ -242,16 +356,50 @@ export async function renderDwgPlanSvg(
     hiddenLayers?: Set<string>;
     theme?: CadTheme;
     strokeMode?: CadStrokeMode;
+    fitToVisibleLayers?: boolean;
     wasmBasePath?: string;
   } = {}
 ): Promise<{ svg: string; viewBox: DwgViewBox; hasGeometry: boolean }> {
   const hidden = options.hiddenLayers ?? new Set<string>();
+  const hasBuckets = Object.keys(plan.layerBuckets).length > 0;
+
   let targetRawSvg = plan.rawSvg;
 
-  if (hidden.size > 0) {
+  if (hasBuckets) {
+    const visibleEntries = Object.entries(plan.layerBuckets).filter(
+      ([layerName]) => !hidden.has(layerName)
+    );
+    const bodyChunks = visibleEntries.map(
+      ([layerName, bucket]) =>
+        `<g data-cad-layer="${escapeXmlAttr(layerName)}">${bucket.innerSvg}</g>`
+    );
+
+    const visibleBox = options.fitToVisibleLayers
+      ? unionViewBoxes(visibleEntries.map(([, b]) => b.viewBox))
+      : plan.viewBox;
+
+    const effectiveBox = isValidViewBox(visibleBox) ? visibleBox : plan.viewBox;
+    targetRawSvg = assembleRawSvg(plan.defsSvg, effectiveBox, bodyChunks);
+  } else if (hidden.size > 0) {
     const libredwg = await getLibreDwgInstance(options.wasmBasePath);
-    const filteredDb = filterDatabaseByHiddenLayers(plan.db, hidden);
-    targetRawSvg = libredwg.dwg_to_svg(filteredDb);
+    const filteredEntries = plan.db.tables.BLOCK_RECORD.entries.map((block) => {
+      if (block.name?.toUpperCase() !== '*MODEL_SPACE') return block;
+      return {
+        ...block,
+        entities: (block.entities || []).filter((e) => !hidden.has(e.layer || '0')),
+      };
+    });
+    targetRawSvg = libredwg.dwg_to_svg({
+      ...plan.db,
+      entities: (plan.db.entities || []).filter((e) => !hidden.has(e.layer || '0')),
+      tables: {
+        ...plan.db.tables,
+        BLOCK_RECORD: {
+          ...plan.db.tables.BLOCK_RECORD,
+          entries: filteredEntries,
+        },
+      },
+    });
   }
 
   return adaptCadSvg(targetRawSvg, {
@@ -260,19 +408,51 @@ export async function renderDwgPlanSvg(
   });
 }
 
+function throwIfAborted(signal?: AbortSignal) {
+  if (signal?.aborted) {
+    throw new DOMException('Carga de plano cancelada.', 'AbortError');
+  }
+}
+
 export async function parseDwgOrDxfBuffer(
   buffer: ArrayBuffer | Uint8Array,
   fileName: string,
-  options: { wasmBasePath?: string } = {}
+  options: {
+    wasmBasePath?: string;
+    signal?: AbortSignal;
+    onProgress?: (progress: DwgParseProgress) => void;
+  } = {}
 ): Promise<ParsedDwgPlan> {
+  const { signal, onProgress } = options;
+  throwIfAborted(signal);
+
   const format = detectCadFormat(fileName);
   const bytes = buffer instanceof Uint8Array ? buffer : new Uint8Array(buffer);
   if (bytes.byteLength === 0) {
     throw new Error('El archivo CAD está vacío.');
   }
 
+  onProgress?.({
+    stage: 'reading',
+    percent: 8,
+    message: `Inicializando motor LibreDWG para ${fileName}...`,
+    processedEntities: 0,
+    totalEntities: 0,
+  });
+
   const libredwgMod = await import('@mlightcad/libredwg-web');
   const libredwg = await getLibreDwgInstance(options.wasmBasePath);
+  throwIfAborted(signal);
+
+  onProgress?.({
+    stage: 'decoding',
+    percent: 22,
+    message: `Decodificando estructura binaria ${format}...`,
+    processedEntities: 0,
+    totalEntities: 0,
+  });
+  await yieldToMain();
+  throwIfAborted(signal);
 
   const fileType =
     format === 'DWG'
@@ -294,6 +474,7 @@ export async function parseDwgOrDxfBuffer(
   try {
     const versionObj = libredwg.dwg_get_version_type(dataPtr);
     const { database: db, stats } = libredwg.convertEx(dataPtr);
+    throwIfAborted(signal);
 
     const modelSpaceBlock = db.tables?.BLOCK_RECORD?.entries?.find(
       (b) => b.name?.toUpperCase() === '*MODEL_SPACE'
@@ -313,11 +494,18 @@ export async function parseDwgOrDxfBuffer(
     }
 
     const layerCounts = new Map<string, number>();
+    const entitiesByLayer = new Map<string, DwgEntity[]>();
     const entitySummary: Record<string, number> = {};
 
     for (const entity of modelEntities) {
       const layerName = entity.layer || '0';
       layerCounts.set(layerName, (layerCounts.get(layerName) ?? 0) + 1);
+      const list = entitiesByLayer.get(layerName);
+      if (list) {
+        list.push(entity);
+      } else {
+        entitiesByLayer.set(layerName, [entity]);
+      }
       const typeName = entity.type || 'OTRO';
       entitySummary[typeName] = (entitySummary[typeName] ?? 0) + 1;
     }
@@ -353,12 +541,164 @@ export async function parseDwgOrDxfBuffer(
 
     layers.sort((a, b) => b.entityCount - a.entityCount || a.name.localeCompare(b.name));
 
-    const rawSvg = libredwg.dwg_to_svg(db);
-    const viewBox = parseCadViewBox(rawSvg);
+    const totalEntities = modelEntities.length;
+    onProgress?.({
+      stage: 'indexing',
+      percent: 34,
+      message: `Indexando ${layers.length} capas y ${totalEntities.toLocaleString('en-US')} entidades...`,
+      processedEntities: 0,
+      totalEntities,
+    });
+    await yieldToMain();
+    throwIfAborted(signal);
+
+    // Prepare block map for fast per-layer chunk conversion
+    const blocksByName = new Map<
+      string,
+      DwgDatabase['tables']['BLOCK_RECORD']['entries'][number]
+    >();
+    const allBlocks = db.tables?.BLOCK_RECORD?.entries || [];
+    for (const b of allBlocks) {
+      if (b.name && b.name.toUpperCase() !== '*MODEL_SPACE') {
+        blocksByName.set(b.name, b);
+      }
+    }
+
+    const baseModelSpace: DwgDatabase['tables']['BLOCK_RECORD']['entries'][number] =
+      modelSpaceBlock ?? {
+        name: '*MODEL_SPACE',
+        handle: 'MODEL',
+        ownerHandle: '0',
+        flags: 0,
+        basePoint: { x: 0, y: 0, z: 0 },
+        entities: [],
+        layout: '',
+        insertionUnits: 0,
+        explodability: 1,
+        scalability: 1,
+        bmpPreview: '',
+      };
+
+    // Extract <defs> once across all referenced blocks (if any INSERT/DIMENSION exist)
+    const usedBlocks = collectReferencedBlocks(modelEntities, blocksByName);
+    let defsSvg = '';
+    if (usedBlocks.length > 0) {
+      const defsOnlyDb: DwgDatabase = {
+        ...db,
+        entities: [],
+        tables: {
+          ...db.tables,
+          BLOCK_RECORD: {
+            ...db.tables.BLOCK_RECORD,
+            entries: [
+              ...usedBlocks,
+              { ...baseModelSpace, entities: [] },
+            ],
+          },
+        },
+      };
+      defsSvg = extractDefsInner(libredwg.dwg_to_svg(defsOnlyDb));
+    }
+
+    // Progressive chunked layer-by-layer conversion
+    const CHUNK_SIZE = 450;
+    const layerBuckets: Record<string, LayerSvgBucket> = {};
+    const partialBodyChunks: string[] = [];
+    const partialBoxes: DwgViewBox[] = [];
+    let processedEntities = 0;
+
+    const populatedLayers = layers.filter((l) => (entitiesByLayer.get(l.name)?.length ?? 0) > 0);
+
+    for (const layerInfo of populatedLayers) {
+      throwIfAborted(signal);
+      const layerEntities = entitiesByLayer.get(layerInfo.name) ?? [];
+      const chunkHtmlParts: string[] = [];
+      const chunkBoxes: DwgViewBox[] = [];
+
+      for (let i = 0; i < layerEntities.length; i += CHUNK_SIZE) {
+        throwIfAborted(signal);
+        const slice = layerEntities.slice(i, i + CHUNK_SIZE);
+        const referencedForChunk = collectReferencedBlocks(slice, blocksByName);
+        const chunkDb: DwgDatabase = {
+          ...db,
+          entities: slice,
+          tables: {
+            ...db.tables,
+            BLOCK_RECORD: {
+              ...db.tables.BLOCK_RECORD,
+              entries: [
+                ...referencedForChunk,
+                { ...baseModelSpace, entities: slice },
+              ],
+            },
+          },
+        };
+
+        const chunkSvg = libredwg.dwg_to_svg(chunkDb);
+        const chunkVb = parseCadViewBox(chunkSvg);
+        const chunkInner = extractRootGroupInner(chunkSvg);
+
+        if (chunkInner) {
+          chunkHtmlParts.push(chunkInner);
+        }
+        if (isValidViewBox(chunkVb)) {
+          chunkBoxes.push(chunkVb);
+          partialBoxes.push(chunkVb);
+        }
+
+        processedEntities += slice.length;
+
+        const pct = totalEntities > 0
+          ? Math.min(98, 35 + Math.round((processedEntities / totalEntities) * 63))
+          : 95;
+
+        const liveLayerInner = chunkHtmlParts.join('\n');
+        const currentPartialBody = liveLayerInner
+          ? [
+              ...partialBodyChunks,
+              `<g data-cad-layer="${escapeXmlAttr(layerInfo.name)}">${liveLayerInner}</g>`,
+            ]
+          : partialBodyChunks;
+
+        const liveBox = unionViewBoxes(partialBoxes);
+        const livePartialSvg =
+          isValidViewBox(liveBox) && currentPartialBody.length > 0
+            ? assembleRawSvg(defsSvg, liveBox, currentPartialBody)
+            : undefined;
+
+        onProgress?.({
+          stage: 'indexing',
+          percent: pct,
+          message: `Renderizando capa ${layerInfo.name} (${processedEntities.toLocaleString('en-US')} / ${totalEntities.toLocaleString('en-US')} ent.)`,
+          processedEntities,
+          totalEntities,
+          currentLayer: layerInfo.name,
+          partialSvg: livePartialSvg,
+          partialViewBox: isValidViewBox(liveBox) ? liveBox : undefined,
+        });
+
+        if (i + CHUNK_SIZE < layerEntities.length || totalEntities > CHUNK_SIZE) {
+          await yieldToMain();
+        }
+      }
+
+      const layerInner = chunkHtmlParts.join('\n').trim();
+      const layerBox = unionViewBoxes(chunkBoxes);
+      if (layerInner) {
+        layerBuckets[layerInfo.name] = {
+          innerSvg: layerInner,
+          viewBox: layerBox,
+        };
+        partialBodyChunks.push(
+          `<g data-cad-layer="${escapeXmlAttr(layerInfo.name)}">${layerInner}</g>`
+        );
+      }
+    }
+
+    const viewBox = unionViewBoxes(partialBoxes);
+    const rawSvg = assembleRawSvg(defsSvg, viewBox, partialBodyChunks);
     const hasRenderableGeometry =
-      viewBox.width > 0 &&
-      viewBox.height > 0 &&
-      /<(line|path|circle|ellipse|text|use)\b/i.test(rawSvg);
+      isValidViewBox(viewBox) && /<(line|path|circle|ellipse|text|use)\b/i.test(rawSvg);
 
     const versionHdr =
       versionObj && typeof versionObj === 'object' && versionObj.hdr && versionObj.hdr !== 'INVALI'
@@ -375,17 +715,27 @@ export async function parseDwgOrDxfBuffer(
     const insUnitsCode = Number(db.header?.INSUNITS ?? 0);
     const insUnitsLabel = INSUNITS_LABELS[insUnitsCode] || 'Unidades CAD';
 
+    onProgress?.({
+      stage: 'done',
+      percent: 100,
+      message: `Plano ${fileName} listo (${layers.length} capas).`,
+      processedEntities: totalEntities,
+      totalEntities,
+    });
+
     return {
       fileName,
       format,
       version,
       insUnitsLabel,
       db,
+      defsSvg,
+      layerBuckets,
       rawSvg,
       viewBox,
       layers,
       entitySummary,
-      totalEntities: modelEntities.length,
+      totalEntities,
       unknownEntityCount: stats?.unknownEntityCount ?? 0,
       blocksCount: Math.max(0, (db.tables?.BLOCK_RECORD?.entries?.length ?? 1) - 1),
       hasRenderableGeometry,
@@ -397,7 +747,11 @@ export async function parseDwgOrDxfBuffer(
 
 export async function parseDwgOrDxfFile(
   file: File,
-  options: { wasmBasePath?: string } = {}
+  options: {
+    wasmBasePath?: string;
+    signal?: AbortSignal;
+    onProgress?: (progress: DwgParseProgress) => void;
+  } = {}
 ): Promise<ParsedDwgPlan> {
   const buffer = await file.arrayBuffer();
   return parseDwgOrDxfBuffer(buffer, file.name, options);
@@ -413,16 +767,14 @@ export function buildSampleArchitecturalDxfContent(): string {
     lines.push([code, value]);
   };
 
-  // HEADER
   push(0, 'SECTION');
   push(2, 'HEADER');
   push(9, '$ACADVER');
   push(1, 'AC1015');
   push(9, '$INSUNITS');
-  push(70, 6); // Metros
+  push(70, 6);
   push(0, 'ENDSEC');
 
-  // TABLES (LAYERS)
   push(0, 'SECTION');
   push(2, 'TABLES');
   push(0, 'TABLE');
@@ -447,7 +799,6 @@ export function buildSampleArchitecturalDxfContent(): string {
   push(0, 'ENDTAB');
   push(0, 'ENDSEC');
 
-  // ENTITIES
   push(0, 'SECTION');
   push(2, 'ENTITIES');
 
@@ -518,10 +869,8 @@ export function buildSampleArchitecturalDxfContent(): string {
     push(1, value);
   };
 
-  // Lindero de parcela (16m x 13m)
   addRect('LINDERO', -1, -1.5, 15, 11.5, 1);
 
-  // Ejes estructurales
   for (const x of [0, 6.5, 14]) {
     addLine('EJES', x, -0.8, x, 11, 8);
     addCircle('EJES', x, 11.25, 0.25, 8);
@@ -531,17 +880,14 @@ export function buildSampleArchitecturalDxfContent(): string {
     addCircle('EJES', -1.05, y, 0.25, 8);
   }
 
-  // Muros perimetrales exteriores (espesor 0.20m)
   addRect('MUROS', 0, 0, 14, 10.5, 7);
   addRect('MUROS', 0.2, 0.2, 13.8, 10.3, 7);
 
-  // Muro divisorio central vertical (Sala/Cocina vs Dormitorios)
   addLine('MUROS', 6.5, 0.2, 6.5, 6.2, 7);
   addLine('MUROS', 6.65, 0.2, 6.65, 6.2, 7);
   addLine('MUROS', 6.5, 7.2, 6.5, 10.3, 7);
   addLine('MUROS', 6.65, 7.2, 6.65, 10.3, 7);
 
-  // Muro horizontal cocina/terraza y bano/dormitorio
   addLine('MUROS', 0.2, 5.2, 3.8, 5.2, 7);
   addLine('MUROS', 0.2, 5.35, 3.8, 5.35, 7);
   addLine('MUROS', 6.65, 4.4, 10.2, 4.4, 7);
@@ -549,17 +895,13 @@ export function buildSampleArchitecturalDxfContent(): string {
   addLine('MUROS', 11.2, 4.4, 13.8, 4.4, 7);
   addLine('MUROS', 11.2, 4.55, 13.8, 4.55, 7);
 
-  // Puertas (arco + hoja) y Ventanas
   addLine('PUERTAS_VENTANAS', 6.65, 6.2, 7.55, 6.2, 4);
   addArc('PUERTAS_VENTANAS', 6.65, 6.2, 0.9, 0, 90, 4);
   addLine('PUERTAS_VENTANAS', 10.2, 4.4, 10.2, 3.5, 4);
   addArc('PUERTAS_VENTANAS', 10.2, 4.4, 0.9, 270, 360, 4);
-  // Ventana frontal Sala
   addRect('PUERTAS_VENTANAS', 1.8, 0.05, 4.8, 0.15, 4);
-  // Ventana Dormitorio
   addRect('PUERTAS_VENTANAS', 8.5, 10.35, 11.8, 10.45, 4);
 
-  // Cotas generales
   addLine('COTAS', 0, -0.5, 14, -0.5, 2);
   addLine('COTAS', 0, -0.7, 0, -0.3, 2);
   addLine('COTAS', 14, -0.7, 14, -0.3, 2);
@@ -567,7 +909,6 @@ export function buildSampleArchitecturalDxfContent(): string {
   addLine('COTAS', 14.3, 0, 14.7, 0, 2);
   addLine('COTAS', 14.3, 10.5, 14.7, 10.5, 2);
 
-  // Textos / Etiquetas
   addText('TEXTOS', 1.1, 2.6, 0.38, 'SALA / COMEDOR', 3);
   addText('TEXTOS', 1.2, 7.8, 0.35, 'COCINA + TERRAZA', 3);
   addText('TEXTOS', 8.1, 7.4, 0.36, 'DORMITORIO PRINCIPAL', 3);

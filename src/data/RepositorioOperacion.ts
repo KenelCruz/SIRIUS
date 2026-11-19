@@ -2,21 +2,27 @@ import type {
   Asignacion,
   AvisoSobrescrituraLWW,
   BitacoraEntrada,
+  CargoConfig,
   Cliente,
+  ConfiguracionEmpresa,
   Cuadrilla,
   Empresa,
   EquipoGNSS,
   EstadoAprobacionViatico,
   EstadoEmpresaSnapshot,
+  EstadoOnboardingEmpresa,
   EstadoServicio,
   Personal,
   ProyeccionSnapshotPorRol,
   Proyecto,
+  ReglasViaticosVersion,
   RepartoProyecto,
   RolEmpresa,
   Ruta,
   Servicio,
   SesionActiva,
+  TarifaServicioVersion,
+  TerrenoFactorVersion,
   Usuario,
   Vehiculo,
   Viatico,
@@ -147,6 +153,65 @@ export interface RepositorioOperacion {
     personalId?: string;
     activo: boolean;
   }): Promise<{ usuario: Usuario; rol: RolEmpresa }>;
+  actualizarAccesoMembresia(params: {
+    empresaId: string;
+    usuarioId: string;
+    rol: RolEmpresa;
+    activo: boolean;
+  }): Promise<void>;
+
+  // A1: Configuración versionada con vigencias
+  guardarCargoConfig(
+    empresaId: string,
+    cargo: Pick<CargoConfig, 'codigo' | 'etiqueta' | 'activo'>
+  ): Promise<ConfiguracionEmpresa>;
+  eliminarCargoConfig(empresaId: string, codigo: string): Promise<ConfiguracionEmpresa>;
+  crearTipoCombustible(params: {
+    empresaId: string;
+    nombre: string;
+    precioGalonRD: number;
+    vigenciaDesde: string;
+  }): Promise<ConfiguracionEmpresa>;
+  agregarVigenciaCombustible(params: {
+    empresaId: string;
+    combustibleId: string;
+    precioGalonRD: number;
+    vigenciaDesde: string;
+    activo?: boolean;
+  }): Promise<ConfiguracionEmpresa>;
+  crearServicioCatalogo(params: {
+    empresaId: string;
+    codigo: string;
+    nombre: string;
+    subtitulo: string;
+    tarifaInicial: Omit<TarifaServicioVersion, 'version'>;
+  }): Promise<ConfiguracionEmpresa>;
+  agregarVigenciaServicio(params: {
+    empresaId: string;
+    servicioCodigo: string;
+    nombre?: string;
+    subtitulo?: string;
+    activo?: boolean;
+    tarifa: Omit<TarifaServicioVersion, 'version'>;
+  }): Promise<ConfiguracionEmpresa>;
+  agregarVigenciaFactoresTerreno(params: {
+    empresaId: string;
+    factores: Omit<TerrenoFactorVersion, 'version'>;
+  }): Promise<ConfiguracionEmpresa>;
+  agregarVigenciaReglasViaticos(params: {
+    empresaId: string;
+    reglas: Omit<ReglasViaticosVersion, 'version'>;
+  }): Promise<ConfiguracionEmpresa>;
+
+  // A2: Onboarding opcional por empresa
+  guardarOnboarding(
+    empresaId: string,
+    onboarding: EstadoOnboardingEmpresa
+  ): Promise<EstadoOnboardingEmpresa>;
+
+  // A3: Estado de tutorial visual por usuario/perfil
+  obtenerTutorialesVistos(usuarioId: string): Partial<Record<RolEmpresa, boolean>>;
+  marcarTutorialVisto(usuarioId: string, rol: RolEmpresa): Partial<Record<RolEmpresa, boolean>>;
 
   // F15: Sincronización LWW y OCR pendiente
   sincronizarConServidor(empresaId: string): Promise<{
@@ -155,3 +220,4 @@ export interface RepositorioOperacion {
     sobrescritosLocales: AvisoSobrescrituraLWW[];
   }>;
 }
+

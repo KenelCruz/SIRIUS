@@ -4,3 +4,6 @@ export * from './conflictos';
 export * from './viaticos';
 export * from './sync';
 export * from './tecnico';
+export * from './configuracion';
+export * from './onboarding';
+

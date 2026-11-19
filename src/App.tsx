@@ -7,26 +7,32 @@ import {
   Compass,
   FileUp,
   FolderKanban,
+  HelpCircle,
   History,
+  Home,
   Layers,
   LogOut,
   Plus,
   PlusCircle,
   Receipt,
   Route,
+  Settings,
   Users,
   Wifi,
   WifiOff,
 } from 'lucide-react';
+import { AdminHoyView } from './components/AdminHoyView';
 import { AgendaView } from './components/AgendaView';
 import { AuditoriaView } from './components/AuditoriaView';
 import { AuthGate } from './components/AuthGate';
 import { CatalogosView } from './components/CatalogosView';
+import { ConfiguracionView } from './components/ConfiguracionView';
 import { DwgPlanViewer } from './components/DwgPlanViewer';
 import { KmzImportModal } from './components/KmzImportModal';
 import { KmzOsmViewer } from './components/KmzOsmViewer';
 import { MobileExpenseCaptureModal } from './components/MobileExpenseCaptureModal';
 import { DemoBanner, OfflineSyncBanner } from './components/OfflineSyncBanner';
+import { OnboardingWizardModal } from './components/OnboardingWizardModal';
 import { ProyectosView } from './components/ProyectosView';
 import { PWAInstallButton } from './components/PWAInstallButton';
 import { ResourceConflictModal } from './components/ResourceConflictModal';
@@ -39,12 +45,17 @@ import { TecnicoRutaDetalleView } from './components/tecnico/TecnicoRutaDetalleV
 import { TecnicoRutasView } from './components/tecnico/TecnicoRutasView';
 import { TecnicoTransicionModal } from './components/tecnico/TecnicoTransicionModal';
 import { TecnicoViaticosView } from './components/tecnico/TecnicoViaticosView';
+import { TutorialVisualModal } from './components/TutorialVisualModal';
 import { ViaticosView } from './components/ViaticosView';
 import {
+  cerrarTarjetaOnboardingEnHoy,
   detectarConflictosAsignacion,
   obtenerRutasAsignadasAUsuario,
   puedeCrearOEditarOperacion,
   puedeVerAuditoria,
+  puedeVerConfiguracion,
+  reiniciarOnboarding,
+  seleccionarPasoOnboarding,
 } from './domain';
 import { useOnlineStatus } from './hooks/useOnlineStatus';
 import { useOperacionEmpresa } from './hooks/useOperacionEmpresa';
@@ -52,7 +63,10 @@ import type {
   AreaUnit,
   ConflictDetail,
   GeoPoint,
+  OnboardingPasoId,
   OverrideConflicto,
+  ReglasCapturaViaticosTecnico,
+  SeccionConfiguracion,
   Viatico,
 } from './types/domain';
 import { formatRD, latLonToUtm19N } from './utils/geodesy';
@@ -60,13 +74,15 @@ import type { ParsedDwgPlan } from './utils/dwgParser';
 import { parseKmzOrKmlFile, type ParsedKmzResult } from './utils/kmzParser';
 
 type AdminTab =
+  | 'hoy'
   | 'proyectos'
   | 'agenda'
   | 'rutas'
   | 'map'
   | 'viaticos'
   | 'catalogos'
-  | 'auditoria';
+  | 'auditoria'
+  | 'configuracion';
 
 type TecnicoTab = 'hoy' | 'rutas_tecnico' | 'ruta_detalle' | 'agenda_tecnico' | 'viaticos_tecnico';
 
@@ -79,6 +95,15 @@ export default function App() {
     empresasDisponibles,
     requiereElegirEmpresa,
     proyeccion,
+    configuracion,
+    cargos,
+    combustiblesVigentes,
+    serviciosVigentes,
+    factoresTerrenoVigentes,
+    reglasViaticosVigentes,
+    onboarding,
+    tutorialesPerfil,
+    tutorialesVistos,
     isLoadingSnapshot,
     errorSnapshot,
     isSyncing,
@@ -93,13 +118,19 @@ export default function App() {
     cerrarSesion,
     refrescar,
     sincronizarAhora,
+    marcarTutorialVisto,
     descartarAvisosLww,
     actions,
   } = useOperacionEmpresa(isOnline);
 
-  const [adminTab, setAdminTab] = useState<AdminTab>('proyectos');
+  const [adminTab, setAdminTab] = useState<AdminTab>('hoy');
   const [tecnicoTab, setTecnicoTab] = useState<TecnicoTab>('hoy');
   const [tecnicoRutaDetalleId, setTecnicoRutaDetalleId] = useState<string>('');
+  const [configSeccionInicial, setConfigSeccionInicial] = useState<SeccionConfiguracion | undefined>(
+    undefined
+  );
+  const [isOnboardingOpen, setIsOnboardingOpen] = useState(false);
+  const [isTutorialOpen, setIsTutorialOpen] = useState(false);
 
   const [selectedRutaId, setSelectedRutaId] = useState<string>('');
   const [areaUnit, setAreaUnit] = useState<AreaUnit>('tareas');
@@ -157,16 +188,36 @@ export default function App() {
     }, 5000);
   };
 
-  // Al iniciar sesión, cambiar de empresa o restaurar rol técnico, siempre abrir en 'hoy' (o 'proyectos' para admin/coordinador)
+  // Al iniciar sesión o cambiar de empresa: Admin abre en 'hoy', Coordinador en 'proyectos', Técnico en 'hoy'
   useEffect(() => {
     if (!sesion) return;
+    setConfigSeccionInicial(undefined);
+    setIsOnboardingOpen(false);
     if (sesion.rolActivo === 'tecnico') {
       setTecnicoTab('hoy');
       setTecnicoRutaDetalleId('');
+    } else if (sesion.rolActivo === 'admin') {
+      setAdminTab('hoy');
     } else {
       setAdminTab('proyectos');
     }
   }, [sesion?.usuario.id, sesion?.empresaActivaId, sesion?.rolActivo]);
+
+  // Abrir automáticamente el tutorial visual la primera vez que el perfil ingresa
+  const hasProyeccion = Boolean(proyeccion);
+  useEffect(() => {
+    if (!sesion || requiereElegirEmpresa || !hasProyeccion) return;
+    if (!tutorialesVistos[sesion.rolActivo]) {
+      setIsTutorialOpen(true);
+    }
+  }, [
+    sesion?.usuario.id,
+    sesion?.empresaActivaId,
+    sesion?.rolActivo,
+    requiereElegirEmpresa,
+    hasProyeccion,
+    tutorialesVistos,
+  ]);
 
   // Mantener ruta activa seleccionada al actualizar snapshot
   useEffect(() => {
@@ -177,10 +228,17 @@ export default function App() {
     );
   }, [proyeccion]);
 
+  const handleCerrarTutorial = () => {
+    setIsTutorialOpen(false);
+    marcarTutorialVisto();
+  };
+
   const handleLogin = async (email: string, password: string) => {
     const nuevaSesion = await iniciarSesion(email, password);
     if (nuevaSesion.rolActivo === 'tecnico') {
       setTecnicoTab('hoy');
+    } else if (nuevaSesion.rolActivo === 'admin') {
+      setAdminTab('hoy');
     } else {
       setAdminTab('proyectos');
     }
@@ -191,6 +249,8 @@ export default function App() {
     if (!guardada) return;
     if (guardada.rolActivo === 'tecnico') {
       setTecnicoTab('hoy');
+    } else if (guardada.rolActivo === 'admin') {
+      setAdminTab('hoy');
     } else {
       setAdminTab('proyectos');
     }
@@ -201,6 +261,8 @@ export default function App() {
     const actualizada = await seleccionarEmpresa(empresaId);
     if (actualizada.rolActivo === 'tecnico') {
       setTecnicoTab('hoy');
+    } else if (actualizada.rolActivo === 'admin') {
+      setAdminTab('hoy');
     } else {
       setAdminTab('proyectos');
     }
@@ -211,6 +273,8 @@ export default function App() {
     setSelectedRutaId('');
     setTecnicoRutaDetalleId('');
     setStandaloneKmz(null);
+    setIsOnboardingOpen(false);
+    setIsTutorialOpen(false);
   };
 
   const handleSyncNow = async () => {
@@ -503,6 +567,16 @@ export default function App() {
 
                 <button
                   type="button"
+                  onClick={() => setIsTutorialOpen(true)}
+                  className="inline-flex items-center gap-1.5 rounded-sm border border-[#CBD5E1] bg-white px-2.5 py-2 text-xs font-semibold text-[#0F2942] hover:bg-[#F8FAFC] min-h-[38px]"
+                  title="Ver guía visual del módulo técnico"
+                >
+                  <HelpCircle className="h-4 w-4 text-[#0284C7]" />
+                  <span className="hidden sm:inline">Ayuda</span>
+                </button>
+
+                <button
+                  type="button"
                   onClick={() => setIsReportarSelectorOpen(true)}
                   className="inline-flex items-center gap-1.5 rounded-sm bg-[#0284C7] px-3 py-2 text-xs font-semibold text-white hover:bg-[#006398] min-h-[38px]"
                 >
@@ -767,6 +841,8 @@ export default function App() {
           creadoPorUsuario={sesion.usuario}
           baseLat={snapTecnico.empresa.baseLat}
           baseLon={snapTecnico.empresa.baseLon}
+          moneda={snapTecnico.empresa.moneda}
+          reglasCaptura={snapTecnico.reglasCapturaViaticos}
           onAddExpense={async (expense) => {
             await actions.registrarViatico(expense);
             showTecnicoSuccess(
@@ -779,6 +855,14 @@ export default function App() {
             await actions.editarViatico(viaticoId, expense);
             showTecnicoSuccess('Viático pendiente actualizado.');
           }}
+        />
+
+        <TutorialVisualModal
+          isOpen={isTutorialOpen}
+          rol="tecnico"
+          tarjetas={tutorialesPerfil}
+          onClose={handleCerrarTutorial}
+          onCompletar={handleCerrarTutorial}
         />
 
         {toastMessage && (
@@ -797,8 +881,45 @@ export default function App() {
   const snapshot = proyeccion.snapshot;
   const canEdit = puedeCrearOEditarOperacion(rol);
   const canAudit = puedeVerAuditoria(rol);
+  const canViewConfig = puedeVerConfiguracion(rol);
   const selectedRuta =
     snapshot.rutas.find((r) => r.id === selectedRutaId) ?? snapshot.rutas[0];
+
+  const reglasCapturaAdmin: ReglasCapturaViaticosTecnico | undefined =
+    configuracion && reglasViaticosVigentes
+      ? {
+          version: reglasViaticosVigentes.version,
+          vigenciaDesde: reglasViaticosVigentes.vigenciaDesde,
+          gpsRuta: reglasViaticosVigentes.gpsRuta,
+          presetsRapidos: reglasViaticosVigentes.presetsRapidos,
+          categoriasViatico: configuracion.categoriasViatico,
+        }
+      : undefined;
+
+  const handleNavegarPasoOnboarding = async (pasoId: OnboardingPasoId) => {
+    if (onboarding) {
+      const actualizado = seleccionarPasoOnboarding(onboarding, pasoId);
+      await actions.guardarOnboarding(actualizado);
+    }
+    setIsOnboardingOpen(false);
+    if (pasoId === 'empresa') {
+      setConfigSeccionInicial('empresa');
+      setAdminTab('configuracion');
+    } else if (pasoId === 'personal_cargos') {
+      setAdminTab('catalogos');
+    } else if (pasoId === 'flota') {
+      setAdminTab('catalogos');
+    } else if (pasoId === 'servicios') {
+      setConfigSeccionInicial('servicios');
+      setAdminTab('configuracion');
+    } else if (pasoId === 'cliente_proyecto') {
+      setAdminTab('proyectos');
+    } else if (pasoId === 'kmz_demo') {
+      setPreloadedKmzForModal(null);
+      setDefaultProyectoModal(snapshot.proyectos[0]?.id);
+      setIsKmzModalOpen(true);
+    }
+  };
 
   const handleOpenKmzInViewer = async (file: File) => {
     try {
@@ -820,6 +941,9 @@ export default function App() {
     shortLabel: string;
     icon: React.FC<{ className?: string }>;
   }> = [
+    ...(rol === 'admin'
+      ? [{ id: 'hoy' as const, label: 'Hoy', shortLabel: 'Hoy', icon: Home }]
+      : []),
     { id: 'proyectos', label: 'Proyectos y Rutas', shortLabel: 'Proyectos', icon: FolderKanban },
     { id: 'agenda', label: 'Agenda y Cuadrillas', shortLabel: 'Agenda', icon: CalendarDays },
     { id: 'rutas', label: 'Rutas y Servicios', shortLabel: 'Rutas', icon: Route },
@@ -828,6 +952,16 @@ export default function App() {
     { id: 'catalogos', label: 'Catálogos y Equipos', shortLabel: 'Catálogos', icon: Users },
     ...(canAudit
       ? [{ id: 'auditoria' as const, label: 'Auditoría F16', shortLabel: 'Auditoría', icon: History }]
+      : []),
+    ...(canViewConfig
+      ? [
+          {
+            id: 'configuracion' as const,
+            label: 'Configuración',
+            shortLabel: 'Config',
+            icon: Settings,
+          },
+        ]
       : []),
   ];
 
@@ -958,6 +1092,7 @@ export default function App() {
               </div>
               <div className="min-w-0">
                 <h1 className="text-sm sm:text-base font-bold text-[#0D1C2F] truncate">
+                  {adminTab === 'hoy' && `${snapshot.empresa.nombre} · Hoy`}
                   {adminTab === 'proyectos' && `${snapshot.empresa.nombre} · Proyectos y Rutas`}
                   {adminTab === 'agenda' && 'Agenda de Cuadrillas y Conflictos'}
                   {adminTab === 'rutas' && 'Cálculo de Rutas y Servicios Sumatorios'}
@@ -968,6 +1103,7 @@ export default function App() {
                   {adminTab === 'viaticos' && 'Control de Viáticos y Reparto por Proyecto'}
                   {adminTab === 'catalogos' && 'Catálogos, Flota y Equipos GNSS'}
                   {adminTab === 'auditoria' && 'Auditoría Operativa (F16)'}
+                  {adminTab === 'configuracion' && `${snapshot.empresa.nombre} · Configuración`}
                 </h1>
               </div>
             </div>
@@ -983,6 +1119,40 @@ export default function App() {
               </div>
 
               <PWAInstallButton />
+
+              {rol === 'admin' && (
+                <button
+                  type="button"
+                  onClick={() => setAdminTab('hoy')}
+                  className="lg:hidden inline-flex items-center gap-1 rounded-sm border border-[#CBD5E1] bg-white px-2.5 py-2 text-xs font-semibold text-[#0F2942] hover:bg-[#F8FAFC] min-h-[38px]"
+                  title="Hoy"
+                  aria-label="Ir a Hoy"
+                >
+                  <Home className="h-4 w-4 text-[#0F2942]" />
+                </button>
+              )}
+
+              {canViewConfig && (
+                <button
+                  type="button"
+                  onClick={() => setAdminTab('configuracion')}
+                  className="lg:hidden inline-flex items-center gap-1 rounded-sm border border-[#CBD5E1] bg-white px-2.5 py-2 text-xs font-semibold text-[#0F2942] hover:bg-[#F8FAFC] min-h-[38px]"
+                  title="Configuración"
+                  aria-label="Ir a Configuración"
+                >
+                  <Settings className="h-4 w-4 text-[#0F2942]" />
+                </button>
+              )}
+
+              <button
+                type="button"
+                onClick={() => setIsTutorialOpen(true)}
+                className="inline-flex items-center gap-1.5 rounded-sm border border-[#CBD5E1] bg-white px-2.5 py-2 text-xs font-semibold text-[#0F2942] hover:bg-[#F8FAFC] min-h-[38px]"
+                title="Abrir tutorial visual del perfil"
+              >
+                <HelpCircle className="h-4 w-4 text-[#0284C7]" />
+                <span className="hidden sm:inline">Ayuda</span>
+              </button>
 
               {canEdit && (
                 <button
@@ -1036,6 +1206,32 @@ export default function App() {
               </div>
             </div>
 
+            {adminTab === 'hoy' && rol === 'admin' && onboarding && (
+              <AdminHoyView
+                empresa={snapshot.empresa}
+                rutas={snapshot.rutas}
+                servicios={snapshot.servicios}
+                asignaciones={snapshot.asignaciones}
+                cuadrillas={snapshot.cuadrillas}
+                vehiculos={snapshot.vehiculos}
+                viaticos={snapshot.viaticos}
+                onboarding={onboarding}
+                isDemo={isDemoActivo}
+                onIrAPasoOnboarding={(pasoId) => {
+                  handleNavegarPasoOnboarding(pasoId).catch(() => {});
+                }}
+                onAbrirOnboarding={() => setIsOnboardingOpen(true)}
+                onCerrarTarjetaOnboarding={async () => {
+                  const cerrado = cerrarTarjetaOnboardingEnHoy(onboarding);
+                  await actions.guardarOnboarding(cerrado);
+                  showToast(
+                    'Tarjeta ocultada. Puedes reabrir el asistente en Configuración → Ayuda y tutorial.'
+                  );
+                }}
+                onIrATab={(tab) => setAdminTab(tab)}
+              />
+            )}
+
             {adminTab === 'proyectos' && (
               <ProyectosView
                 rol={rol}
@@ -1049,6 +1245,9 @@ export default function App() {
                 rutasAsignadasIds={rutasAsignadasAdminIds}
                 areaUnit={areaUnit}
                 pendingSyncCount={pendingCounts.total}
+                serviciosCatalogo={serviciosVigentes}
+                factoresTerreno={factoresTerrenoVigentes}
+                moneda={snapshot.empresa.moneda}
                 onChangeAreaUnit={setAreaUnit}
                 onCrearCliente={async (datos) => {
                   await actions.crearCliente(datos);
@@ -1127,6 +1326,10 @@ export default function App() {
                 baseLat={snapshot.empresa.baseLat}
                 baseLon={snapshot.empresa.baseLon}
                 baseDireccion={snapshot.empresa.direccionBase}
+                serviciosVigentes={serviciosVigentes}
+                factoresTerreno={factoresTerrenoVigentes}
+                reglasViaticos={reglasViaticosVigentes}
+                moneda={snapshot.empresa.moneda}
                 onSelectRuta={setSelectedRutaId}
                 onApplyToRuta={async ({
                   rutaId,
@@ -1161,6 +1364,9 @@ export default function App() {
                         tipoServicioId: sp.tipoServicioId,
                         nombre: sp.nombre,
                         cotizacionRD: sp.cotizacionRD,
+                        configVersion: sp.configVersion,
+                        tarifaBaseUsadaRD: sp.tarifaBaseUsadaRD,
+                        recargosUsadosRD: sp.recargosUsadosRD,
                         estado: 'cotizado',
                       });
                     } else if (
@@ -1171,11 +1377,14 @@ export default function App() {
                         ...existente,
                         nombre: sp.nombre,
                         cotizacionRD: sp.cotizacionRD,
+                        configVersion: sp.configVersion,
+                        tarifaBaseUsadaRD: sp.tarifaBaseUsadaRD,
+                        recargosUsadosRD: sp.recargosUsadosRD,
                       });
                     }
                   }
                   showToast(
-                    `Presupuesto (${formatRD(budgetViaticosRD)}) y servicios aplicados al proyecto.`
+                    `Presupuesto (${formatRD(budgetViaticosRD, snapshot.empresa.moneda)}) y servicios aplicados al proyecto.`
                   );
                 }}
                 onRegisterKmzFromCalculator={(parsed) => {
@@ -1359,14 +1568,14 @@ export default function App() {
             {adminTab === 'catalogos' && (
               <CatalogosView
                 rol={rol}
-                empresa={snapshot.empresa}
-                membresias={snapshot.membresias}
-                usuarios={snapshot.usuarios}
                 clientes={snapshot.clientes}
                 personal={snapshot.personal}
+                cargos={cargos}
                 vehiculos={snapshot.vehiculos}
+                combustiblesVigentes={combustiblesVigentes}
                 equipos={snapshot.equipos}
                 cuadrillas={snapshot.cuadrillas}
+                moneda={snapshot.empresa.moneda}
                 onCrearCliente={async (datos) => {
                   await actions.crearCliente(datos);
                 }}
@@ -1382,17 +1591,77 @@ export default function App() {
                 onGuardarCuadrilla={async (item) => {
                   await actions.guardarCuadrilla(item);
                 }}
-                onActualizarEmpresa={async (emp) => {
-                  await actions.actualizarEmpresa(emp);
-                }}
-                onGuardarMembresiaUsuario={async (params) => {
-                  await actions.guardarMembresiaUsuario(params);
-                }}
               />
             )}
 
             {adminTab === 'auditoria' && canAudit && (
               <AuditoriaView historial={snapshot.historial} />
+            )}
+
+            {adminTab === 'configuracion' && canViewConfig && configuracion && (
+              <ConfiguracionView
+                rol={rol}
+                usuarioActualId={sesion.usuario.id}
+                empresa={snapshot.empresa}
+                configuracion={configuracion}
+                membresias={snapshot.membresias}
+                usuarios={snapshot.usuarios}
+                personal={snapshot.personal}
+                vehiculos={snapshot.vehiculos}
+                isDemo={isDemoActivo}
+                seccionInicial={configSeccionInicial}
+                onActualizarEmpresa={async (emp) => {
+                  await actions.actualizarEmpresa(emp);
+                  showToast('Datos de la empresa actualizados.');
+                }}
+                onGuardarMembresiaUsuario={async (params) => {
+                  await actions.guardarMembresiaUsuario(params);
+                  showToast(`Acceso guardado para ${params.email}.`);
+                }}
+                onActualizarAccesoMembresia={async (params) => {
+                  await actions.actualizarAccesoMembresia(params);
+                  showToast('Permiso de usuario actualizado.');
+                }}
+                onGuardarCargoConfig={async (cargo) => {
+                  await actions.guardarCargoConfig(cargo);
+                  showToast(`Cargo "${cargo.etiqueta}" guardado.`);
+                }}
+                onEliminarCargoConfig={async (codigo) => {
+                  await actions.eliminarCargoConfig(codigo);
+                  showToast('Cargo eliminado del catálogo.');
+                }}
+                onCrearTipoCombustible={async (params) => {
+                  await actions.crearTipoCombustible(params);
+                  showToast(`Combustible "${params.nombre}" agregado.`);
+                }}
+                onAgregarVigenciaCombustible={async (params) => {
+                  await actions.agregarVigenciaCombustible(params);
+                  showToast(`Nueva vigencia de combustible (${params.vigenciaDesde}) guardada.`);
+                }}
+                onCrearServicioCatalogo={async (params) => {
+                  await actions.crearServicioCatalogo(params);
+                  showToast(`Servicio "${params.nombre}" agregado al catálogo.`);
+                }}
+                onAgregarVigenciaServicio={async (params) => {
+                  await actions.agregarVigenciaServicio(params);
+                  showToast(`Nueva vigencia (${params.tarifa.vigenciaDesde}) aplicada.`);
+                }}
+                onAgregarVigenciaFactoresTerreno={async (factores) => {
+                  await actions.agregarVigenciaFactoresTerreno(factores);
+                  showToast(`Factores de terreno vigentes desde ${factores.vigenciaDesde} guardados.`);
+                }}
+                onAgregarVigenciaReglasViaticos={async (reglas) => {
+                  await actions.agregarVigenciaReglasViaticos(reglas);
+                  showToast(`Reglas vigentes desde ${reglas.vigenciaDesde} guardadas.`);
+                }}
+                onAbrirTutorial={() => setIsTutorialOpen(true)}
+                onReiniciarOnboarding={async () => {
+                  const nuevo = reiniciarOnboarding(snapshot.empresa.id);
+                  await actions.guardarOnboarding(nuevo);
+                  setIsOnboardingOpen(true);
+                  showToast('Asistente de puesta en marcha reiniciado.');
+                }}
+              />
             )}
           </main>
         </div>
@@ -1443,6 +1712,10 @@ export default function App() {
         baseLat={snapshot.empresa.baseLat}
         baseLon={snapshot.empresa.baseLon}
         baseDireccion={snapshot.empresa.direccionBase}
+        serviciosVigentes={serviciosVigentes}
+        factoresTerreno={factoresTerrenoVigentes}
+        reglasViaticos={reglasViaticosVigentes}
+        moneda={snapshot.empresa.moneda}
         onCrearClienteYProyectoRapido={async (datos) => {
           let cliId = datos.clienteIdExistente;
           if (!cliId) {
@@ -1545,6 +1818,8 @@ export default function App() {
         creadoPorUsuario={sesion.usuario}
         baseLat={snapshot.empresa.baseLat}
         baseLon={snapshot.empresa.baseLon}
+        moneda={snapshot.empresa.moneda}
+        reglasCaptura={reglasCapturaAdmin}
         onAddExpense={async (expense) => {
           await actions.registrarViatico(expense);
           showToast(
@@ -1557,6 +1832,30 @@ export default function App() {
           await actions.editarViatico(viaticoId, expense);
           showToast('Viático actualizado.');
         }}
+      />
+
+      {rol === 'admin' && onboarding && (
+        <OnboardingWizardModal
+          isOpen={isOnboardingOpen}
+          empresaNombre={snapshot.empresa.nombre}
+          estado={onboarding}
+          isDemo={isDemoActivo}
+          onClose={() => setIsOnboardingOpen(false)}
+          onGuardarEstado={async (nuevo) => {
+            await actions.guardarOnboarding(nuevo);
+          }}
+          onNavegarAPaso={(paso) => {
+            handleNavegarPasoOnboarding(paso.id).catch(() => {});
+          }}
+        />
+      )}
+
+      <TutorialVisualModal
+        isOpen={isTutorialOpen}
+        rol={rol}
+        tarjetas={tutorialesPerfil}
+        onClose={handleCerrarTutorial}
+        onCompletar={handleCerrarTutorial}
       />
 
       <ResourceConflictModal

@@ -1,4 +1,8 @@
 import {
+  asegurarConfiguracionEmpresa,
+  asegurarEstadoOnboarding,
+  crearConfiguracionInicialEmpresa,
+  crearEstadoOnboardingInicial,
   detectarConflictosAsignacion,
   obtenerCuadrillasDeUsuario,
   obtenerFechaHoyAST,
@@ -7,41 +11,60 @@ import {
   proyectarSnapshotParaRol,
   puedeAprobarViatico,
   puedeCrearOEditarOperacion,
+  puedeEditarConfiguracion,
   puedeGestionarCatalogos,
   puedeGestionarEmpresa,
   puedeRegistrarBitacoraEnServicio,
   reconciliarColeccionLWWConReporte,
+  siguienteVersion,
   sumarDiasIso,
+  validarCargoConfig,
   validarDecisionViatico,
   validarEdicionViaticoTecnico,
   validarEliminacionViaticoTecnico,
+  validarEliminarCargo,
+  validarEmpresaConfig,
+  validarNuevaVigenciaCombustible,
+  validarNuevaVigenciaReglasViaticos,
+  validarNuevaVigenciaServicio,
+  validarNuevaVigenciaTerreno,
+  validarNuevoServicioCatalogo,
+  validarNuevoTipoCombustible,
   validarRangoFechas,
   validarRepartoViatico,
   validarResolucionConflictos,
   validarTransicionServicio,
+  validarVehiculoConfig,
 } from '../domain';
 import type { PayloadTransicionServicio } from '../domain/estados';
 import type {
   Asignacion,
   AvisoSobrescrituraLWW,
   BitacoraEntrada,
+  CargoConfig,
   Cliente,
+  ConfiguracionEmpresa,
   Cuadrilla,
   Empresa,
   EquipoGNSS,
   EstadoAprobacionViatico,
   EstadoEmpresaSnapshot,
+  EstadoOnboardingEmpresa,
   EstadoServicio,
   HistorialEvento,
   MembresiaEmpresa,
   Personal,
   ProyeccionSnapshotPorRol,
   Proyecto,
+  ReglasViaticosVersion,
   RepartoProyecto,
   RolEmpresa,
   Ruta,
   Servicio,
+  ServicioCatalogoConfig,
   SesionActiva,
+  TarifaServicioVersion,
+  TerrenoFactorVersion,
   Usuario,
   Vehiculo,
   Viatico,
@@ -57,6 +80,7 @@ import type { CuentaDemoInfo, RepositorioOperacion } from './RepositorioOperacio
 
 const DB_STORAGE_KEY = 'sirius_saas_db_v3';
 const SESSION_STORAGE_KEY = 'geomatrix_saas_session_v2';
+const TUTORIALES_STORAGE_KEY = 'sirius_tutoriales_vistos_v1';
 
 function esModoDemoHabilitado(): boolean {
   const env = (import.meta as unknown as { env?: Record<string, unknown> }).env;
@@ -104,6 +128,8 @@ function crearSeedDatabase(): DatabaseLocal {
       direccionBase: 'Av. 27 de Febrero #340, Santo Domingo',
       baseLat: 18.4861,
       baseLon: -69.9312,
+      zonaHoraria: 'America/Santo_Domingo',
+      moneda: 'RD$',
       planMensualRD: 14500,
       estadoSuscripcion: 'activa',
       fechaAlta: '2026-01-15',
@@ -116,6 +142,8 @@ function crearSeedDatabase(): DatabaseLocal {
       direccionBase: 'Av. Estrella Sadhalá #88, Santiago',
       baseLat: 19.4517,
       baseLon: -70.697,
+      zonaHoraria: 'America/Santo_Domingo',
+      moneda: 'RD$',
       planMensualRD: 9500,
       estadoSuscripcion: 'activa',
       fechaAlta: '2026-03-02',
@@ -248,6 +276,7 @@ function crearSeedDatabase(): DatabaseLocal {
       empresaId: 'emp-aia',
       etiqueta: 'Hilux 4x4 Doble Cabina',
       placa: 'L402819',
+      tipoCombustibleId: 'diesel_optimo',
       tipoCombustible: 'Diésel Óptimo',
       precioGalonRD: 239.1,
       kmPorGal: 32,
@@ -259,6 +288,7 @@ function crearSeedDatabase(): DatabaseLocal {
       empresaId: 'emp-aia',
       etiqueta: 'Pickup Ranger 4x4',
       placa: 'L418390',
+      tipoCombustibleId: 'diesel_optimo',
       tipoCombustible: 'Diésel Óptimo',
       precioGalonRD: 239.1,
       kmPorGal: 30,
@@ -270,6 +300,7 @@ function crearSeedDatabase(): DatabaseLocal {
       empresaId: 'emp-aia',
       etiqueta: 'SUV Brigada Urbana',
       placa: 'G551209',
+      tipoCombustibleId: 'gasolina_regular',
       tipoCombustible: 'Gasolina Regular',
       precioGalonRD: 272.5,
       kmPorGal: 35,
@@ -799,6 +830,7 @@ function crearSeedDatabase(): DatabaseLocal {
         empresaId: 'emp-caribe',
         etiqueta: 'Nissan Frontier 4x4',
         placa: 'L390112',
+        tipoCombustibleId: 'diesel_optimo',
         tipoCombustible: 'Diésel Óptimo',
         precioGalonRD: 239.1,
         kmPorGal: 31,
@@ -888,6 +920,8 @@ function crearSeedDatabase(): DatabaseLocal {
     asignaciones: [],
     viaticos: [],
     historial: [],
+    configuracion: crearConfiguracionInicialEmpresa('emp-caribe'),
+    onboarding: crearEstadoOnboardingInicial('emp-caribe'),
   };
 
   const snapshotAia: EstadoEmpresaSnapshot = {
@@ -906,6 +940,8 @@ function crearSeedDatabase(): DatabaseLocal {
     asignaciones: asignacionesAia,
     viaticos: viaticosAia,
     historial: historialAia,
+    configuracion: crearConfiguracionInicialEmpresa('emp-aia'),
+    onboarding: crearEstadoOnboardingInicial('emp-aia'),
   };
 
   return {
@@ -916,6 +952,48 @@ function crearSeedDatabase(): DatabaseLocal {
       'emp-aia': snapshotAia,
       'emp-caribe': snapshotCaribe,
     },
+  };
+}
+
+function hidratarDatabase(rawDb: DatabaseLocal): DatabaseLocal {
+  const empresas = rawDb.empresas.map((emp) => ({
+    ...emp,
+    zonaHoraria: emp.zonaHoraria || 'America/Santo_Domingo',
+    moneda: emp.moneda || 'RD$',
+  }));
+
+  const snapshotsPorEmpresa: Record<string, EstadoEmpresaSnapshot> = {};
+  for (const [empresaId, snap] of Object.entries(rawDb.snapshotsPorEmpresa)) {
+    const config = asegurarConfiguracionEmpresa(empresaId, snap.configuracion);
+    const onboarding = asegurarEstadoOnboarding(empresaId, snap.onboarding);
+    const empresaHydrated: Empresa = {
+      ...snap.empresa,
+      zonaHoraria: snap.empresa.zonaHoraria || 'America/Santo_Domingo',
+      moneda: snap.empresa.moneda || 'RD$',
+    };
+    const vehiculos = snap.vehiculos.map((v) => {
+      if (v.tipoCombustibleId) return v;
+      const match = config.combustibles.find(
+        (c) => c.nombre.toLowerCase() === v.tipoCombustible.toLowerCase()
+      );
+      return {
+        ...v,
+        tipoCombustibleId: match?.id ?? config.combustibles[0]?.id,
+      };
+    });
+    snapshotsPorEmpresa[empresaId] = {
+      ...snap,
+      empresa: empresaHydrated,
+      vehiculos,
+      configuracion: config,
+      onboarding,
+    };
+  }
+
+  return {
+    ...rawDb,
+    empresas,
+    snapshotsPorEmpresa,
   };
 }
 
@@ -932,7 +1010,9 @@ export class LocalRepositorioOperacion implements RepositorioOperacion {
       if (raw) {
         const parsed = JSON.parse(raw) as DatabaseLocal;
         if (parsed?.empresas?.length && parsed?.snapshotsPorEmpresa) {
-          return parsed;
+          const hydrated = hidratarDatabase(parsed);
+          this.guardarDB(hydrated);
+          return hydrated;
         }
       }
     } catch {
@@ -1919,23 +1999,31 @@ export class LocalRepositorioOperacion implements RepositorioOperacion {
     if (!puedeGestionarCatalogos(sesion.rolActivo)) {
       throw new Error('No tienes permisos para administrar vehículos.');
     }
+    const check = validarVehiculoConfig(item);
+    if (!check.valido) {
+      throw new Error(check.error || 'Datos de vehículo inválidos.');
+    }
     const snap = this.obtenerSnapshot(empresaId);
     const anterior = item.id ? snap.vehiculos.find((v) => v.id === item.id) : undefined;
     const record: Vehiculo = {
       ...item,
       id: item.id || `veh-${Date.now()}`,
       empresaId,
+      etiqueta: item.etiqueta.trim(),
+      placa: item.placa.trim().toUpperCase(),
     };
     snap.vehiculos = anterior
       ? snap.vehiculos.map((v) => (v.id === record.id ? record : v))
       : [record, ...snap.vehiculos];
-    const valorAnterior = anterior ? anterior.estado : 'Sin registro';
-    const valorNuevo = record.estado;
+    const valorAnterior = anterior
+      ? `${anterior.estado} · ${anterior.tipoCombustible} · ${anterior.kmPorGal} km/gal`
+      : 'Sin registro';
+    const valorNuevo = `${record.estado} · ${record.tipoCombustible} · ${record.kmPorGal} km/gal`;
     this.registrarEvento(snap, {
       entidadTipo: 'catalogo',
       entidadId: record.id,
       accion: anterior ? 'Vehículo actualizado' : 'Vehículo registrado',
-      detalle: `${record.etiqueta} (${record.placa}) → estado: ${record.estado}.`,
+      detalle: `${record.etiqueta} (${record.placa}) → estado: ${record.estado}, mant: ${record.mantenimientoPorKmRD}/km.`,
       valorAnterior,
       valorNuevo,
       usuarioId: sesion.usuario.id,
@@ -2042,19 +2130,41 @@ export class LocalRepositorioOperacion implements RepositorioOperacion {
     if (!puedeGestionarEmpresa(sesion.rolActivo)) {
       throw new Error('Solo el Administrador de la empresa puede modificar la configuración.');
     }
-    this.db.empresas = this.db.empresas.map((e) => (e.id === empresa.id ? empresa : e));
+    const check = validarEmpresaConfig(empresa);
+    if (!check.valido) {
+      throw new Error(check.error || 'Datos de empresa inválidos.');
+    }
     const snap = this.obtenerSnapshot(empresa.id);
-    snap.empresa = empresa;
+    const anterior = snap.empresa;
+    // Plan de suscripción y estado permanecen de solo lectura desde el cliente
+    const actualizada: Empresa = {
+      ...empresa,
+      nombre: empresa.nombre.trim(),
+      rnc: empresa.rnc.trim(),
+      direccionBase: empresa.direccionBase.trim(),
+      zonaHoraria: empresa.zonaHoraria.trim(),
+      moneda: empresa.moneda.trim(),
+      planMensualRD: anterior.planMensualRD,
+      estadoSuscripcion: anterior.estadoSuscripcion,
+      fechaAlta: anterior.fechaAlta,
+    };
+    this.db.empresas = this.db.empresas.map((e) => (e.id === actualizada.id ? actualizada : e));
+    snap.empresa = actualizada;
+    const valorAnterior = `${anterior.nombre} (${anterior.zonaHoraria} · ${anterior.moneda})`;
+    const valorNuevo = `${actualizada.nombre} (${actualizada.zonaHoraria} · ${actualizada.moneda})`;
     this.registrarEvento(snap, {
       entidadTipo: 'empresa',
-      entidadId: empresa.id,
+      entidadId: actualizada.id,
       accion: 'Empresa actualizada',
-      detalle: `Datos de "${empresa.nombre}" (Plan RD$ ${empresa.planMensualRD}/mes) actualizados.`,
+      detalle: `Datos de "${actualizada.nombre}" (${actualizada.zonaHoraria}, ${actualizada.moneda}) actualizados.`,
+      valorAnterior,
+      valorNuevo,
       usuarioId: sesion.usuario.id,
       usuarioNombre: sesion.usuario.nombre,
+      metadata: { valorAnterior, valorNuevo },
     });
     this.guardarDB();
-    return empresa;
+    return actualizada;
   }
 
   async guardarMembresiaUsuario(params: {
@@ -2113,12 +2223,494 @@ export class LocalRepositorioOperacion implements RepositorioOperacion {
       entidadTipo: 'empresa',
       entidadId: user.id,
       accion: 'Rol de usuario actualizado',
-      detalle: `${cleanUser.nombre} (${cleanUser.email}) asignado como ${params.rol}.`,
+      detalle: `${cleanUser.nombre} (${cleanUser.email}) asignado como ${params.rol} (${params.activo ? 'activo' : 'inactivo'}).`,
       usuarioId: sesion.usuario.id,
       usuarioNombre: sesion.usuario.nombre,
     });
     this.guardarDB();
     return { usuario: cleanUser, rol: params.rol };
+  }
+
+  async actualizarAccesoMembresia(params: {
+    empresaId: string;
+    usuarioId: string;
+    rol: RolEmpresa;
+    activo: boolean;
+  }): Promise<void> {
+    const sesion = this.obtenerSesionRequerida();
+    if (!puedeGestionarEmpresa(sesion.rolActivo)) {
+      throw new Error('Solo el Administrador puede modificar roles o acceso de usuarios.');
+    }
+    const snap = this.obtenerSnapshot(params.empresaId);
+    const mem = this.db.membresias.find(
+      (m) => m.empresaId === params.empresaId && m.usuarioId === params.usuarioId
+    );
+    if (!mem) {
+      throw new Error('No se encontró la membresía del usuario en esta empresa.');
+    }
+    if (params.usuarioId === sesion.usuario.id && !params.activo) {
+      throw new Error('No puedes desactivar tu propio acceso activo como Administrador.');
+    }
+
+    const valorAnterior = `${mem.rol} (${mem.activo ? 'activo' : 'inactivo'})`;
+    mem.rol = params.rol;
+    mem.activo = params.activo;
+
+    const user = this.db.usuarios.find((u) => u.id === params.usuarioId);
+    if (user) {
+      const tieneAlgunaActiva = this.db.membresias.some(
+        (m) => m.usuarioId === user.id && m.activo
+      );
+      user.activo = tieneAlgunaActiva;
+      snap.usuarios = snap.usuarios.map((u) =>
+        u.id === user.id ? { ...u, activo: params.activo } : u
+      );
+    }
+    snap.membresias = this.db.membresias.filter((m) => m.empresaId === params.empresaId);
+
+    const valorNuevo = `${params.rol} (${params.activo ? 'activo' : 'inactivo'})`;
+    this.registrarEvento(snap, {
+      entidadTipo: 'empresa',
+      entidadId: params.usuarioId,
+      accion: 'Acceso de usuario actualizado',
+      detalle: `${user?.nombre || params.usuarioId} cambió a ${valorNuevo}.`,
+      valorAnterior,
+      valorNuevo,
+      usuarioId: sesion.usuario.id,
+      usuarioNombre: sesion.usuario.nombre,
+      metadata: { valorAnterior, valorNuevo },
+    });
+    this.guardarDB();
+  }
+
+  async guardarCargoConfig(
+    empresaId: string,
+    cargo: Pick<CargoConfig, 'codigo' | 'etiqueta' | 'activo'>
+  ): Promise<ConfiguracionEmpresa> {
+    const sesion = this.obtenerSesionRequerida();
+    if (!puedeEditarConfiguracion(sesion.rolActivo)) {
+      throw new Error('Solo el Administrador puede editar el catálogo de cargos.');
+    }
+    const snap = this.obtenerSnapshot(empresaId);
+    const config = asegurarConfiguracionEmpresa(empresaId, snap.configuracion);
+    const existente = config.cargos.find((c) => c.codigo === cargo.codigo);
+    const check = validarCargoConfig({
+      codigo: cargo.codigo,
+      etiqueta: cargo.etiqueta,
+      existentes: config.cargos,
+      esEdicion: Boolean(existente),
+    });
+    if (!check.valido || !check.codigoNormalizado) {
+      throw new Error(check.error || 'Cargo inválido.');
+    }
+
+    const nuevoCargo: CargoConfig = {
+      codigo: check.codigoNormalizado,
+      etiqueta: cargo.etiqueta.trim(),
+      esBase: existente?.esBase ?? false,
+      activo: cargo.activo,
+    };
+
+    const nextConfig: ConfiguracionEmpresa = {
+      ...config,
+      cargos: existente
+        ? config.cargos.map((c) => (c.codigo === nuevoCargo.codigo ? nuevoCargo : c))
+        : [...config.cargos, nuevoCargo],
+      versionGlobal: config.versionGlobal + 1,
+    };
+    snap.configuracion = nextConfig;
+
+    this.registrarEvento(snap, {
+      entidadTipo: 'empresa',
+      entidadId: nuevoCargo.codigo,
+      accion: existente ? 'Cargo actualizado' : 'Cargo creado',
+      detalle: `Cargo "${nuevoCargo.etiqueta}" [${nuevoCargo.codigo}] (${nuevoCargo.activo ? 'activo' : 'inactivo'}).`,
+      valorAnterior: existente ? `${existente.etiqueta} (${existente.activo ? 'activo' : 'inactivo'})` : 'Sin registro',
+      valorNuevo: `${nuevoCargo.etiqueta} (${nuevoCargo.activo ? 'activo' : 'inactivo'})`,
+      usuarioId: sesion.usuario.id,
+      usuarioNombre: sesion.usuario.nombre,
+    });
+    this.guardarDB();
+    return nextConfig;
+  }
+
+  async eliminarCargoConfig(empresaId: string, codigo: string): Promise<ConfiguracionEmpresa> {
+    const sesion = this.obtenerSesionRequerida();
+    if (!puedeEditarConfiguracion(sesion.rolActivo)) {
+      throw new Error('Solo el Administrador puede eliminar cargos.');
+    }
+    const snap = this.obtenerSnapshot(empresaId);
+    const config = asegurarConfiguracionEmpresa(empresaId, snap.configuracion);
+    const check = validarEliminarCargo({
+      codigo,
+      cargos: config.cargos,
+      personal: snap.personal,
+    });
+    if (!check.valido) {
+      throw new Error(check.error || 'No se puede eliminar el cargo.');
+    }
+    const eliminado = config.cargos.find((c) => c.codigo === codigo);
+    const nextConfig: ConfiguracionEmpresa = {
+      ...config,
+      cargos: config.cargos.filter((c) => c.codigo !== codigo),
+      versionGlobal: config.versionGlobal + 1,
+    };
+    snap.configuracion = nextConfig;
+    this.registrarEvento(snap, {
+      entidadTipo: 'empresa',
+      entidadId: codigo,
+      accion: 'Cargo eliminado',
+      detalle: `Se eliminó el cargo "${eliminado?.etiqueta || codigo}" [${codigo}].`,
+      valorAnterior: eliminado?.etiqueta || codigo,
+      valorNuevo: 'Eliminado',
+      usuarioId: sesion.usuario.id,
+      usuarioNombre: sesion.usuario.nombre,
+    });
+    this.guardarDB();
+    return nextConfig;
+  }
+
+  async crearTipoCombustible(params: {
+    empresaId: string;
+    nombre: string;
+    precioGalonRD: number;
+    vigenciaDesde: string;
+  }): Promise<ConfiguracionEmpresa> {
+    const sesion = this.obtenerSesionRequerida();
+    if (!puedeEditarConfiguracion(sesion.rolActivo)) {
+      throw new Error('Solo el Administrador puede crear combustibles.');
+    }
+    const snap = this.obtenerSnapshot(params.empresaId);
+    const config = asegurarConfiguracionEmpresa(params.empresaId, snap.configuracion);
+    const check = validarNuevoTipoCombustible({
+      nombre: params.nombre,
+      existentes: config.combustibles,
+      precioGalonRD: params.precioGalonRD,
+      vigenciaDesde: params.vigenciaDesde,
+    });
+    if (!check.valido || !check.idNormalizado) {
+      throw new Error(check.error || 'Datos de combustible inválidos.');
+    }
+    const nuevo = {
+      id: check.idNormalizado,
+      nombre: params.nombre.trim(),
+      activo: true,
+      versiones: [
+        {
+          version: 1,
+          vigenciaDesde: params.vigenciaDesde,
+          precioGalonRD: params.precioGalonRD,
+        },
+      ],
+    };
+    const nextConfig: ConfiguracionEmpresa = {
+      ...config,
+      combustibles: [...config.combustibles, nuevo],
+      versionGlobal: config.versionGlobal + 1,
+    };
+    snap.configuracion = nextConfig;
+    this.registrarEvento(snap, {
+      entidadTipo: 'empresa',
+      entidadId: nuevo.id,
+      accion: 'Combustible agregado',
+      detalle: `Tipo de combustible "${nuevo.nombre}" @ RD$ ${params.precioGalonRD}/gal desde ${params.vigenciaDesde}.`,
+      valorAnterior: 'Sin registro',
+      valorNuevo: `RD$ ${params.precioGalonRD}/gal (v1 · ${params.vigenciaDesde})`,
+      usuarioId: sesion.usuario.id,
+      usuarioNombre: sesion.usuario.nombre,
+    });
+    this.guardarDB();
+    return nextConfig;
+  }
+
+  async agregarVigenciaCombustible(params: {
+    empresaId: string;
+    combustibleId: string;
+    precioGalonRD: number;
+    vigenciaDesde: string;
+    activo?: boolean;
+  }): Promise<ConfiguracionEmpresa> {
+    const sesion = this.obtenerSesionRequerida();
+    if (!puedeEditarConfiguracion(sesion.rolActivo)) {
+      throw new Error('Solo el Administrador puede actualizar precios de combustible.');
+    }
+    const snap = this.obtenerSnapshot(params.empresaId);
+    const config = asegurarConfiguracionEmpresa(params.empresaId, snap.configuracion);
+    const target = config.combustibles.find((c) => c.id === params.combustibleId);
+    if (!target) {
+      throw new Error('Tipo de combustible no encontrado.');
+    }
+    const check = validarNuevaVigenciaCombustible(target.versiones, {
+      vigenciaDesde: params.vigenciaDesde,
+      precioGalonRD: params.precioGalonRD,
+    });
+    if (!check.valido) {
+      throw new Error(check.error || 'Vigencia de combustible inválida.');
+    }
+    const nextVersionNum = siguienteVersion(target.versiones);
+    const nuevaVersion = {
+      version: nextVersionNum,
+      vigenciaDesde: params.vigenciaDesde,
+      precioGalonRD: params.precioGalonRD,
+    };
+    const ultimaVersion = target.versiones[target.versiones.length - 1];
+    const nextConfig: ConfiguracionEmpresa = {
+      ...config,
+      combustibles: config.combustibles.map((c) =>
+        c.id === params.combustibleId
+          ? {
+              ...c,
+              activo: params.activo ?? c.activo,
+              versiones: [...c.versiones, nuevaVersion],
+            }
+          : c
+      ),
+      versionGlobal: config.versionGlobal + 1,
+    };
+    snap.configuracion = nextConfig;
+    this.registrarEvento(snap, {
+      entidadTipo: 'empresa',
+      entidadId: target.id,
+      accion: 'Tarifa de combustible versionada',
+      detalle: `${target.nombre}: nueva vigencia desde ${params.vigenciaDesde} a ${params.precioGalonRD}/gal (v${nextVersionNum}).`,
+      valorAnterior: ultimaVersion ? `${ultimaVersion.precioGalonRD}/gal (${ultimaVersion.vigenciaDesde})` : undefined,
+      valorNuevo: `${params.precioGalonRD}/gal (${params.vigenciaDesde})`,
+      usuarioId: sesion.usuario.id,
+      usuarioNombre: sesion.usuario.nombre,
+    });
+    this.guardarDB();
+    return nextConfig;
+  }
+
+  async crearServicioCatalogo(params: {
+    empresaId: string;
+    codigo: string;
+    nombre: string;
+    subtitulo: string;
+    tarifaInicial: Omit<TarifaServicioVersion, 'version'>;
+  }): Promise<ConfiguracionEmpresa> {
+    const sesion = this.obtenerSesionRequerida();
+    if (!puedeEditarConfiguracion(sesion.rolActivo)) {
+      throw new Error('Solo el Administrador puede crear servicios del catálogo.');
+    }
+    const snap = this.obtenerSnapshot(params.empresaId);
+    const config = asegurarConfiguracionEmpresa(params.empresaId, snap.configuracion);
+    const check = validarNuevoServicioCatalogo({
+      codigo: params.codigo,
+      nombre: params.nombre,
+      subtitulo: params.subtitulo,
+      existentes: config.servicios,
+      tarifaInicial: params.tarifaInicial,
+    });
+    if (!check.valido || !check.codigoNormalizado) {
+      throw new Error(check.error || 'Servicio inválido.');
+    }
+    const nuevo: ServicioCatalogoConfig = {
+      codigo: check.codigoNormalizado,
+      nombre: params.nombre.trim(),
+      subtitulo: params.subtitulo.trim() || 'Servicio Técnico',
+      activo: true,
+      versiones: [{ ...params.tarifaInicial, version: 1 }],
+    };
+    const nextConfig: ConfiguracionEmpresa = {
+      ...config,
+      servicios: [...config.servicios, nuevo],
+      versionGlobal: config.versionGlobal + 1,
+    };
+    snap.configuracion = nextConfig;
+    this.registrarEvento(snap, {
+      entidadTipo: 'empresa',
+      entidadId: nuevo.codigo,
+      accion: 'Servicio de catálogo agregado',
+      detalle: `Servicio "${nuevo.nombre}" [${nuevo.codigo}] con base ${params.tarifaInicial.precioBaseRD} desde ${params.tarifaInicial.vigenciaDesde}.`,
+      valorAnterior: 'Sin registro',
+      valorNuevo: `Base ${params.tarifaInicial.precioBaseRD} (${params.tarifaInicial.vigenciaDesde})`,
+      usuarioId: sesion.usuario.id,
+      usuarioNombre: sesion.usuario.nombre,
+    });
+    this.guardarDB();
+    return nextConfig;
+  }
+
+  async agregarVigenciaServicio(params: {
+    empresaId: string;
+    servicioCodigo: string;
+    nombre?: string;
+    subtitulo?: string;
+    activo?: boolean;
+    tarifa: Omit<TarifaServicioVersion, 'version'>;
+  }): Promise<ConfiguracionEmpresa> {
+    const sesion = this.obtenerSesionRequerida();
+    if (!puedeEditarConfiguracion(sesion.rolActivo)) {
+      throw new Error('Solo el Administrador puede actualizar tarifas de servicios.');
+    }
+    const snap = this.obtenerSnapshot(params.empresaId);
+    const config = asegurarConfiguracionEmpresa(params.empresaId, snap.configuracion);
+    const target = config.servicios.find((s) => s.codigo === params.servicioCodigo);
+    if (!target) {
+      throw new Error('Servicio no encontrado en catálogo.');
+    }
+    const check = validarNuevaVigenciaServicio(target.versiones, params.tarifa);
+    if (!check.valido) {
+      throw new Error(check.error || 'Tarifa de servicio inválida.');
+    }
+    const nextVersionNum = siguienteVersion(target.versiones);
+    const nuevaTarifa: TarifaServicioVersion = {
+      ...params.tarifa,
+      version: nextVersionNum,
+    };
+    const ultima = target.versiones[target.versiones.length - 1];
+    const nextConfig: ConfiguracionEmpresa = {
+      ...config,
+      servicios: config.servicios.map((s) =>
+        s.codigo === params.servicioCodigo
+          ? {
+              ...s,
+              nombre: params.nombre?.trim() || s.nombre,
+              subtitulo: params.subtitulo?.trim() || s.subtitulo,
+              activo: params.activo ?? s.activo,
+              versiones: [...s.versiones, nuevaTarifa],
+            }
+          : s
+      ),
+      versionGlobal: config.versionGlobal + 1,
+    };
+    snap.configuracion = nextConfig;
+    this.registrarEvento(snap, {
+      entidadTipo: 'empresa',
+      entidadId: target.codigo,
+      accion: 'Tarifa de servicio versionada',
+      detalle: `${target.nombre}: nueva vigencia v${nextVersionNum} desde ${params.tarifa.vigenciaDesde} (base ${params.tarifa.precioBaseRD}).`,
+      valorAnterior: ultima ? `Base ${ultima.precioBaseRD} (${ultima.vigenciaDesde})` : undefined,
+      valorNuevo: `Base ${params.tarifa.precioBaseRD} (${params.tarifa.vigenciaDesde})`,
+      usuarioId: sesion.usuario.id,
+      usuarioNombre: sesion.usuario.nombre,
+    });
+    this.guardarDB();
+    return nextConfig;
+  }
+
+  async agregarVigenciaFactoresTerreno(params: {
+    empresaId: string;
+    factores: Omit<TerrenoFactorVersion, 'version'>;
+  }): Promise<ConfiguracionEmpresa> {
+    const sesion = this.obtenerSesionRequerida();
+    if (!puedeEditarConfiguracion(sesion.rolActivo)) {
+      throw new Error('Solo el Administrador puede actualizar factores de terreno.');
+    }
+    const snap = this.obtenerSnapshot(params.empresaId);
+    const config = asegurarConfiguracionEmpresa(params.empresaId, snap.configuracion);
+    const check = validarNuevaVigenciaTerreno(config.factoresTerreno, params.factores);
+    if (!check.valido) {
+      throw new Error(check.error || 'Factores de terreno inválidos.');
+    }
+    const nextVersionNum = siguienteVersion(config.factoresTerreno);
+    const nueva: TerrenoFactorVersion = {
+      ...params.factores,
+      version: nextVersionNum,
+    };
+    const nextConfig: ConfiguracionEmpresa = {
+      ...config,
+      factoresTerreno: [...config.factoresTerreno, nueva],
+      versionGlobal: config.versionGlobal + 1,
+    };
+    snap.configuracion = nextConfig;
+    this.registrarEvento(snap, {
+      entidadTipo: 'empresa',
+      entidadId: 'factores_terreno',
+      accion: 'Factores de terreno versionados',
+      detalle: `Vigencia v${nextVersionNum} desde ${nueva.vigenciaDesde}: Llano ${nueva.Llano}x, Ondulado ${nueva.Ondulado}x, Montañoso ${nueva.Montañoso}x.`,
+      usuarioId: sesion.usuario.id,
+      usuarioNombre: sesion.usuario.nombre,
+    });
+    this.guardarDB();
+    return nextConfig;
+  }
+
+  async agregarVigenciaReglasViaticos(params: {
+    empresaId: string;
+    reglas: Omit<ReglasViaticosVersion, 'version'>;
+  }): Promise<ConfiguracionEmpresa> {
+    const sesion = this.obtenerSesionRequerida();
+    if (!puedeEditarConfiguracion(sesion.rolActivo)) {
+      throw new Error('Solo el Administrador puede actualizar reglas de viáticos y distancia.');
+    }
+    const snap = this.obtenerSnapshot(params.empresaId);
+    const config = asegurarConfiguracionEmpresa(params.empresaId, snap.configuracion);
+    const check = validarNuevaVigenciaReglasViaticos(config.reglasViaticos, params.reglas);
+    if (!check.valido) {
+      throw new Error(check.error || 'Reglas de viáticos inválidas.');
+    }
+    const nextVersionNum = siguienteVersion(config.reglasViaticos);
+    const nueva: ReglasViaticosVersion = {
+      ...params.reglas,
+      version: nextVersionNum,
+    };
+    const ultima = config.reglasViaticos[config.reglasViaticos.length - 1];
+    const nextConfig: ConfiguracionEmpresa = {
+      ...config,
+      reglasViaticos: [...config.reglasViaticos, nueva],
+      versionGlobal: config.versionGlobal + 1,
+    };
+    snap.configuracion = nextConfig;
+    this.registrarEvento(snap, {
+      entidadTipo: 'empresa',
+      entidadId: 'reglas_viaticos',
+      accion: 'Reglas de viáticos y GPS versionadas',
+      detalle: `Vigencia v${nextVersionNum} desde ${nueva.vigenciaDesde}: GPS ${nueva.gpsRuta.tarifaPorKmRD}/km (mín ${nueva.gpsRuta.minimoKm} km, ${nueva.gpsRuta.conceptoDistancia}).`,
+      valorAnterior: ultima
+        ? `GPS ${ultima.gpsRuta.tarifaPorKmRD}/km · Dieta ${ultima.dietaCampoRD} (${ultima.vigenciaDesde})`
+        : undefined,
+      valorNuevo: `GPS ${nueva.gpsRuta.tarifaPorKmRD}/km · Dieta ${nueva.dietaCampoRD} (${nueva.vigenciaDesde})`,
+      usuarioId: sesion.usuario.id,
+      usuarioNombre: sesion.usuario.nombre,
+    });
+    this.guardarDB();
+    return nextConfig;
+  }
+
+  async guardarOnboarding(
+    empresaId: string,
+    onboarding: EstadoOnboardingEmpresa
+  ): Promise<EstadoOnboardingEmpresa> {
+    const sesion = this.obtenerSesionRequerida();
+    if (!puedeEditarConfiguracion(sesion.rolActivo)) {
+      throw new Error('Solo el Administrador puede actualizar el asistente de configuración.');
+    }
+    const snap = this.obtenerSnapshot(empresaId);
+    const next = asegurarEstadoOnboarding(empresaId, onboarding);
+    snap.onboarding = next;
+    this.guardarDB();
+    return next;
+  }
+
+  obtenerTutorialesVistos(usuarioId: string): Partial<Record<RolEmpresa, boolean>> {
+    try {
+      const raw = localStorage.getItem(TUTORIALES_STORAGE_KEY);
+      if (!raw) return {};
+      const parsed = JSON.parse(raw) as Record<string, Partial<Record<RolEmpresa, boolean>>>;
+      return parsed[usuarioId] ?? {};
+    } catch {
+      return {};
+    }
+  }
+
+  marcarTutorialVisto(usuarioId: string, rol: RolEmpresa): Partial<Record<RolEmpresa, boolean>> {
+    let all: Record<string, Partial<Record<RolEmpresa, boolean>>> = {};
+    try {
+      const raw = localStorage.getItem(TUTORIALES_STORAGE_KEY);
+      if (raw) all = JSON.parse(raw) as Record<string, Partial<Record<RolEmpresa, boolean>>>;
+    } catch {
+      all = {};
+    }
+    const nextUser = { ...(all[usuarioId] ?? {}), [rol]: true };
+    all[usuarioId] = nextUser;
+    try {
+      localStorage.setItem(TUTORIALES_STORAGE_KEY, JSON.stringify(all));
+    } catch {
+      // Ignore quota errors
+    }
+    return nextUser;
   }
 
   async sincronizarConServidor(empresaId: string): Promise<{

@@ -12,6 +12,7 @@ import {
   XCircle,
 } from 'lucide-react';
 import {
+  CATEGORIAS_VIATICO,
   calcularReporteViaticosPorProyecto,
   completarRepartoConSinAsignar,
   puedeAprobarViatico,
@@ -41,15 +42,6 @@ interface ViaticosViewProps {
   onActualizarReparto: (viaticoId: string, repartos: RepartoProyecto[]) => Promise<void>;
   onEliminarViatico: (viaticoId: string) => Promise<void>;
 }
-
-const CATEGORIAS: CategoriaViatico[] = [
-  'Combustible',
-  'Dieta',
-  'Hospedaje',
-  'Peaje',
-  'Materiales',
-  'Otro',
-];
 
 export const ViaticosView: React.FC<ViaticosViewProps> = ({
   rol,
@@ -425,7 +417,7 @@ export const ViaticosView: React.FC<ViaticosViewProps> = ({
             className="rounded-sm border border-[#CBD5E1] bg-white px-2.5 py-2"
           >
             <option value="ALL">Todas las categorías</option>
-            {CATEGORIAS.map((c) => (
+            {CATEGORIAS_VIATICO.map((c) => (
               <option key={c} value={c}>
                 {c}
               </option>

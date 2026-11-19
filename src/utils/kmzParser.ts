@@ -1,4 +1,10 @@
 import JSZip from 'jszip';
+import {
+  calcularCombustibleGpsRuta,
+  crearConfiguracionInicialEmpresa,
+  obtenerReglasViaticosVigentes,
+} from '../domain/configuracion';
+import type { ReglasViaticosVersion } from '../types/domain';
 import type { GeoPoint, KmzFeature } from '../types/geodesy';
 import {
   computeCentroid,
@@ -10,6 +16,10 @@ import {
 import { inferDominicanLocationFromCoords } from './osmGeocode';
 
 const SANTO_DOMINGO_BASE = { lat: 18.4861, lon: -69.9312 };
+const DEFAULT_REGLAS_KMZ = obtenerReglasViaticosVigentes(
+  crearConfiguracionInicialEmpresa('default'),
+  '2026-01-01'
+);
 
 function parseCoordinatesString(raw: string): GeoPoint[] {
   const tokens = raw.trim().split(/\s+/);
@@ -157,18 +167,14 @@ export interface ParsedKmzResult {
 
 export function estimateViaticosFromKmz(
   features: KmzFeature[],
-  centroid: GeoPoint
+  centroid: GeoPoint,
+  reglas: ReglasViaticosVersion = DEFAULT_REGLAS_KMZ,
+  baseLat: number = SANTO_DOMINGO_BASE.lat,
+  baseLon: number = SANTO_DOMINGO_BASE.lon
 ): ParsedKmzResult['estimatedViaticos'] {
   const distKm = Math.max(
-    12,
-    Math.round(
-      haversineMeters(
-        SANTO_DOMINGO_BASE.lat,
-        SANTO_DOMINGO_BASE.lon,
-        centroid.lat,
-        centroid.lon
-      ) / 1000
-    )
+    1,
+    Math.round(haversineMeters(baseLat, baseLon, centroid.lat, centroid.lon) / 1000)
   );
   const totalAreaM2 = features.reduce((sum, f) => sum + f.areaM2, 0);
   const totalVertices = features.reduce((sum, f) => sum + f.points.length, 0);
@@ -176,11 +182,20 @@ export function estimateViaticosFromKmz(
   const hectares = totalAreaM2 / 10000;
   const estimatedDays = Math.max(1, Math.min(7, Math.ceil(hectares / 18 + totalVertices / 28)));
 
-  const roundTripKm = distKm * 2;
-  const fuelRD = Math.round(roundTripKm * 26.5);
-  const perDiemRD = estimatedDays * 2200 * 2;
-  const tollsRD = distKm > 45 ? Math.round((distKm / 50) * 320) : 0;
-  const lodgingRD = distKm > 105 && estimatedDays > 1 ? (estimatedDays - 1) * 4800 : 0;
+  const gpsCalc = calcularCombustibleGpsRuta({
+    distanciaOneWayKm: distKm,
+    regla: reglas.gpsRuta,
+  });
+  const fuelRD = gpsCalc.montoRD;
+  const perDiemRD = estimatedDays * reglas.dietaCampoRD * reglas.kmzPersonasDietaDefault;
+  const tollsRD =
+    distKm > reglas.kmzPeajeUmbralKm
+      ? Math.round((distKm / 50) * reglas.kmzPeajePorTramo50KmRD)
+      : 0;
+  const lodgingRD =
+    distKm > reglas.umbralHospedajeKm && estimatedDays > 1
+      ? (estimatedDays - 1) * reglas.hospedajePorNocheRD
+      : 0;
 
   return {
     distanceFromBaseKm: distKm,
