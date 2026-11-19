@@ -3,8 +3,13 @@ import { LocalRepositorioOperacion } from '../../data/LocalRepositorioOperacion'
 import type { Proyecto, Viatico } from '../../types/domain';
 import { parseGeoJsonText, parseKmzOrKmlFile } from '../../utils/kmzParser';
 import {
+  calcularCombustibleGpsRuta,
+  calcularCotizacionServicioVigente,
   calcularReporteViaticosPorProyecto,
   detectarConflictosAsignacion,
+  obtenerFactoresTerrenoVigentes,
+  obtenerReglasViaticosVigentes,
+  obtenerServiciosVigentes,
   proyectarSnapshotParaRol,
   validarResolucionConflictos,
 } from '../index';
@@ -537,5 +542,121 @@ describe('Flujos Admin y Coordinador (F2 a F16) — SIRIUS', () => {
     expect(histBajaCuadrilla?.usuarioId).toBe('usr-coord');
     expect(histBajaCuadrilla?.valorAnterior).toContain('Activa');
     expect(histBajaCuadrilla?.valorNuevo).toContain('De baja');
+  });
+
+  it('Configuración versionada: registros guardados con configVersion v1 no cambian al agregar vigencias v2 y plan/suscripción permanecen bloqueados', async () => {
+    await repo.iniciarSesion('admin@aiaservices.do', 'demo123');
+    const snapV1 = await repo.cargarSnapshotEmpresa('emp-aia');
+    const configV1 = snapV1.configuracion!;
+
+    // 1. Verificar bloqueo de planMensualRD y estadoSuscripcion desde cliente
+    const empEditada = await repo.actualizarEmpresa({
+      ...snapV1.empresa,
+      nombre: 'AIA Services SRL Actualizada',
+      planMensualRD: 0,
+      estadoSuscripcion: 'suspendida',
+    });
+    expect(empEditada.nombre).toBe('AIA Services SRL Actualizada');
+    expect(empEditada.planMensualRD).toBe(snapV1.empresa.planMensualRD);
+    expect(empEditada.estadoSuscripcion).toBe(snapV1.empresa.estadoSuscripcion);
+
+    // 2. Guardar servicio y viático usando tarifas vigentes v1 (2026-11-18)
+    const deslindeV1 = obtenerServiciosVigentes(configV1, '2026-11-18').find(
+      (s) => s.codigo === 'deslinde'
+    )!;
+    const terrenoV1 = obtenerFactoresTerrenoVigentes(configV1, '2026-11-18');
+    const reglasV1 = obtenerReglasViaticosVigentes(configV1, '2026-11-18');
+
+    const cotV1 = calcularCotizacionServicioVigente({
+      servicio: deslindeV1,
+      areaM2: 20000,
+      corridorKm: 0,
+      terrain: 'Llano',
+      factoresTerreno: terrenoV1,
+    });
+    const gpsV1 = calcularCombustibleGpsRuta({
+      distanciaOneWayKm: 20,
+      regla: reglasV1.gpsRuta,
+    });
+
+    const srvHistorico = await repo.crearServicio('emp-aia', {
+      rutaId: 'ruta-1',
+      tipoServicioId: 'deslinde',
+      nombre: 'Deslinde Histórico v1',
+      cotizacionRD: cotV1.totalRD,
+      configVersion: deslindeV1.version,
+      tarifaBaseUsadaRD: deslindeV1.precioBaseRD,
+      recargosUsadosRD: cotV1.areaSurchargeRD,
+      estado: 'cotizado',
+    });
+
+    const viaHistorico = await repo.registrarViatico('emp-aia', {
+      creadoPorUsuarioId: 'usr-admin',
+      creadoPorNombre: 'Ing. Roberto Almonte',
+      rutaId: 'ruta-1',
+      fechaIso: '2026-11-18',
+      timestampAST: '18/11/2026 11:00:00 AST',
+      categoria: 'Combustible',
+      comercio: 'GPS Ruta (v1)',
+      montoRD: gpsV1.montoRD,
+      itbisRD: 0,
+      metodo: 'GPS Ruta',
+      configVersion: reglasV1.version,
+      tarifaUsadaRD: reglasV1.gpsRuta.tarifaPorKmRD,
+      repartos: [{ proyectoId: 'proy-1', montoRD: gpsV1.montoRD }],
+      syncStatus: 'synced',
+    });
+
+    // 3. Agregar nuevas vigencias v2 desde 2026-11-19 con precios mucho más altos
+    await repo.agregarVigenciaServicio({
+      empresaId: 'emp-aia',
+      servicioCodigo: 'deslinde',
+      tarifa: {
+        vigenciaDesde: '2026-11-19',
+        precioBaseRD: 150000,
+        recargoCorredorPorKmRD: 0,
+        recargoAreaPorHaExtraRD: 8000,
+        umbralAreaBaseM2: 8000,
+      },
+    });
+    await repo.agregarVigenciaReglasViaticos({
+      empresaId: 'emp-aia',
+      reglas: {
+        ...reglasV1,
+        vigenciaDesde: '2026-11-19',
+        gpsRuta: {
+          tarifaPorKmRD: 45,
+          minimoKm: 16,
+          conceptoDistancia: 'ida_vuelta',
+        },
+      },
+    });
+
+    // 4. Reinstanciar repositorio desde localStorage para verificar persistencia real
+    const repoRecargado = new LocalRepositorioOperacion();
+    await repoRecargado.iniciarSesion('admin@aiaservices.do', 'demo123');
+    const snapDespues = await repoRecargado.cargarSnapshotEmpresa('emp-aia');
+
+    const srvRecargado = snapDespues.servicios.find((s) => s.id === srvHistorico.id)!;
+    const viaRecargado = snapDespues.viaticos.find((v) => v.id === viaHistorico.id)!;
+
+    // Los registros guardados con v1 conservan exactamente sus montos, tarifas usadas y configVersion=1
+    expect(srvRecargado.configVersion).toBe(1);
+    expect(srvRecargado.tarifaBaseUsadaRD).toBe(75000);
+    expect(srvRecargado.cotizacionRD).toBe(cotV1.totalRD);
+
+    expect(viaRecargado.configVersion).toBe(1);
+    expect(viaRecargado.tarifaUsadaRD).toBe(26.5);
+    expect(viaRecargado.montoRD).toBe(gpsV1.montoRD);
+
+    // Mientras tanto, nuevos cálculos para >= 2026-11-19 usan v2
+    const deslindeV2 = obtenerServiciosVigentes(snapDespues.configuracion!, '2026-11-19').find(
+      (s) => s.codigo === 'deslinde'
+    )!;
+    const reglasV2 = obtenerReglasViaticosVigentes(snapDespues.configuracion!, '2026-11-19');
+    expect(deslindeV2.version).toBe(2);
+    expect(deslindeV2.precioBaseRD).toBe(150000);
+    expect(reglasV2.version).toBe(2);
+    expect(reglasV2.gpsRuta.tarifaPorKmRD).toBe(45);
   });
 });

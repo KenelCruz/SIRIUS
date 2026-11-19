@@ -48,9 +48,9 @@ import { TecnicoViaticosView } from './components/tecnico/TecnicoViaticosView';
 import { TutorialVisualModal } from './components/TutorialVisualModal';
 import { ViaticosView } from './components/ViaticosView';
 import {
-  cerrarTarjetaOnboardingEnHoy,
   detectarConflictosAsignacion,
   obtenerRutasAsignadasAUsuario,
+  ocultarTarjetaOnboarding,
   puedeCrearOEditarOperacion,
   puedeVerAuditoria,
   puedeVerConfiguracion,
@@ -1209,6 +1209,9 @@ export default function App() {
             {adminTab === 'hoy' && rol === 'admin' && onboarding && (
               <AdminHoyView
                 empresa={snapshot.empresa}
+                personal={snapshot.personal}
+                proyectos={snapshot.proyectos}
+                serviciosConfig={configuracion?.servicios ?? []}
                 rutas={snapshot.rutas}
                 servicios={snapshot.servicios}
                 asignaciones={snapshot.asignaciones}
@@ -1222,8 +1225,8 @@ export default function App() {
                 }}
                 onAbrirOnboarding={() => setIsOnboardingOpen(true)}
                 onCerrarTarjetaOnboarding={async () => {
-                  const cerrado = cerrarTarjetaOnboardingEnHoy(onboarding);
-                  await actions.guardarOnboarding(cerrado);
+                  const oculta = ocultarTarjetaOnboarding(onboarding);
+                  await actions.guardarOnboarding(oculta);
                   showToast(
                     'Tarjeta ocultada. Puedes reabrir el asistente en Configuración → Ayuda y tutorial.'
                   );
@@ -1840,6 +1843,14 @@ export default function App() {
           empresaNombre={snapshot.empresa.nombre}
           estado={onboarding}
           isDemo={isDemoActivo}
+          datosOnboarding={{
+            empresa: snapshot.empresa,
+            personal: snapshot.personal,
+            vehiculos: snapshot.vehiculos,
+            serviciosConfig: configuracion?.servicios ?? [],
+            proyectos: snapshot.proyectos,
+            esDemo: isDemoActivo,
+          }}
           onClose={() => setIsOnboardingOpen(false)}
           onGuardarEstado={async (nuevo) => {
             await actions.guardarOnboarding(nuevo);

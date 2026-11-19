@@ -1,9 +1,17 @@
 import type {
+  ConfiguracionEmpresa,
+  Empresa,
+  EstadoEfectivoPasoOnboarding,
   EstadoOnboardingEmpresa,
   OnboardingEstadoPaso,
   OnboardingPasoId,
+  Personal,
+  Proyecto,
   SeccionConfiguracion,
+  ServicioCatalogoConfig,
+  Vehiculo,
 } from '../types/domain';
+import { validarEmpresaConfig } from './configuracion';
 
 export interface DefinicionPasoOnboarding {
   id: OnboardingPasoId;
@@ -13,6 +21,16 @@ export interface DefinicionPasoOnboarding {
   soloEnDemo: boolean;
   destinoTab: 'configuracion' | 'catalogos' | 'proyectos' | 'kmz';
   seccionConfig?: SeccionConfiguracion;
+}
+
+export interface DatosDeteccionOnboarding {
+  empresa?: Partial<Empresa> | null;
+  personal?: Personal[];
+  vehiculos?: Vehiculo[];
+  serviciosConfig?: ServicioCatalogoConfig[];
+  configuracion?: ConfiguracionEmpresa | null;
+  proyectos?: Proyecto[];
+  esDemo?: boolean;
 }
 
 export const PASOS_ONBOARDING_DEFINICION: readonly DefinicionPasoOnboarding[] = [
@@ -76,6 +94,45 @@ export function obtenerPasosOnboardingVisibles(
   return PASOS_ONBOARDING_DEFINICION.filter((p) => (p.soloEnDemo ? esDemo : true));
 }
 
+export function detectarEstadoPasoDesdeDatos(
+  paso: OnboardingPasoId | DefinicionPasoOnboarding,
+  datos: DatosDeteccionOnboarding
+): 'completo' | 'pendiente' {
+  const pasoId = typeof paso === 'string' ? paso : paso.id;
+
+  switch (pasoId) {
+    case 'empresa': {
+      const emp = datos.empresa;
+      if (!emp) return 'pendiente';
+      const check = validarEmpresaConfig({
+        nombre: emp.nombre ?? '',
+        rnc: emp.rnc ?? '',
+        direccionBase: emp.direccionBase ?? '',
+        zonaHoraria: emp.zonaHoraria ?? 'America/Santo_Domingo',
+        moneda: emp.moneda ?? 'RD$',
+        planMensualRD: emp.planMensualRD ?? 0,
+      });
+      return check.valido ? 'completo' : 'pendiente';
+    }
+    case 'personal_cargos':
+      return (datos.personal?.length ?? 0) > 0 ? 'completo' : 'pendiente';
+    case 'flota':
+      return (datos.vehiculos?.length ?? 0) > 0 ? 'completo' : 'pendiente';
+    case 'servicios': {
+      const servicios = datos.serviciosConfig ?? datos.configuracion?.servicios ?? [];
+      return servicios.some((s) => s.activo) ? 'completo' : 'pendiente';
+    }
+    case 'cliente_proyecto':
+      return (datos.proyectos?.length ?? 0) > 0 ? 'completo' : 'pendiente';
+    case 'kmz_demo':
+      return Boolean(datos.esDemo) && (datos.proyectos?.length ?? 0) > 0
+        ? 'completo'
+        : 'pendiente';
+    default:
+      return 'pendiente';
+  }
+}
+
 export function crearEstadoOnboardingInicial(
   empresaId: string,
   ahoraIso: string = new Date().toISOString()
@@ -91,21 +148,27 @@ export function crearEstadoOnboardingInicial(
       cliente_proyecto: 'pendiente',
       kmz_demo: 'pendiente',
     },
-    cerradoEnHoy: false,
+    tarjetaOcultada: false,
     updatedAt: ahoraIso,
   };
 }
 
 export function asegurarEstadoOnboarding(
   empresaId: string,
-  estado?: EstadoOnboardingEmpresa
+  estado?: EstadoOnboardingEmpresa & { cerradoEnHoy?: boolean }
 ): EstadoOnboardingEmpresa {
   if (!estado) return crearEstadoOnboardingInicial(empresaId);
   const base = crearEstadoOnboardingInicial(empresaId);
+  const tarjetaOcultada =
+    typeof estado.tarjetaOcultada === 'boolean'
+      ? estado.tarjetaOcultada
+      : Boolean(estado.cerradoEnHoy);
+  const { cerradoEnHoy: _legacy, ...rest } = estado;
   return {
     ...base,
-    ...estado,
+    ...rest,
     empresaId,
+    tarjetaOcultada,
     pasos: {
       ...base.pasos,
       ...estado.pasos,
@@ -195,13 +258,13 @@ export function seleccionarPasoOnboarding(
   };
 }
 
-export function cerrarTarjetaOnboardingEnHoy(
+export function ocultarTarjetaOnboarding(
   estado: EstadoOnboardingEmpresa,
   ahoraIso: string = new Date().toISOString()
 ): EstadoOnboardingEmpresa {
   return {
     ...estado,
-    cerradoEnHoy: true,
+    tarjetaOcultada: true,
     updatedAt: ahoraIso,
   };
 }
@@ -213,38 +276,120 @@ export function reiniciarOnboarding(
   return crearEstadoOnboardingInicial(empresaId, ahoraIso);
 }
 
+export interface DetallePasoResumenOnboarding {
+  paso: DefinicionPasoOnboarding;
+  estado: EstadoEfectivoPasoOnboarding;
+  etiquetaEstado: string;
+  completoReal: boolean;
+}
+
 export interface ResumenOnboarding {
   pasosVisibles: DefinicionPasoOnboarding[];
+  detallePasos: DetallePasoResumenOnboarding[];
+  estadoPorPaso: Record<OnboardingPasoId, EstadoEfectivoPasoOnboarding>;
   pasosPendientes: DefinicionPasoOnboarding[];
   pasosCompletados: DefinicionPasoOnboarding[];
+  pasosCompletadosManuales: DefinicionPasoOnboarding[];
   pasosSaltados: DefinicionPasoOnboarding[];
   totalPasos: number;
   porcentajeResuelto: number;
+  porcentajeReal: number;
   estaFinalizado: boolean;
   debeMostrarTarjetaHoy: boolean;
 }
 
+function etiquetaEstadoPaso(estado: EstadoEfectivoPasoOnboarding): string {
+  switch (estado) {
+    case 'completo':
+      return 'Completado';
+    case 'completo_manual':
+      return 'completado manualmente';
+    case 'saltado':
+      return 'Saltado';
+    default:
+      return 'Pendiente';
+  }
+}
+
 export function obtenerResumenOnboarding(
   estado: EstadoOnboardingEmpresa,
-  esDemo: boolean
+  esDemo: boolean,
+  datos?: DatosDeteccionOnboarding
 ): ResumenOnboarding {
   const pasosVisibles = obtenerPasosOnboardingVisibles(esDemo);
-  const pasosPendientes = pasosVisibles.filter((p) => estado.pasos[p.id] === 'pendiente');
-  const pasosCompletados = pasosVisibles.filter((p) => estado.pasos[p.id] === 'completo');
-  const pasosSaltados = pasosVisibles.filter((p) => estado.pasos[p.id] === 'saltado');
+
+  const estadoPorPaso: Record<OnboardingPasoId, EstadoEfectivoPasoOnboarding> = {
+    empresa: 'pendiente',
+    personal_cargos: 'pendiente',
+    flota: 'pendiente',
+    servicios: 'pendiente',
+    cliente_proyecto: 'pendiente',
+    kmz_demo: 'pendiente',
+  };
+
+  for (const paso of PASOS_ONBOARDING_DEFINICION) {
+    const manual = estado.pasos[paso.id];
+    if (datos) {
+      const detectado = detectarEstadoPasoDesdeDatos(paso.id, {
+        ...datos,
+        esDemo: datos.esDemo ?? esDemo,
+      });
+      if (detectado === 'completo') {
+        estadoPorPaso[paso.id] = 'completo';
+      } else if (manual === 'completo') {
+        estadoPorPaso[paso.id] = 'completo_manual';
+      } else if (manual === 'saltado') {
+        estadoPorPaso[paso.id] = 'saltado';
+      } else {
+        estadoPorPaso[paso.id] = 'pendiente';
+      }
+    } else {
+      estadoPorPaso[paso.id] = manual;
+    }
+  }
+
+  const detallePasos: DetallePasoResumenOnboarding[] = pasosVisibles.map((paso) => {
+    const efectivo = estadoPorPaso[paso.id];
+    return {
+      paso,
+      estado: efectivo,
+      etiquetaEstado: etiquetaEstadoPaso(efectivo),
+      completoReal: efectivo === 'completo',
+    };
+  });
+
+  const pasosPendientes = detallePasos
+    .filter((d) => d.estado === 'pendiente')
+    .map((d) => d.paso);
+  const pasosCompletados = detallePasos
+    .filter((d) => d.estado === 'completo')
+    .map((d) => d.paso);
+  const pasosCompletadosManuales = detallePasos
+    .filter((d) => d.estado === 'completo_manual')
+    .map((d) => d.paso);
+  const pasosSaltados = detallePasos
+    .filter((d) => d.estado === 'saltado')
+    .map((d) => d.paso);
+
   const totalPasos = pasosVisibles.length;
   const resueltos = totalPasos - pasosPendientes.length;
   const porcentajeResuelto = totalPasos > 0 ? Math.round((resueltos / totalPasos) * 100) : 100;
+  const porcentajeReal =
+    totalPasos > 0 ? Math.round((pasosCompletados.length / totalPasos) * 100) : 100;
   const estaFinalizado = pasosPendientes.length === 0;
-  const debeMostrarTarjetaHoy = !estado.cerradoEnHoy && !estaFinalizado;
+  const debeMostrarTarjetaHoy = !estado.tarjetaOcultada && !estaFinalizado;
 
   return {
     pasosVisibles,
+    detallePasos,
+    estadoPorPaso,
     pasosPendientes,
     pasosCompletados,
+    pasosCompletadosManuales,
     pasosSaltados,
     totalPasos,
     porcentajeResuelto,
+    porcentajeReal,
     estaFinalizado,
     debeMostrarTarjetaHoy,
   };

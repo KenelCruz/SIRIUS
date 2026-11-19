@@ -305,4 +305,60 @@ describe('Configuración y vigencias versionadas (A1)', () => {
     expect(breakdownConfig.perDiemRD).toBe(2200);
     expect(breakdownConfig.lodgingRD).toBe(4800);
   });
+
+  it('Rechaza umbralAreaBaseM2 <= 0 y usa el umbral configurado tal cual sin fallback silencioso a 10000', () => {
+    const cfg = crearConfiguracionInicialEmpresa('emp-aia');
+
+    // Umbral 0 o negativo se rechaza con mensaje claro en español
+    const resCero = validarNuevaVigenciaServicio(cfg.servicios[0].versiones, {
+      vigenciaDesde: '2026-11-25',
+      precioBaseRD: 80000,
+      recargoCorredorPorKmRD: 0,
+      recargoAreaPorHaExtraRD: 3500,
+      umbralAreaBaseM2: 0,
+    });
+    expect(resCero.valido).toBe(false);
+    expect(resCero.error).toMatch(/umbral de área base/i);
+
+    const resNeg = validarNuevaVigenciaServicio(cfg.servicios[0].versiones, {
+      vigenciaDesde: '2026-11-25',
+      precioBaseRD: 80000,
+      recargoCorredorPorKmRD: 0,
+      recargoAreaPorHaExtraRD: 3500,
+      umbralAreaBaseM2: -500,
+    });
+    expect(resNeg.valido).toBe(false);
+    expect(resNeg.error).toMatch(/umbral de área base/i);
+
+    // Umbral válido distinto a 10,000 m² se aplica exactamente como se configuró
+    const terreno = obtenerFactoresTerrenoVigentes(cfg, '2026-11-18');
+    const deslinde5k = {
+      ...obtenerServiciosVigentes(cfg, '2026-11-18').find((s) => s.codigo === 'deslinde')!,
+      umbralAreaBaseM2: 5000,
+      recargoAreaPorHaExtraRD: 4000,
+      precioBaseRD: 75000,
+    };
+    // 15,000 m² con umbral 5,000 -> 10,000 m² extra (1 ha) -> 75,000 + 4,000 = 79,000
+    const cot5k = calcularCotizacionServicioVigente({
+      servicio: deslinde5k,
+      areaM2: 15000,
+      corridorKm: 0,
+      terrain: 'Llano',
+      factoresTerreno: terreno,
+    });
+    expect(cot5k.areaSurchargeRD).toBe(4000);
+    expect(cot5k.totalRD).toBe(79000);
+
+    // 12,000 m² con umbral 15,000 -> por debajo del umbral -> recargo 0
+    const deslinde15k = { ...deslinde5k, umbralAreaBaseM2: 15000 };
+    const cot15k = calcularCotizacionServicioVigente({
+      servicio: deslinde15k,
+      areaM2: 12000,
+      corridorKm: 0,
+      terrain: 'Llano',
+      factoresTerreno: terreno,
+    });
+    expect(cot15k.areaSurchargeRD).toBe(0);
+    expect(cot15k.totalRD).toBe(75000);
+  });
 });

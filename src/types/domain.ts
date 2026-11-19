@@ -137,12 +137,18 @@ export type OnboardingPasoId =
 
 export type OnboardingEstadoPaso = 'pendiente' | 'completo' | 'saltado';
 
+export type EstadoEfectivoPasoOnboarding =
+  | 'pendiente'
+  | 'completo'
+  | 'completo_manual'
+  | 'saltado';
+
 export interface EstadoOnboardingEmpresa {
   empresaId: string;
   pasoActual: OnboardingPasoId;
   pasos: Record<OnboardingPasoId, OnboardingEstadoPaso>;
   completadoEn?: string;
-  cerradoEnHoy: boolean;
+  tarjetaOcultada: boolean;
   updatedAt: string;
 }
 

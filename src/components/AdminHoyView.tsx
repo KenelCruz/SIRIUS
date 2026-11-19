@@ -17,8 +17,11 @@ import type {
   Empresa,
   EstadoOnboardingEmpresa,
   OnboardingPasoId,
+  Personal,
+  Proyecto,
   Ruta,
   Servicio,
+  ServicioCatalogoConfig,
   Vehiculo,
   Viatico,
 } from '../types/domain';
@@ -26,6 +29,9 @@ import { formatRD } from '../utils/geodesy';
 
 interface AdminHoyViewProps {
   empresa: Empresa;
+  personal: Personal[];
+  proyectos: Proyecto[];
+  serviciosConfig: ServicioCatalogoConfig[];
   rutas: Ruta[];
   servicios: Servicio[];
   asignaciones: Asignacion[];
@@ -42,6 +48,9 @@ interface AdminHoyViewProps {
 
 export const AdminHoyView: React.FC<AdminHoyViewProps> = ({
   empresa,
+  personal,
+  proyectos,
+  serviciosConfig,
   rutas,
   servicios,
   asignaciones,
@@ -57,7 +66,14 @@ export const AdminHoyView: React.FC<AdminHoyViewProps> = ({
 }) => {
   const hoyIso = obtenerFechaHoyAST();
   const moneda = empresa.moneda || 'RD$';
-  const resumenOnboarding = obtenerResumenOnboarding(onboarding, isDemo);
+  const resumenOnboarding = obtenerResumenOnboarding(onboarding, isDemo, {
+    empresa,
+    personal,
+    vehiculos,
+    serviciosConfig,
+    proyectos,
+    esDemo: isDemo,
+  });
 
   const asignacionesHoy = asignaciones.filter(
     (a) => a.fechaInicio <= hoyIso && a.fechaFin >= hoyIso
@@ -102,11 +118,17 @@ export const AdminHoyView: React.FC<AdminHoyViewProps> = ({
             <div className="space-y-1">
               <div className="flex items-center gap-2 text-sm font-bold text-slate-900">
                 <Sparkles className="w-4 h-4 text-emerald-700" />
-                <span>Puesta en marcha de la empresa ({resumenOnboarding.porcentajeResuelto}%)</span>
+                <span>
+                  Puesta en marcha de la empresa ({resumenOnboarding.pasosCompletados.length}/
+                  {resumenOnboarding.totalPasos} completos reales)
+                </span>
               </div>
               <p className="text-xs text-slate-600">
                 Faltan {resumenOnboarding.pasosPendientes.length} de {resumenOnboarding.totalPasos}{' '}
-                pasos opcionales para dejar lista la operación de {empresa.nombre}.
+                pasos opcionales para dejar lista la operación de {empresa.nombre}
+                {resumenOnboarding.pasosCompletadosManuales.length > 0
+                  ? ` · ${resumenOnboarding.pasosCompletadosManuales.length} completado(s) manualmente sin datos.`
+                  : '.'}
               </p>
             </div>
             <div className="flex items-center gap-2 shrink-0">
@@ -133,14 +155,14 @@ export const AdminHoyView: React.FC<AdminHoyViewProps> = ({
           <div className="w-full h-2 bg-slate-100 rounded-full overflow-hidden">
             <div
               className="h-full bg-emerald-600 transition-all"
-              style={{ width: `${resumenOnboarding.porcentajeResuelto}%` }}
+              style={{ width: `${resumenOnboarding.porcentajeReal}%` }}
             />
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2.5">
-            {resumenOnboarding.pasosVisibles.map((paso) => {
-              const estado = onboarding.pasos[paso.id];
+            {resumenOnboarding.detallePasos.map(({ paso, estado, etiquetaEstado }) => {
               const isPending = estado === 'pendiente';
+              const isManual = estado === 'completo_manual';
               return (
                 <button
                   key={paso.id}
@@ -149,7 +171,9 @@ export const AdminHoyView: React.FC<AdminHoyViewProps> = ({
                   className={`flex items-center justify-between gap-2 px-3 py-2.5 rounded-lg border text-left text-xs transition-colors ${
                     isPending
                       ? 'bg-slate-50 hover:bg-slate-100 border-slate-200 text-slate-900'
-                      : 'bg-white border-slate-100 text-slate-500'
+                      : isManual
+                      ? 'bg-amber-50/70 hover:bg-amber-50 border-amber-200 text-amber-900'
+                      : 'bg-white border-slate-100 text-slate-600'
                   }`}
                 >
                   <div className="flex items-center gap-2 min-w-0">
@@ -157,14 +181,23 @@ export const AdminHoyView: React.FC<AdminHoyViewProps> = ({
                       className={`w-4 h-4 shrink-0 ${
                         estado === 'completo'
                           ? 'text-emerald-600'
+                          : isManual
+                          ? 'text-amber-600'
                           : estado === 'saltado'
                           ? 'text-slate-400'
                           : 'text-slate-300'
                       }`}
                     />
-                    <span className="truncate font-medium">
-                      {paso.numero}. {paso.titulo}
-                    </span>
+                    <div className="min-w-0">
+                      <div className="truncate font-medium">
+                        {paso.numero}. {paso.titulo}
+                      </div>
+                      {isManual && (
+                        <div className="text-[10px] font-semibold text-amber-700 truncate">
+                          {etiquetaEstado}
+                        </div>
+                      )}
+                    </div>
                   </div>
                   <ArrowRight className="w-3.5 h-3.5 shrink-0 text-slate-400" />
                 </button>

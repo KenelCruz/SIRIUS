@@ -291,7 +291,7 @@ create table onboarding_empresa (
   empresa_id uuid primary key references empresas(id) on delete cascade,
   paso_actual text not null default 'empresa',
   pasos_json jsonb not null,
-  cerrado_en_hoy boolean not null default false,
+  tarjeta_ocultada boolean not null default false,
   completado_en timestamptz,
   updated_at timestamptz not null default now()
 );

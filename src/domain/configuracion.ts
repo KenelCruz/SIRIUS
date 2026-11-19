@@ -410,7 +410,7 @@ export function calcularCotizacionServicioVigente(params: {
     servicio.recargoCorredorPorKmRD > 0
       ? Math.round(Math.max(0, corridorKm) * servicio.recargoCorredorPorKmRD)
       : 0;
-  const umbral = servicio.umbralAreaBaseM2 > 0 ? servicio.umbralAreaBaseM2 : 10000;
+  const umbral = servicio.umbralAreaBaseM2;
   const areaSurchargeRD =
     areaM2 > umbral
       ? Math.round(((areaM2 - umbral) / 10000) * servicio.recargoAreaPorHaExtraRD)
@@ -611,11 +611,15 @@ export function validarNuevaVigenciaServicio(
     !Number.isFinite(nueva.recargoCorredorPorKmRD) ||
     nueva.recargoCorredorPorKmRD < 0 ||
     !Number.isFinite(nueva.recargoAreaPorHaExtraRD) ||
-    nueva.recargoAreaPorHaExtraRD < 0 ||
-    !Number.isFinite(nueva.umbralAreaBaseM2) ||
-    nueva.umbralAreaBaseM2 < 0
+    nueva.recargoAreaPorHaExtraRD < 0
   ) {
     return { valido: false, error: 'Las tarifas y recargos del servicio no pueden ser negativos.' };
+  }
+  if (!Number.isFinite(nueva.umbralAreaBaseM2) || nueva.umbralAreaBaseM2 <= 0) {
+    return {
+      valido: false,
+      error: 'El umbral de área base (m²) debe ser mayor que 0.',
+    };
   }
   return { valido: true };
 }

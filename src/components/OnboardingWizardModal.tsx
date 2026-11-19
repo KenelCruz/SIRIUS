@@ -9,13 +9,14 @@ import {
   seleccionarPasoOnboarding,
 } from '../domain';
 import type { EstadoOnboardingEmpresa, OnboardingPasoId } from '../types/domain';
-import type { DefinicionPasoOnboarding } from '../domain/onboarding';
+import type { DatosDeteccionOnboarding, DefinicionPasoOnboarding } from '../domain/onboarding';
 
 interface OnboardingWizardModalProps {
   isOpen: boolean;
   empresaNombre: string;
   estado: EstadoOnboardingEmpresa;
   isDemo: boolean;
+  datosOnboarding?: DatosDeteccionOnboarding;
   onClose: () => void;
   onGuardarEstado: (nuevoEstado: EstadoOnboardingEmpresa) => Promise<void>;
   onNavegarAPaso: (paso: DefinicionPasoOnboarding) => void;
@@ -26,6 +27,7 @@ export const OnboardingWizardModal: React.FC<OnboardingWizardModalProps> = ({
   empresaNombre,
   estado,
   isDemo,
+  datosOnboarding,
   onClose,
   onGuardarEstado,
   onNavegarAPaso,
@@ -33,9 +35,11 @@ export const OnboardingWizardModal: React.FC<OnboardingWizardModalProps> = ({
   if (!isOpen) return null;
 
   const pasos = obtenerPasosOnboardingVisibles(isDemo);
-  const resumen = obtenerResumenOnboarding(estado, isDemo);
+  const resumen = obtenerResumenOnboarding(estado, isDemo, datosOnboarding);
   const pasoActivo: DefinicionPasoOnboarding =
     pasos.find((p) => p.id === estado.pasoActual) ?? pasos[0];
+  const detalleActivo =
+    resumen.detallePasos.find((d) => d.paso.id === pasoActivo.id) ?? resumen.detallePasos[0];
 
   const handleSelectStep = async (pasoId: OnboardingPasoId) => {
     const next = seleccionarPasoOnboarding(estado, pasoId);
@@ -74,7 +78,10 @@ export const OnboardingWizardModal: React.FC<OnboardingWizardModalProps> = ({
                 Asistente de configuración · {empresaNombre}
               </h3>
               <p className="text-xs text-slate-500">
-                Opcional y reanudable en cualquier momento ({resumen.porcentajeResuelto}% completado)
+                {resumen.pasosCompletados.length} de {resumen.totalPasos} completos reales
+                {resumen.pasosCompletadosManuales.length > 0
+                  ? ` · ${resumen.pasosCompletadosManuales.length} completado(s) manualmente`
+                  : ''}
               </p>
             </div>
           </div>
@@ -92,8 +99,7 @@ export const OnboardingWizardModal: React.FC<OnboardingWizardModalProps> = ({
         <div className="grid grid-cols-1 md:grid-cols-12 flex-1 overflow-y-auto">
           {/* Lista de pasos */}
           <div className="md:col-span-5 border-b md:border-b-0 md:border-r border-slate-200 bg-slate-50 p-4 space-y-2">
-            {pasos.map((paso) => {
-              const stepStatus = estado.pasos[paso.id];
+            {resumen.detallePasos.map(({ paso, estado: stepStatus, etiquetaEstado }) => {
               const isActive = paso.id === pasoActivo.id;
               return (
                 <button
@@ -111,6 +117,10 @@ export const OnboardingWizardModal: React.FC<OnboardingWizardModalProps> = ({
                       <CheckCircle2
                         className={`w-4 h-4 shrink-0 ${isActive ? 'text-emerald-400' : 'text-emerald-600'}`}
                       />
+                    ) : stepStatus === 'completo_manual' ? (
+                      <CheckCircle2
+                        className={`w-4 h-4 shrink-0 ${isActive ? 'text-amber-300' : 'text-amber-600'}`}
+                      />
                     ) : stepStatus === 'saltado' ? (
                       <SkipForward
                         className={`w-4 h-4 shrink-0 ${isActive ? 'text-slate-300' : 'text-slate-400'}`}
@@ -120,9 +130,20 @@ export const OnboardingWizardModal: React.FC<OnboardingWizardModalProps> = ({
                         className={`w-4 h-4 shrink-0 ${isActive ? 'text-amber-300' : 'text-slate-400'}`}
                       />
                     )}
-                    <span className="truncate">
-                      {paso.numero}. {paso.titulo}
-                    </span>
+                    <div className="min-w-0">
+                      <div className="truncate">
+                        {paso.numero}. {paso.titulo}
+                      </div>
+                      {stepStatus === 'completo_manual' && (
+                        <div
+                          className={`text-[10px] truncate ${
+                            isActive ? 'text-amber-200' : 'text-amber-700 font-medium'
+                          }`}
+                        >
+                          {etiquetaEstado}
+                        </div>
+                      )}
+                    </div>
                   </div>
                 </button>
               );
@@ -139,11 +160,26 @@ export const OnboardingWizardModal: React.FC<OnboardingWizardModalProps> = ({
               <h4 className="text-lg font-bold text-slate-900">{pasoActivo.titulo}</h4>
               <p className="text-sm text-slate-600 leading-relaxed">{pasoActivo.descripcion}</p>
 
-              <div className="bg-slate-50 border border-slate-200 rounded-lg p-3.5 text-xs text-slate-600">
-                {isDemo
-                  ? 'En modo demo puedes explorar los datos precargados o probar el asistente KMZ sin afectar otros entornos.'
-                  : 'Este asistente solo te guía hacia cada módulo para que cargues los datos reales de tu empresa cuando lo necesites.'}
-              </div>
+              {detalleActivo?.estado === 'completo' && (
+                <div className="bg-emerald-50 border border-emerald-200 rounded-lg p-3.5 text-xs text-emerald-900">
+                  Completado con datos reales registrados en la empresa.
+                </div>
+              )}
+
+              {detalleActivo?.estado === 'completo_manual' && (
+                <div className="bg-amber-50 border border-amber-200 rounded-lg p-3.5 text-xs text-amber-900">
+                  Marcado como completado manualmente (excepción): aún faltan datos mínimos en este
+                  módulo para considerarse completo real.
+                </div>
+              )}
+
+              {(!detalleActivo || detalleActivo.estado === 'pendiente' || detalleActivo.estado === 'saltado') && (
+                <div className="bg-slate-50 border border-slate-200 rounded-lg p-3.5 text-xs text-slate-600">
+                  {isDemo
+                    ? 'En modo demo puedes explorar los datos precargados o probar el asistente KMZ sin afectar otros entornos.'
+                    : 'Este asistente solo te guía hacia cada módulo para que cargues los datos reales de tu empresa cuando lo necesites.'}
+                </div>
+              )}
 
               <div className="pt-2">
                 <button
@@ -159,7 +195,13 @@ export const OnboardingWizardModal: React.FC<OnboardingWizardModalProps> = ({
 
             {resumen.estaFinalizado && (
               <div className="bg-emerald-50 border border-emerald-200 rounded-lg p-3.5 text-xs text-emerald-900 flex items-center justify-between gap-3">
-                <span>Todos los pasos fueron revisados o saltados.</span>
+                <span>
+                  Todos los pasos fueron revisados ({resumen.pasosCompletados.length} completos reales
+                  {resumen.pasosCompletadosManuales.length > 0
+                    ? `, ${resumen.pasosCompletadosManuales.length} completado(s) manualmente`
+                    : ''}
+                  ).
+                </span>
                 <button
                   type="button"
                   onClick={handleReset}
@@ -192,9 +234,12 @@ export const OnboardingWizardModal: React.FC<OnboardingWizardModalProps> = ({
             <button
               type="button"
               onClick={handleCompleteStep}
-              className="px-4 py-2 text-xs font-semibold text-white bg-slate-900 hover:bg-slate-800 rounded-lg whitespace-nowrap"
+              disabled={detalleActivo?.estado === 'completo'}
+              className="px-4 py-2 text-xs font-semibold text-white bg-slate-900 hover:bg-slate-800 disabled:bg-emerald-700 disabled:opacity-90 rounded-lg whitespace-nowrap"
             >
-              Marcar como completado
+              {detalleActivo?.estado === 'completo'
+                ? 'Completado con datos'
+                : 'Marcar como completado'}
             </button>
           </div>
         </div>
