@@ -45,6 +45,12 @@ export const ResourceConflictModal: React.FC<ResourceConflictModalProps> = ({
         return 'Vehículo en Mantenimiento (Bloqueo Duro)';
       case 'equipo_mantenimiento':
         return 'Equipo GNSS No Disponible (Bloqueo Duro)';
+      case 'renta_solapada':
+        return 'Renta Activa/Reservada Solapada (Bloqueo Duro)';
+      case 'renta_lejana':
+        return 'Renta en Otra Zona Fuera de Umbral (Bloqueo Duro)';
+      case 'renta_cercana':
+        return 'Renta Cercana / De Camino (Permite Excepción)';
       case 'personal':
         return 'Técnico Solapado en Fechas';
       case 'cuadrilla':
@@ -92,16 +98,16 @@ export const ResourceConflictModal: React.FC<ResourceConflictModalProps> = ({
             <div>
               <h3 className="text-base font-bold text-[#0D1C2F]">
                 {tieneBloqueoDuro
-                  ? 'Asignación Bloqueada por Indisponibilidad'
+                  ? 'Asignación o Renta Bloqueada'
                   : tieneBloqueoConExcepcion
-                  ? 'Conflicto de Agenda en Rango de Fechas'
+                  ? 'Conflicto de Agenda / Renta en Rango de Fechas'
                   : 'Advertencia Espacial de Ruta'}
               </h3>
               <p className="mt-1 text-xs text-[#43474D]">
                 {tieneBloqueoDuro
-                  ? 'Uno o más recursos seleccionados están en mantenimiento o fuera de servicio. Reemplázalos antes de continuar.'
+                  ? 'Uno o más recursos no están disponibles (mantenimiento, cuadrilla de baja o renta incompatible). Reemplázalos o ajusta las fechas antes de continuar.'
                   : tieneBloqueoConExcepcion
-                  ? 'Se detectaron solapamientos en el rango de fechas. Puedes reasignar o autorizar una excepción auditada con motivo.'
+                  ? 'Se detectaron solapamientos de agenda o rentas cercanas dentro del umbral configurado. Puedes reasignar o autorizar una excepción auditada con motivo.'
                   : 'Se detectó cercanía con otra parcela existente (< 120 m). Es una advertencia informativa y no bloquea la asignación.'}
               </p>
             </div>

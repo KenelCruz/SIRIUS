@@ -1,11 +1,14 @@
 import type {
   Asignacion,
   BitacoraEntrada,
+  CategoriaViatico,
   Cliente,
   Cuadrilla,
   EmpresaTecnico,
   EquipoGNSS,
   EstadoEmpresaSnapshot,
+  Mision,
+  MisionTecnico,
   Personal,
   ProyeccionSnapshotPorRol,
   Proyecto,
@@ -16,6 +19,7 @@ import type {
   Servicio,
   ServicioTecnico,
   SnapshotTecnico,
+  TopeViaticoUsuarioResumen,
   Vehiculo,
   VehiculoTecnico,
   Viatico,
@@ -23,6 +27,7 @@ import type {
 import {
   asegurarConfiguracionEmpresa,
   obtenerReglasViaticosVigentes,
+  obtenerTopesViaticoVigentes,
 } from './configuracion';
 
 export function puedeGestionarEmpresa(rol: RolEmpresa): boolean {
@@ -227,13 +232,13 @@ export function puedeEditarViatico(
   viatico: Viatico,
   usuarioId: string
 ): boolean {
-  if (rol === 'tecnico') {
-    return (
-      viatico.creadoPorUsuarioId === usuarioId &&
-      viatico.estadoAprobacion === 'pendiente'
-    );
+  if (viatico.estadoAprobacion === 'aprobado' || viatico.estadoAprobacion === 'rechazado') {
+    return false;
   }
-  return false;
+  if (rol === 'tecnico') {
+    return viatico.creadoPorUsuarioId === usuarioId;
+  }
+  return rol === 'admin' || rol === 'coordinador';
 }
 
 export function puedeEliminarViatico(
@@ -284,6 +289,19 @@ function sanitizarVehiculoParaTecnico(vehiculo: Vehiculo): VehiculoTecnico {
     etiqueta: vehiculo.etiqueta,
     placa: vehiculo.placa,
     estado: vehiculo.estado,
+  };
+}
+
+function sanitizarMisionParaTecnico(mision: Mision): MisionTecnico {
+  return {
+    id: mision.id,
+    empresaId: mision.empresaId,
+    nombre: mision.nombre,
+    zona: mision.zona,
+    provincia: mision.provincia,
+    fechaInicio: mision.fechaInicio,
+    fechaFin: mision.fechaFin,
+    rutaIds: mision.rutaIds,
   };
 }
 
@@ -383,6 +401,31 @@ export function proyectarSnapshotParaRol(params: {
   const configEmpresa = asegurarConfiguracionEmpresa(snapshot.empresa.id, snapshot.configuracion);
   const reglasVigentes = obtenerReglasViaticosVigentes(configEmpresa);
 
+  const personalUsuarioId =
+    personalIdMembresia ?? snapshot.personal.find((p) => p.usuarioId === usuarioId)?.id;
+  const personaUsuario = personalUsuarioId
+    ? snapshot.personal.find((p) => p.id === personalUsuarioId)
+    : undefined;
+  const cargoUsuario = personaUsuario?.cargo;
+
+  const topesUsuario: Partial<Record<CategoriaViatico, TopeViaticoUsuarioResumen>> | undefined =
+    cargoUsuario
+      ? obtenerTopesViaticoVigentes(configEmpresa)
+          .filter((t) => t.cargoCodigo === cargoUsuario)
+          .reduce<Partial<Record<CategoriaViatico, TopeViaticoUsuarioResumen>>>((acc, t) => {
+            acc[t.categoria] = {
+              montoMaximoPorMisionRD: t.montoMaximoPorMisionRD,
+              vigenciaDesde: t.vigenciaDesde,
+              cargoCodigo: t.cargoCodigo,
+            };
+            return acc;
+          }, {})
+      : undefined;
+
+  const misionesTecnico: MisionTecnico[] = (snapshot.misiones ?? [])
+    .filter((m) => m.rutaIds.some((rId) => rutasAsignadasIds.has(rId)))
+    .map(sanitizarMisionParaTecnico);
+
   const snapshotTecnico: SnapshotTecnico = {
     empresa: sanitizarEmpresaParaTecnico(snapshot.empresa),
     personal: personalTecnico,
@@ -397,12 +440,15 @@ export function proyectarSnapshotParaRol(params: {
     bitacoras: bitacorasTecnico,
     asignaciones: asignacionesTecnico,
     viaticos: viaticosTecnico,
+    misiones: misionesTecnico,
+    personalIdUsuario: personalUsuarioId,
     reglasCapturaViaticos: {
       version: reglasVigentes.version,
       vigenciaDesde: reglasVigentes.vigenciaDesde,
       gpsRuta: reglasVigentes.gpsRuta,
       presetsRapidos: reglasVigentes.presetsRapidos,
       categoriasViatico: configEmpresa.categoriasViatico,
+      topesUsuario,
     },
     lastSyncedAt: snapshot.lastSyncedAt,
   };

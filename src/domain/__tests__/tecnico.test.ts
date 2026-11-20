@@ -337,6 +337,8 @@ function buildSnapshotBase(): EstadoEmpresaSnapshot {
         fechaAST: '10/11/2026 10:00:00 AST',
       },
     ],
+    misiones: [],
+    rentas: [],
   };
 }
 

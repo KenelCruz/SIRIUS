@@ -4,9 +4,14 @@ import {
   crearConfiguracionInicialEmpresa,
   crearEstadoOnboardingInicial,
   detectarConflictosAsignacion,
+  detectarConflictosRenta,
+  ERROR_TECNICO_SIN_PERSONAL,
+  escalarRepartosAMontoEmpresa,
+  evaluarTopeViaticoEnMision,
   obtenerCuadrillasDeUsuario,
   obtenerFechaHoyAST,
   obtenerPersonalIdsUsuario,
+  obtenerRendimientoConfigVigente,
   obtenerRutasAsignadasAUsuario,
   proyectarSnapshotParaRol,
   puedeAprobarViatico,
@@ -16,21 +21,26 @@ import {
   puedeGestionarEmpresa,
   puedeRegistrarBitacoraEnServicio,
   reconciliarColeccionLWWConReporte,
+  resolverEtiquetaCargo,
+  resolverPersonalYCargoUsuario,
   siguienteVersion,
   sumarDiasIso,
   validarCargoConfig,
   validarDecisionViatico,
-  validarEdicionViaticoTecnico,
+  validarEdicionViatico,
   validarEliminacionViaticoTecnico,
   validarEliminarCargo,
   validarEmpresaConfig,
   validarNuevaVigenciaCombustible,
   validarNuevaVigenciaReglasViaticos,
+  validarNuevaVigenciaRendimientoFlota,
   validarNuevaVigenciaServicio,
   validarNuevaVigenciaTerreno,
+  validarNuevaVigenciaTopeViatico,
   validarNuevoServicioCatalogo,
   validarNuevoTipoCombustible,
   validarRangoFechas,
+  validarRenta,
   validarRepartoViatico,
   validarResolucionConflictos,
   validarTransicionServicio,
@@ -42,9 +52,11 @@ import type {
   AvisoSobrescrituraLWW,
   BitacoraEntrada,
   CargoConfig,
+  CategoriaViatico,
   Cliente,
   ConfiguracionEmpresa,
   Cuadrilla,
+  DecisionExcedenteViatico,
   Empresa,
   EquipoGNSS,
   EstadoAprobacionViatico,
@@ -53,10 +65,13 @@ import type {
   EstadoServicio,
   HistorialEvento,
   MembresiaEmpresa,
+  Mision,
   Personal,
   ProyeccionSnapshotPorRol,
   Proyecto,
+  ReglaRendimientoFlotaVersion,
   ReglasViaticosVersion,
+  Renta,
   RepartoProyecto,
   RolEmpresa,
   Ruta,
@@ -646,13 +661,92 @@ function crearSeedDatabase(): DatabaseLocal {
     },
   ];
 
+  const misionesAia: Mision[] = [
+    {
+      id: 'mis-1',
+      empresaId: 'emp-aia',
+      nombre: 'Misión Este — Punta Cana / La Romana',
+      zona: 'Este Turístico',
+      provincia: 'La Altagracia',
+      fechaInicio: hoy,
+      fechaFin: en6Dias,
+      rutaIds: ['ruta-1', 'ruta-3'],
+      notas: 'Deslinde turístico Bavaro y trazado vial en La Romana',
+      version: 1,
+      updatedAt: `${ayer}T10:00:00-04:00`,
+      syncStatus: 'synced',
+    },
+    {
+      id: 'mis-2',
+      empresaId: 'emp-aia',
+      nombre: 'Misión Cibao Central — Santiago',
+      zona: 'Norte / Cibao',
+      provincia: 'Santiago',
+      fechaInicio: en1Dia,
+      fechaFin: en3Dias,
+      rutaIds: ['ruta-2'],
+      notas: 'Levantamiento LiDAR y polígono agroindustrial en Tamboril',
+      version: 1,
+      updatedAt: `${ayer}T10:15:00-04:00`,
+      syncStatus: 'synced',
+    },
+    {
+      id: 'mis-3',
+      empresaId: 'emp-aia',
+      nombre: 'Misión Sur — San Cristóbal',
+      zona: 'Sur Corto',
+      provincia: 'San Cristóbal',
+      fechaInicio: hace8Dias,
+      fechaFin: hoy,
+      rutaIds: ['ruta-4'],
+      notas: 'Cierre de replanteo y entregas finales en Zona Franca Sur',
+      version: 1,
+      updatedAt: `${hace8Dias}T08:00:00-04:00`,
+      syncStatus: 'synced',
+    },
+  ];
+
+  const rentasAia: Renta[] = [
+    {
+      id: 'rent-1',
+      empresaId: 'emp-aia',
+      recursoTipo: 'equipo',
+      recursoId: 'eq-3',
+      recursoEtiqueta: 'Trimble R12i Rover Base',
+      proveedor: 'TopGeo Rent SRL',
+      misionId: 'mis-2',
+      rutaId: 'ruta-2',
+      fechaInicio: en1Dia,
+      fechaFin: en3Dias,
+      modalidadTarifa: 'por_dia',
+      tarifaRD: 3500,
+      cantidadEstimada: 3,
+      incluyeItbis: true,
+      itbisRD: 1890,
+      costoTotalRD: 12390,
+      estado: 'activa',
+      notas: 'Renta auxiliar de base RTK para cobertura simultánea en Santiago',
+      repartos: [{ proyectoId: 'proy-2', montoRD: 12390 }],
+      configVersion: 1,
+      umbralDistanciaKmUsado: 30,
+      version: 1,
+      updatedAt: `${ayer}T12:00:00-04:00`,
+      syncStatus: 'synced',
+    },
+  ];
+
   const viaticosAia: Viatico[] = [
     {
       id: 'via-1',
       empresaId: 'emp-aia',
       creadoPorUsuarioId: 'usr-tec1',
       creadoPorNombre: 'Ing. Carlos Méndez',
+      personalId: 'per-1',
+      cargoUsado: 'jefe_brigada',
+      misionId: 'mis-1',
       rutaId: 'ruta-1',
+      vehiculoId: 'veh-1',
+      galonesCargados: 18.8,
       fechaIso: hoy,
       timestampAST: `${hoy} 07:42:15 AST`,
       categoria: 'Combustible',
@@ -670,6 +764,9 @@ function crearSeedDatabase(): DatabaseLocal {
       estadoAprobacion: 'aprobado',
       aprobadoPorUsuarioId: 'usr-coord',
       aprobadoEn: `${hoy} 09:00:00 AST`,
+      topeAplicadoRD: 5500,
+      montoAprobadoEmpresaRD: 4500,
+      montoCargoColaboradorRD: 0,
       repartos: [
         { proyectoId: 'proy-1', montoRD: 3850 },
         { proyectoId: 'sin_asignar', montoRD: 650 },
@@ -684,6 +781,9 @@ function crearSeedDatabase(): DatabaseLocal {
       empresaId: 'emp-aia',
       creadoPorUsuarioId: 'usr-tec1',
       creadoPorNombre: 'Ing. Carlos Méndez',
+      personalId: 'per-1',
+      cargoUsado: 'jefe_brigada',
+      misionId: 'mis-1',
       rutaId: 'ruta-1',
       fechaIso: hoy,
       timestampAST: `${hoy} 07:18:04 AST`,
@@ -702,6 +802,9 @@ function crearSeedDatabase(): DatabaseLocal {
       estadoAprobacion: 'aprobado',
       aprobadoPorUsuarioId: 'usr-coord',
       aprobadoEn: `${hoy} 09:05:00 AST`,
+      topeAplicadoRD: 1500,
+      montoAprobadoEmpresaRD: 400,
+      montoCargoColaboradorRD: 0,
       repartos: [{ proyectoId: 'proy-1', montoRD: 400 }],
       notas: 'Ida y vuelta autopista del Este',
       version: 1,
@@ -713,6 +816,9 @@ function crearSeedDatabase(): DatabaseLocal {
       empresaId: 'emp-aia',
       creadoPorUsuarioId: 'usr-tec1',
       creadoPorNombre: 'Ing. Carlos Méndez',
+      personalId: 'per-1',
+      cargoUsado: 'jefe_brigada',
+      misionId: 'mis-1',
       rutaId: 'ruta-1',
       fechaIso: hoy,
       timestampAST: `${hoy} 12:15:00 AST`,
@@ -722,6 +828,9 @@ function crearSeedDatabase(): DatabaseLocal {
       itbisRD: 0,
       metodo: 'Dieta Automática',
       estadoAprobacion: 'pendiente',
+      topeAplicadoRD: 2800,
+      excedenteRD: 1600,
+      motivoExcedente: 'Jornada extendida para 2 técnicos en deslinde Bávaro',
       repartos: [{ proyectoId: 'proy-1', montoRD: 4400 }],
       notas: 'Jornada de 2 personas en campo',
       version: 1,
@@ -733,7 +842,12 @@ function crearSeedDatabase(): DatabaseLocal {
       empresaId: 'emp-aia',
       creadoPorUsuarioId: 'usr-tec2',
       creadoPorNombre: 'Agrim. Laura Ramírez',
+      personalId: 'per-3',
+      cargoUsado: 'tecnico',
+      misionId: 'mis-3',
       rutaId: 'ruta-4',
+      vehiculoId: 'veh-2',
+      galonesCargados: 8.7,
       fechaIso: hace8Dias,
       timestampAST: `${hace8Dias} 08:25:12 AST`,
       categoria: 'Combustible',
@@ -745,6 +859,9 @@ function crearSeedDatabase(): DatabaseLocal {
       estadoAprobacion: 'aprobado',
       aprobadoPorUsuarioId: 'usr-coord',
       aprobadoEn: `${hace8Dias} 17:00:00 AST`,
+      topeAplicadoRD: 4000,
+      montoAprobadoEmpresaRD: 2100,
+      montoCargoColaboradorRD: 0,
       repartos: [{ proyectoId: 'proy-3', montoRD: 2100 }],
       notas: 'Traslado brigada San Cristóbal',
       version: 1,
@@ -919,6 +1036,8 @@ function crearSeedDatabase(): DatabaseLocal {
     bitacoras: [],
     asignaciones: [],
     viaticos: [],
+    misiones: [],
+    rentas: [],
     historial: [],
     configuracion: crearConfiguracionInicialEmpresa('emp-caribe'),
     onboarding: crearEstadoOnboardingInicial('emp-caribe'),
@@ -939,6 +1058,8 @@ function crearSeedDatabase(): DatabaseLocal {
     bitacoras: bitacorasAia,
     asignaciones: asignacionesAia,
     viaticos: viaticosAia,
+    misiones: misionesAia,
+    rentas: rentasAia,
     historial: historialAia,
     configuracion: crearConfiguracionInicialEmpresa('emp-aia'),
     onboarding: crearEstadoOnboardingInicial('emp-aia'),
@@ -985,6 +1106,8 @@ function hidratarDatabase(rawDb: DatabaseLocal): DatabaseLocal {
       ...snap,
       empresa: empresaHydrated,
       vehiculos,
+      misiones: snap.misiones ?? [],
+      rentas: snap.rentas ?? [],
       configuracion: config,
       onboarding,
     };
@@ -1585,6 +1708,11 @@ export class LocalRepositorioOperacion implements RepositorioOperacion {
       personal: snap.personal,
       vehiculos: snap.vehiculos,
       equipos: snap.equipos,
+      rentasExistentes: snap.rentas ?? [],
+      misiones: snap.misiones ?? [],
+      umbralCercaniaRentaKm: obtenerRendimientoConfigVigente(
+        asegurarConfiguracionEmpresa(empresaId, snap.configuracion)
+      ).umbralCercaniaRentaKm,
     });
 
     const validacion = validarResolucionConflictos(conflictos, datos.overrideConflicto);
@@ -1703,10 +1831,49 @@ export class LocalRepositorioOperacion implements RepositorioOperacion {
       throw new Error(checkReparto.error || 'Reparto de viático inválido.');
     }
     const snap = this.obtenerSnapshot(empresaId);
+    const mem = this.db.membresias.find(
+      (m) => m.empresaId === empresaId && m.usuarioId === sesion.usuario.id
+    );
+    const resCargo = resolverPersonalYCargoUsuario({
+      usuarioId: sesion.usuario.id,
+      rol: sesion.rolActivo,
+      personalIdMembresia: mem?.personalId,
+      personal: snap.personal,
+    });
+    if (!resCargo.valido) {
+      throw new Error(resCargo.error || ERROR_TECNICO_SIN_PERSONAL);
+    }
+
+    const config = asegurarConfiguracionEmpresa(empresaId, snap.configuracion);
+    const evalTope = evaluarTopeViaticoEnMision({
+      misionId: datos.misionId,
+      categoria: datos.categoria,
+      montoRD: datos.montoRD,
+      cargoCodigo: resCargo.cargoCodigo,
+      usuarioId: sesion.usuario.id,
+      personalId: resCargo.personalId,
+      viaticosExistentes: snap.viaticos,
+      config,
+      fechaCalculoIso: datos.fechaIso,
+    });
+
+    if (evalTope.motivoExcedenteRequerido && !(datos.motivoExcedente && datos.motivoExcedente.trim().length >= 3)) {
+      throw new Error(
+        evalTope.mensajeAviso ||
+          'El gasto supera el tope de misión y requiere un motivo de excedente obligatorio (mínimo 3 caracteres).'
+      );
+    }
+
     const nuevo: Viatico = {
       ...datos,
       id: `via-${Date.now()}-${Math.random().toString(36).slice(2, 5)}`,
       empresaId,
+      personalId: resCargo.personalId,
+      cargoUsado: resCargo.cargoCodigo,
+      topeAplicadoRD: evalTope.topeAplicadoRD,
+      excedenteRD: evalTope.excedenteRD > 0 ? evalTope.excedenteRD : undefined,
+      motivoExcedente: evalTope.excedenteRD > 0 ? datos.motivoExcedente?.trim() : undefined,
+      configVersion: datos.configVersion ?? config.versionGlobal,
       estadoAprobacion: 'pendiente',
       version: 1,
       updatedAt: new Date().toISOString(),
@@ -1721,8 +1888,10 @@ export class LocalRepositorioOperacion implements RepositorioOperacion {
     this.registrarEvento(snap, {
       entidadTipo: 'viatico',
       entidadId: nuevo.id,
-      accion: 'Viático registrado',
-      detalle: `${nuevo.comercio} (${nuevo.categoria}) por RD$ ${nuevo.montoRD.toLocaleString('en-US')} [${nuevo.metodo}].`,
+      accion: nuevo.excedenteRD ? 'Viático registrado con excedente' : 'Viático registrado',
+      detalle: `${nuevo.comercio} (${nuevo.categoria}) por RD$ ${nuevo.montoRD.toLocaleString('en-US')} [${nuevo.metodo}]${
+        nuevo.excedenteRD ? ` · Excedente RD$ ${nuevo.excedenteRD.toLocaleString('en-US')}` : ''
+      }.`,
       valorAnterior: 'Sin registro',
       valorNuevo: `pendiente (${repartoStr})`,
       usuarioId: sesion.usuario.id,
@@ -1730,6 +1899,7 @@ export class LocalRepositorioOperacion implements RepositorioOperacion {
       metadata: {
         valorAnterior: 'Sin registro',
         valorNuevo: `pendiente (${repartoStr})`,
+        ...(nuevo.excedenteRD ? { excedenteRD: nuevo.excedenteRD } : {}),
       },
     });
     this.guardarDB();
@@ -1749,7 +1919,8 @@ export class LocalRepositorioOperacion implements RepositorioOperacion {
     const viatico = snap.viaticos.find((v) => v.id === viaticoId);
     if (!viatico) throw new Error('Viático no encontrado.');
 
-    const check = validarRepartoViatico(viatico.montoRD, repartos);
+    const montoBaseReparto = viatico.montoAprobadoEmpresaRD ?? viatico.montoRD;
+    const check = validarRepartoViatico(montoBaseReparto, repartos);
     if (!check.valido) throw new Error(check.error);
 
     const formatearReparto = (items: RepartoProyecto[]) =>
@@ -1798,19 +1969,22 @@ export class LocalRepositorioOperacion implements RepositorioOperacion {
     nuevoEstado: EstadoAprobacionViatico;
     motivoRechazo?: string;
     motivoDecision?: string;
+    decisionExcedente?: DecisionExcedenteViatico;
   }): Promise<Viatico> {
     const sesion = this.obtenerSesionRequerida();
+    const snap = this.obtenerSnapshot(params.empresaId);
+    const viatico = snap.viaticos.find((v) => v.id === params.viaticoId);
+    if (!viatico) throw new Error('Viático no encontrado.');
+
     const check = validarDecisionViatico({
       rol: sesion.rolActivo,
       nuevoEstado: params.nuevoEstado,
       motivoRechazo: params.motivoRechazo,
       motivoDecision: params.motivoDecision,
+      excedenteRD: viatico.excedenteRD ?? 0,
+      decisionExcedente: params.decisionExcedente,
     });
     if (!check.valido) throw new Error(check.error);
-
-    const snap = this.obtenerSnapshot(params.empresaId);
-    const viatico = snap.viaticos.find((v) => v.id === params.viaticoId);
-    if (!viatico) throw new Error('Viático no encontrado.');
 
     const motivoLimpo = (params.motivoRechazo ?? params.motivoDecision ?? '').trim() || undefined;
     const valorAnterior = viatico.motivoRechazo
@@ -1820,11 +1994,38 @@ export class LocalRepositorioOperacion implements RepositorioOperacion {
       : viatico.estadoAprobacion;
     const valorNuevo = motivoLimpo ? `${params.nuevoEstado} (${motivoLimpo})` : params.nuevoEstado;
 
+    let decisionExcedenteFinal: DecisionExcedenteViatico | undefined = viatico.decisionExcedente;
+    let montoAprobadoEmpresaRD: number | undefined = viatico.montoAprobadoEmpresaRD;
+    let montoCargoColaboradorRD: number | undefined = viatico.montoCargoColaboradorRD;
+    let repartosFinales = viatico.repartos;
+
+    if (params.nuevoEstado === 'aprobado') {
+      const exc = viatico.excedenteRD ?? 0;
+      if (exc > 0 && params.decisionExcedente === 'cargo_colaborador') {
+        decisionExcedenteFinal = 'cargo_colaborador';
+        montoCargoColaboradorRD = Number(Math.min(viatico.montoRD, exc).toFixed(2));
+        montoAprobadoEmpresaRD = Number(Math.max(0, viatico.montoRD - montoCargoColaboradorRD).toFixed(2));
+        repartosFinales = escalarRepartosAMontoEmpresa(montoAprobadoEmpresaRD, viatico.repartos);
+      } else {
+        decisionExcedenteFinal = exc > 0 ? 'aprobado_empresa' : undefined;
+        montoCargoColaboradorRD = 0;
+        montoAprobadoEmpresaRD = viatico.montoRD;
+      }
+    } else {
+      decisionExcedenteFinal = undefined;
+      montoAprobadoEmpresaRD = undefined;
+      montoCargoColaboradorRD = undefined;
+    }
+
     const actualizado: Viatico = {
       ...viatico,
       estadoAprobacion: params.nuevoEstado,
       motivoRechazo: params.nuevoEstado === 'rechazado' ? motivoLimpo : undefined,
       motivoDecision: motivoLimpo,
+      decisionExcedente: decisionExcedenteFinal,
+      montoAprobadoEmpresaRD,
+      montoCargoColaboradorRD,
+      repartos: repartosFinales,
       aprobadoPorUsuarioId: sesion.usuario.id,
       aprobadoEn: formatSantoDomingoAST(new Date()),
       version: viatico.version + 1,
@@ -1837,13 +2038,17 @@ export class LocalRepositorioOperacion implements RepositorioOperacion {
       entidadId: actualizado.id,
       accion:
         params.nuevoEstado === 'aprobado'
-          ? 'Viático aprobado'
+          ? decisionExcedenteFinal === 'cargo_colaborador'
+            ? 'Viático aprobado con cargo de excedente al colaborador'
+            : 'Viático aprobado'
           : params.nuevoEstado === 'rechazado'
           ? 'Viático rechazado'
           : 'Viático devuelto a pendiente',
-      detalle: `${actualizado.comercio} (RD$ ${actualizado.montoRD.toLocaleString('en-US')})${
-        motivoLimpo ? ` · Motivo: ${motivoLimpo}` : ''
-      }`,
+      detalle: `${actualizado.comercio} (Total RD$ ${actualizado.montoRD.toLocaleString('en-US')}${
+        decisionExcedenteFinal === 'cargo_colaborador'
+          ? ` · Empresa RD$ ${(montoAprobadoEmpresaRD ?? 0).toLocaleString('en-US')} / Colaborador RD$ ${(montoCargoColaboradorRD ?? 0).toLocaleString('en-US')}`
+          : ''
+      })${motivoLimpo ? ` · Motivo: ${motivoLimpo}` : ''}`,
       valorAnterior,
       valorNuevo,
       usuarioId: sesion.usuario.id,
@@ -1882,16 +2087,42 @@ export class LocalRepositorioOperacion implements RepositorioOperacion {
       throw new Error('Viático no encontrado.');
     }
 
-    if (sesion.rolActivo === 'tecnico') {
-      const checkEdicion = validarEdicionViaticoTecnico(target, sesion.usuario.id);
-      if (!checkEdicion.valido) {
-        throw new Error(checkEdicion.error || 'Solo puedes editar tus viáticos pendientes.');
-      }
+    const checkEdicion = validarEdicionViatico({
+      viatico: target,
+      rol: sesion.rolActivo,
+      usuarioId: sesion.usuario.id,
+    });
+    if (!checkEdicion.valido) {
+      throw new Error(
+        checkEdicion.error || 'No es posible editar este viático en su estado actual.'
+      );
     }
 
     const checkReparto = validarRepartoViatico(datos.montoRD, datos.repartos);
     if (!checkReparto.valido) {
       throw new Error(checkReparto.error || 'Reparto de viático inválido.');
+    }
+
+    const config = asegurarConfiguracionEmpresa(empresaId, snap.configuracion);
+    const cargoCodigo = target.cargoUsado || 'administrativo';
+    const evalTope = evaluarTopeViaticoEnMision({
+      misionId: datos.misionId,
+      categoria: datos.categoria,
+      montoRD: datos.montoRD,
+      cargoCodigo,
+      usuarioId: target.creadoPorUsuarioId,
+      personalId: target.personalId,
+      viaticosExistentes: snap.viaticos,
+      excluirViaticoId: target.id,
+      config,
+      fechaCalculoIso: datos.fechaIso,
+    });
+
+    if (evalTope.motivoExcedenteRequerido && !(datos.motivoExcedente && datos.motivoExcedente.trim().length >= 3)) {
+      throw new Error(
+        evalTope.mensajeAviso ||
+          'El gasto supera el tope de misión y requiere un motivo de excedente obligatorio.'
+      );
     }
 
     const actualizado: Viatico = {
@@ -1901,6 +2132,9 @@ export class LocalRepositorioOperacion implements RepositorioOperacion {
       empresaId: target.empresaId,
       creadoPorUsuarioId: target.creadoPorUsuarioId,
       creadoPorNombre: target.creadoPorNombre,
+      topeAplicadoRD: evalTope.topeAplicadoRD,
+      excedenteRD: evalTope.excedenteRD > 0 ? evalTope.excedenteRD : undefined,
+      motivoExcedente: evalTope.excedenteRD > 0 ? datos.motivoExcedente?.trim() : undefined,
       estadoAprobacion: 'pendiente',
       version: target.version + 1,
       updatedAt: new Date().toISOString(),
@@ -1942,6 +2176,170 @@ export class LocalRepositorioOperacion implements RepositorioOperacion {
     }
     snap.viaticos = snap.viaticos.filter((v) => v.id !== viaticoId);
     this.guardarDB();
+  }
+
+  async crearMision(
+    empresaId: string,
+    datos: Omit<Mision, 'id' | 'empresaId' | 'version' | 'updatedAt' | 'syncStatus'>
+  ): Promise<Mision> {
+    const sesion = this.obtenerSesionRequerida();
+    if (!puedeCrearOEditarOperacion(sesion.rolActivo)) {
+      throw new Error('No tienes permisos para crear misiones.');
+    }
+    if (!datos.nombre.trim() || !datos.zona.trim() || !datos.provincia.trim()) {
+      throw new Error('Nombre, zona y provincia de la misión son obligatorios.');
+    }
+    if (!validarRangoFechas(datos.fechaInicio, datos.fechaFin)) {
+      throw new Error('El rango de fechas de la misión es inválido.');
+    }
+    const snap = this.obtenerSnapshot(empresaId);
+    const nueva: Mision = {
+      ...datos,
+      id: `mis-${Date.now()}-${Math.random().toString(36).slice(2, 5)}`,
+      empresaId,
+      nombre: datos.nombre.trim(),
+      zona: datos.zona.trim(),
+      provincia: datos.provincia.trim(),
+      version: 1,
+      updatedAt: new Date().toISOString(),
+      syncStatus: 'pending',
+    };
+    snap.misiones = [nueva, ...(snap.misiones ?? [])];
+    this.registrarEvento(snap, {
+      entidadTipo: 'mision',
+      entidadId: nueva.id,
+      accion: 'Misión creada',
+      detalle: `${nueva.nombre} (${nueva.provincia} · ${nueva.fechaInicio} al ${nueva.fechaFin}).`,
+      valorAnterior: 'Sin registro',
+      valorNuevo: nueva.nombre,
+      usuarioId: sesion.usuario.id,
+      usuarioNombre: sesion.usuario.nombre,
+    });
+    this.guardarDB();
+    return nueva;
+  }
+
+  async guardarRenta(
+    empresaId: string,
+    datos: Omit<Renta, 'id' | 'empresaId' | 'version' | 'updatedAt' | 'syncStatus'> & {
+      id?: string;
+    }
+  ): Promise<Renta> {
+    const sesion = this.obtenerSesionRequerida();
+    if (!puedeGestionarCatalogos(sesion.rolActivo)) {
+      throw new Error('Solo Coordinador o Admin pueden registrar o modificar rentas.');
+    }
+    const checkDatos = validarRenta(datos);
+    if (!checkDatos.valido) {
+      throw new Error(checkDatos.error || 'Datos de renta inválidos.');
+    }
+    const snap = this.obtenerSnapshot(empresaId);
+    const config = asegurarConfiguracionEmpresa(empresaId, snap.configuracion);
+    const umbralKm = obtenerRendimientoConfigVigente(config, datos.fechaInicio).umbralCercaniaRentaKm;
+    const rentaId = datos.id || `rent-${Date.now()}-${Math.random().toString(36).slice(2, 5)}`;
+
+    const conflictos = detectarConflictosRenta({
+      candidata: {
+        id: rentaId,
+        recursoTipo: datos.recursoTipo,
+        recursoId: datos.recursoId,
+        misionId: datos.misionId,
+        rutaId: datos.rutaId,
+        fechaInicio: datos.fechaInicio,
+        fechaFin: datos.fechaFin,
+        estado: datos.estado,
+      },
+      rentasExistentes: snap.rentas ?? [],
+      asignacionesExistentes: snap.asignaciones,
+      rutas: snap.rutas,
+      misiones: snap.misiones ?? [],
+      vehiculos: snap.vehiculos,
+      equipos: snap.equipos,
+      umbralCercaniaKm: umbralKm,
+    });
+
+    const validacionConf = validarResolucionConflictos(conflictos, datos.overrideConflicto);
+    if (!validacionConf.valido) {
+      throw new Error(validacionConf.error || 'Conflicto bloqueante en la renta.');
+    }
+
+    const etiqueta =
+      datos.recursoEtiqueta ||
+      (datos.recursoTipo === 'vehiculo'
+        ? snap.vehiculos.find((v) => v.id === datos.recursoId)?.etiqueta
+        : snap.equipos.find((e) => e.id === datos.recursoId)?.nombre) ||
+      datos.recursoId;
+
+    const existente = (snap.rentas ?? []).find((r) => r.id === rentaId);
+    const guardada: Renta = {
+      ...datos,
+      id: rentaId,
+      empresaId,
+      recursoEtiqueta: etiqueta,
+      proveedor: datos.proveedor.trim(),
+      configVersion: datos.configVersion ?? config.versionGlobal,
+      umbralDistanciaKmUsado: datos.umbralDistanciaKmUsado ?? umbralKm,
+      version: existente ? existente.version + 1 : 1,
+      updatedAt: new Date().toISOString(),
+      syncStatus: 'pending',
+    };
+
+    snap.rentas = existente
+      ? (snap.rentas ?? []).map((r) => (r.id === rentaId ? guardada : r))
+      : [guardada, ...(snap.rentas ?? [])];
+
+    this.registrarEvento(snap, {
+      entidadTipo: 'renta',
+      entidadId: guardada.id,
+      accion: existente ? 'Renta actualizada' : 'Renta registrada',
+      detalle: `${etiqueta} (${guardada.proveedor}) del ${guardada.fechaInicio} al ${guardada.fechaFin} por RD$ ${guardada.costoTotalRD.toLocaleString('en-US')}.`,
+      valorAnterior: existente ? `${existente.estado} · RD$ ${existente.costoTotalRD}` : 'Sin registro',
+      valorNuevo: `${guardada.estado} · RD$ ${guardada.costoTotalRD}`,
+      usuarioId: sesion.usuario.id,
+      usuarioNombre: sesion.usuario.nombre,
+    });
+    this.guardarDB();
+    return guardada;
+  }
+
+  async devolverRenta(params: {
+    empresaId: string;
+    rentaId: string;
+    fechaDevolucion?: string;
+    notas?: string;
+  }): Promise<Renta> {
+    const sesion = this.obtenerSesionRequerida();
+    if (!puedeGestionarCatalogos(sesion.rolActivo)) {
+      throw new Error('Solo Coordinador o Admin pueden registrar la devolución de una renta.');
+    }
+    const snap = this.obtenerSnapshot(params.empresaId);
+    const target = (snap.rentas ?? []).find((r) => r.id === params.rentaId);
+    if (!target) {
+      throw new Error('Renta no encontrada.');
+    }
+    const fechaDev = params.fechaDevolucion || obtenerFechaHoyAST();
+    const actualizada: Renta = {
+      ...target,
+      estado: 'finalizada',
+      fechaDevolucion: fechaDev,
+      notas: params.notas ? `${target.notas ? `${target.notas} · ` : ''}${params.notas}` : target.notas,
+      version: target.version + 1,
+      updatedAt: new Date().toISOString(),
+      syncStatus: 'pending',
+    };
+    snap.rentas = (snap.rentas ?? []).map((r) => (r.id === target.id ? actualizada : r));
+    this.registrarEvento(snap, {
+      entidadTipo: 'renta',
+      entidadId: actualizada.id,
+      accion: 'Renta finalizada / devuelta',
+      detalle: `${actualizada.recursoEtiqueta || actualizada.recursoId} (${actualizada.proveedor}) devuelta el ${fechaDev}.`,
+      valorAnterior: target.estado,
+      valorNuevo: `finalizada (${fechaDev})`,
+      usuarioId: sesion.usuario.id,
+      usuarioNombre: sesion.usuario.nombre,
+    });
+    this.guardarDB();
+    return actualizada;
   }
 
   async guardarPersonal(
@@ -2669,6 +3067,113 @@ export class LocalRepositorioOperacion implements RepositorioOperacion {
     return nextConfig;
   }
 
+  async agregarVigenciaTopeViatico(params: {
+    empresaId: string;
+    cargoCodigo: string;
+    categoria: CategoriaViatico;
+    vigenciaDesde: string;
+    montoMaximoPorMisionRD: number;
+  }): Promise<ConfiguracionEmpresa> {
+    const sesion = this.obtenerSesionRequerida();
+    if (!puedeEditarConfiguracion(sesion.rolActivo)) {
+      throw new Error('Solo el Administrador puede editar los topes de viáticos.');
+    }
+    const snap = this.obtenerSnapshot(params.empresaId);
+    const config = asegurarConfiguracionEmpresa(params.empresaId, snap.configuracion);
+    const existente = config.topesViatico.find(
+      (t) => t.cargoCodigo === params.cargoCodigo && t.categoria === params.categoria
+    );
+    const versionesPrevias = existente?.versiones ?? [];
+    const check = validarNuevaVigenciaTopeViatico(versionesPrevias, {
+      vigenciaDesde: params.vigenciaDesde,
+      montoMaximoPorMisionRD: params.montoMaximoPorMisionRD,
+    });
+    if (!check.valido) {
+      throw new Error(check.error || 'Tope de viático inválido.');
+    }
+    const nextVer = siguienteVersion(versionesPrevias);
+    const nuevaVer = {
+      version: nextVer,
+      vigenciaDesde: params.vigenciaDesde,
+      montoMaximoPorMisionRD: params.montoMaximoPorMisionRD,
+      esEjemploPendienteConfirmar: false,
+    };
+    const nextTopes = existente
+      ? config.topesViatico.map((t) =>
+          t.cargoCodigo === params.cargoCodigo && t.categoria === params.categoria
+            ? { ...t, versiones: [...t.versiones, nuevaVer] }
+            : t
+        )
+      : [
+          ...config.topesViatico,
+          {
+            cargoCodigo: params.cargoCodigo,
+            categoria: params.categoria,
+            versiones: [nuevaVer],
+          },
+        ];
+
+    const nextConfig: ConfiguracionEmpresa = {
+      ...config,
+      topesViatico: nextTopes,
+      versionGlobal: config.versionGlobal + 1,
+    };
+    snap.configuracion = nextConfig;
+    const etiquetaCargo = resolverEtiquetaCargo(params.cargoCodigo, config.cargos);
+    this.registrarEvento(snap, {
+      entidadTipo: 'empresa',
+      entidadId: `${params.cargoCodigo}::${params.categoria}`,
+      accion: 'Tope de viático actualizado',
+      detalle: `${etiquetaCargo} · ${params.categoria}: tope por misión RD$ ${params.montoMaximoPorMisionRD.toLocaleString('en-US')} desde ${params.vigenciaDesde} (v${nextVer}).`,
+      valorAnterior: versionesPrevias.length
+        ? `RD$ ${versionesPrevias[versionesPrevias.length - 1].montoMaximoPorMisionRD}`
+        : 'Sin tope',
+      valorNuevo: `RD$ ${params.montoMaximoPorMisionRD} (${params.vigenciaDesde})`,
+      usuarioId: sesion.usuario.id,
+      usuarioNombre: sesion.usuario.nombre,
+    });
+    this.guardarDB();
+    return nextConfig;
+  }
+
+  async agregarVigenciaRendimientoFlota(params: {
+    empresaId: string;
+    regla: Omit<ReglaRendimientoFlotaVersion, 'version'>;
+  }): Promise<ConfiguracionEmpresa> {
+    const sesion = this.obtenerSesionRequerida();
+    if (!puedeEditarConfiguracion(sesion.rolActivo)) {
+      throw new Error('Solo el Administrador puede actualizar reglas de rendimiento y rentas.');
+    }
+    const snap = this.obtenerSnapshot(params.empresaId);
+    const config = asegurarConfiguracionEmpresa(params.empresaId, snap.configuracion);
+    const check = validarNuevaVigenciaRendimientoFlota(config.rendimientoFlota, params.regla);
+    if (!check.valido) {
+      throw new Error(check.error || 'Reglas de rendimiento de flota inválidas.');
+    }
+    const nextVer = siguienteVersion(config.rendimientoFlota);
+    const nuevaVer: ReglaRendimientoFlotaVersion = {
+      ...params.regla,
+      version: nextVer,
+      esEjemploPendienteConfirmar: false,
+    };
+    const nextConfig: ConfiguracionEmpresa = {
+      ...config,
+      rendimientoFlota: [...config.rendimientoFlota, nuevaVer],
+      versionGlobal: config.versionGlobal + 1,
+    };
+    snap.configuracion = nextConfig;
+    this.registrarEvento(snap, {
+      entidadTipo: 'empresa',
+      entidadId: 'rendimiento_flota',
+      accion: 'Parámetros de flota y cercanía versionados',
+      detalle: `Fuente km: ${nuevaVer.fuenteKm} · Alerta rendimiento: ±${nuevaVer.umbralAlertaPct}% · Cercanía rentas: ${nuevaVer.umbralCercaniaRentaKm} km (desde ${nuevaVer.vigenciaDesde}).`,
+      usuarioId: sesion.usuario.id,
+      usuarioNombre: sesion.usuario.nombre,
+    });
+    this.guardarDB();
+    return nextConfig;
+  }
+
   async guardarOnboarding(
     empresaId: string,
     onboarding: EstadoOnboardingEmpresa
@@ -2874,6 +3379,17 @@ export class LocalRepositorioOperacion implements RepositorioOperacion {
       snap.viaticos = recViaticos.items.map((v) =>
         v.syncStatus === 'needs_ocr' ? v : { ...v, syncStatus: 'synced' }
       );
+      if (serverSnap.misiones) {
+        const recMisiones = reconciliarColeccionLWWConReporte(
+          snap.misiones ?? [],
+          serverSnap.misiones
+        );
+        snap.misiones = recMisiones.items.map((m) => ({ ...m, syncStatus: 'synced' }));
+      }
+      if (serverSnap.rentas) {
+        const recRentas = reconciliarColeccionLWWConReporte(snap.rentas ?? [], serverSnap.rentas);
+        snap.rentas = recRentas.items.map((r) => ({ ...r, syncStatus: 'synced' }));
+      }
       snap.bitacoras = snap.bitacoras.map((b) => ({ ...b, syncStatus: 'synced' }));
       snap.lastSyncedAt = ack.lastSyncedAt;
     }

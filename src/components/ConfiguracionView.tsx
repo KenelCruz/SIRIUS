@@ -19,24 +19,31 @@ import {
 } from 'lucide-react';
 import {
   CATEGORIAS_VIATICO,
+  ETIQUETA_EJEMPLO_CONFIRMAR,
+  FUENTES_KM_RENDIMIENTO,
   MONEDAS_SUGERIDAS,
   ZONAS_HORARIAS_SUGERIDAS,
   obtenerCombustiblesVigentes,
   obtenerFactoresTerrenoVigentes,
   obtenerFechaHoyAST,
   obtenerReglasViaticosVigentes,
+  obtenerRendimientoConfigVigente,
   obtenerServiciosVigentes,
+  obtenerTopesViaticoVigentes,
   puedeEditarConfiguracion,
   puedeVerSeccionConfiguracion,
+  resolverEtiquetaCargo,
 } from '../domain';
 import type {
   CategoriaViatico,
   ConceptoDistanciaGps,
   ConfiguracionEmpresa,
   Empresa,
+  FuenteKmRendimiento,
   MembresiaEmpresa,
   Personal,
   PresetViaticoConfig,
+  ReglaRendimientoFlotaVersion,
   ReglasViaticosVersion,
   RolEmpresa,
   SeccionConfiguracion,
@@ -99,6 +106,15 @@ interface ConfiguracionViewProps {
   }) => Promise<void>;
   onAgregarVigenciaFactoresTerreno: (factores: Omit<TerrenoFactorVersion, 'version'>) => Promise<void>;
   onAgregarVigenciaReglasViaticos: (reglas: Omit<ReglasViaticosVersion, 'version'>) => Promise<void>;
+  onAgregarVigenciaTopeViatico?: (params: {
+    cargoCodigo: string;
+    categoria: CategoriaViatico;
+    vigenciaDesde: string;
+    montoMaximoPorMisionRD: number;
+  }) => Promise<void>;
+  onAgregarVigenciaRendimientoFlota?: (
+    regla: Omit<ReglaRendimientoFlotaVersion, 'version'>
+  ) => Promise<void>;
   onAbrirTutorial: () => void;
   onReiniciarOnboarding: () => Promise<void>;
 }
@@ -141,6 +157,8 @@ export const ConfiguracionView: React.FC<ConfiguracionViewProps> = ({
   onAgregarVigenciaServicio,
   onAgregarVigenciaFactoresTerreno,
   onAgregarVigenciaReglasViaticos,
+  onAgregarVigenciaTopeViatico,
+  onAgregarVigenciaRendimientoFlota,
   onAbrirTutorial,
   onReiniciarOnboarding,
 }) => {
@@ -289,6 +307,37 @@ export const ConfiguracionView: React.FC<ConfiguracionViewProps> = ({
 
   const combustiblesVigentes = obtenerCombustiblesVigentes(configuracion);
   const serviciosVigentes = obtenerServiciosVigentes(configuracion);
+  const rendimientoVigente = obtenerRendimientoConfigVigente(configuracion);
+  const topesVigentes = obtenerTopesViaticoVigentes(configuracion);
+
+  const [rfFuenteKm, setRfFuenteKm] = useState<FuenteKmRendimiento>(rendimientoVigente.fuenteKm);
+  const [rfUmbralAlertaPct, setRfUmbralAlertaPct] = useState(
+    String(rendimientoVigente.umbralAlertaPct)
+  );
+  const [rfUmbralCercaniaKm, setRfUmbralCercaniaKm] = useState(
+    String(rendimientoVigente.umbralCercaniaRentaKm)
+  );
+  const [rfVigencia, setRfVigencia] = useState(hoyIso);
+
+  useEffect(() => {
+    setRfFuenteKm(rendimientoVigente.fuenteKm);
+    setRfUmbralAlertaPct(String(rendimientoVigente.umbralAlertaPct));
+    setRfUmbralCercaniaKm(String(rendimientoVigente.umbralCercaniaRentaKm));
+  }, [rendimientoVigente]);
+
+  const [topeCargo, setTopeCargo] = useState<string>(configuracion.cargos[0]?.codigo ?? 'tecnico');
+  const [topeCategoria, setTopeCategoria] = useState<CategoriaViatico>(CATEGORIAS_VIATICO[0]);
+  const [topeMonto, setTopeMonto] = useState<string>('2000');
+  const [topeVigencia, setTopeVigencia] = useState<string>(hoyIso);
+
+  useEffect(() => {
+    const match = topesVigentes.find(
+      (t) => t.cargoCodigo === topeCargo && t.categoria === topeCategoria
+    );
+    if (match) {
+      setTopeMonto(String(match.montoMaximoPorMisionRD));
+    }
+  }, [topeCargo, topeCategoria, configuracion.topesViatico]);
 
   const selectedSrv =
     configuracion.servicios.find((s) => s.codigo === srvVigCodigo) ?? configuracion.servicios[0];
@@ -1022,6 +1071,119 @@ export const ConfiguracionView: React.FC<ConfiguracionViewProps> = ({
                   </table>
                 </div>
               </div>
+
+              {/* Reglas de Rendimiento de Flota (B4) y Cercanía de Rentas (B3) */}
+              <div className="bg-white border border-slate-200 rounded-xl p-5 space-y-4">
+                <div className="flex flex-wrap items-start justify-between gap-2">
+                  <div>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <h4 className="text-sm font-bold text-slate-900">
+                        Rendimiento de Flota y Umbral de Cercanía en Rentas
+                      </h4>
+                      {rendimientoVigente.esEjemploPendienteConfirmar && (
+                        <span className="rounded bg-amber-100 border border-amber-300 px-2 py-0.5 text-[10px] font-bold text-amber-900">
+                          {ETIQUETA_EJEMPLO_CONFIRMAR}
+                        </span>
+                      )}
+                    </div>
+                    <p className="text-xs text-slate-500 mt-0.5">
+                      Vigencia activa: v{rendimientoVigente.version} · desde{' '}
+                      {rendimientoVigente.vigenciaDesde}.{' '}
+                      {canEdit
+                        ? 'Define la fuente de km para evaluar cargas aprobadas (mín. 3 cargas), el % de desviación y el radio de cercanía en rentas.'
+                        : 'Consulta de solo lectura.'}
+                    </p>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 text-sm">
+                  <label className="block">
+                    <span className="text-xs font-semibold text-slate-600">
+                      Fuente de kilómetros
+                    </span>
+                    <select
+                      disabled={!canEdit}
+                      value={rfFuenteKm}
+                      onChange={(e) => setRfFuenteKm(e.target.value as FuenteKmRendimiento)}
+                      className="mt-1 w-full px-3 py-2 border border-slate-300 rounded-lg bg-white disabled:bg-slate-50"
+                    >
+                      {FUENTES_KM_RENDIMIENTO.map((f) => (
+                        <option key={f} value={f}>
+                          {f === 'ruta_asignada'
+                            ? 'Ruta asignada (ida y vuelta)'
+                            : f === 'bitacora'
+                            ? 'Bitácora de campo'
+                            : 'Captura manual'}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  <label className="block">
+                    <span className="text-xs font-semibold text-slate-600">
+                      Umbral alerta rendimiento (%)
+                    </span>
+                    <input
+                      type="number"
+                      min="1"
+                      step="0.5"
+                      disabled={!canEdit}
+                      value={rfUmbralAlertaPct}
+                      onChange={(e) => setRfUmbralAlertaPct(e.target.value)}
+                      className="mt-1 w-full px-3 py-2 border border-slate-300 rounded-lg tabular-nums disabled:bg-slate-50"
+                    />
+                  </label>
+                  <label className="block">
+                    <span className="text-xs font-semibold text-slate-600">
+                      Umbral cercanía rentas (km)
+                    </span>
+                    <input
+                      type="number"
+                      min="1"
+                      step="1"
+                      disabled={!canEdit}
+                      value={rfUmbralCercaniaKm}
+                      onChange={(e) => setRfUmbralCercaniaKm(e.target.value)}
+                      className="mt-1 w-full px-3 py-2 border border-slate-300 rounded-lg tabular-nums disabled:bg-slate-50"
+                    />
+                  </label>
+                  {canEdit && (
+                    <label className="block">
+                      <span className="text-xs font-semibold text-slate-600">Vigencia desde</span>
+                      <input
+                        type="date"
+                        value={rfVigencia}
+                        onChange={(e) => setRfVigencia(e.target.value)}
+                        className="mt-1 w-full px-3 py-2 border border-slate-300 rounded-lg"
+                      />
+                    </label>
+                  )}
+                </div>
+
+                {canEdit && onAgregarVigenciaRendimientoFlota && (
+                  <div className="flex justify-end">
+                    <button
+                      type="button"
+                      onClick={() =>
+                        handleAction(
+                          () =>
+                            onAgregarVigenciaRendimientoFlota({
+                              vigenciaDesde: rfVigencia,
+                              fuenteKm: rfFuenteKm,
+                              umbralAlertaPct: Number(rfUmbralAlertaPct),
+                              umbralCercaniaRentaKm: Number(rfUmbralCercaniaKm),
+                              esEjemploPendienteConfirmar: false,
+                            }),
+                          'Regla de rendimiento y cercanía de rentas guardada.'
+                        )
+                      }
+                      className="inline-flex items-center gap-1.5 px-4 py-2 bg-slate-900 hover:bg-slate-800 text-white text-xs font-semibold rounded-lg"
+                    >
+                      <Save className="w-3.5 h-3.5" />
+                      Guardar nueva vigencia
+                    </button>
+                  </div>
+                )}
+              </div>
             </div>
           )}
 
@@ -1646,20 +1808,25 @@ export const ConfiguracionView: React.FC<ConfiguracionViewProps> = ({
             </div>
           )}
 
-          {/* 7. VIÁTICOS POR CARGO (SOLO ESTRUCTURA) */}
-          {seccion === 'viaticos_categorias' && canEdit && (
+          {/* 7. TOPES DE VIÁTICOS POR CARGO Y CATEGORÍA (B1) */}
+          {seccion === 'viaticos_categorias' && (
             <div className="bg-white border border-slate-200 rounded-xl p-5 space-y-5">
-              <div>
-                <h3 className="text-base font-bold text-slate-900">
-                  Estructura de Viáticos por Categoría y Cargo
-                </h3>
-                <p className="text-xs text-slate-500 mt-0.5">
-                  Las categorías de gasto están centralizadas para toda la plataforma.
-                </p>
-              </div>
-
-              <div className="bg-slate-50 border border-slate-200 rounded-lg px-4 py-3 text-sm font-medium text-slate-800">
-                Topes por cargo: próximamente
+              <div className="flex flex-wrap items-start justify-between gap-2">
+                <div>
+                  <h3 className="text-base font-bold text-slate-900">
+                    Topes de Viáticos por Cargo y Categoría (por Misión)
+                  </h3>
+                  <p className="text-xs text-slate-500 mt-0.5">
+                    {canEdit
+                      ? 'Define el tope máximo acumulado por persona en cada misión. Un tope de RD$ 0 indica categoría no permitida para ese cargo (avisa y exige motivo).'
+                      : 'Consulta de solo lectura de los topes máximos por misión vigentes para cada cargo.'}
+                  </p>
+                </div>
+                {topesVigentes.some((t) => t.esEjemploPendienteConfirmar) && (
+                  <span className="rounded bg-amber-100 border border-amber-300 px-2.5 py-1 text-[11px] font-bold text-amber-900">
+                    {ETIQUETA_EJEMPLO_CONFIRMAR}
+                  </span>
+                )}
               </div>
 
               <div className="overflow-x-auto border border-slate-200 rounded-lg">
@@ -1668,7 +1835,7 @@ export const ConfiguracionView: React.FC<ConfiguracionViewProps> = ({
                     <tr>
                       <th className="px-4 py-2.5 font-semibold">Categoría</th>
                       {configuracion.cargos.map((c) => (
-                        <th key={c.codigo} className="px-4 py-2.5 font-semibold text-center">
+                        <th key={c.codigo} className="px-4 py-2.5 font-semibold text-right">
                           {c.etiqueta}
                         </th>
                       ))}
@@ -1678,16 +1845,137 @@ export const ConfiguracionView: React.FC<ConfiguracionViewProps> = ({
                     {CATEGORIAS_VIATICO.map((cat) => (
                       <tr key={cat}>
                         <td className="px-4 py-2.5 font-medium text-slate-900">{cat}</td>
-                        {configuracion.cargos.map((c) => (
-                          <td key={c.codigo} className="px-4 py-2.5 text-center text-xs text-slate-400">
-                            Sin tope asignado
-                          </td>
-                        ))}
+                        {configuracion.cargos.map((c) => {
+                          const tope = topesVigentes.find(
+                            (t) => t.cargoCodigo === c.codigo && t.categoria === cat
+                          );
+                          const monto = tope?.montoMaximoPorMisionRD;
+                          return (
+                            <td key={c.codigo} className="px-4 py-2.5 text-right text-xs">
+                              {monto === undefined ? (
+                                <span className="text-slate-400">Sin tope</span>
+                              ) : monto === 0 ? (
+                                <div>
+                                  <span className="inline-block rounded bg-rose-100 border border-rose-200 px-1.5 py-0.5 text-[10px] font-bold text-rose-800">
+                                    No permitida ({formatRD(0, moneda)})
+                                  </span>
+                                  <div className="text-[10px] text-slate-400 mt-0.5">
+                                    v{tope?.version} · {tope?.vigenciaDesde}
+                                  </div>
+                                </div>
+                              ) : (
+                                <div>
+                                  <div className="font-semibold text-slate-900 tabular-nums">
+                                    {formatRD(monto, moneda)}
+                                  </div>
+                                  <div className="text-[10px] text-slate-500 tabular-nums">
+                                    v{tope?.version} · {tope?.vigenciaDesde}
+                                    {tope?.esEjemploPendienteConfirmar && (
+                                      <span className="ml-1 text-amber-700 font-semibold">
+                                        (Ejemplo)
+                                      </span>
+                                    )}
+                                  </div>
+                                </div>
+                              )}
+                            </td>
+                          );
+                        })}
                       </tr>
                     ))}
                   </tbody>
                 </table>
               </div>
+
+              {canEdit && onAgregarVigenciaTopeViatico && (
+                <div className="border border-slate-200 rounded-lg p-4 space-y-3 bg-slate-50/50">
+                  <h4 className="text-xs font-bold uppercase tracking-wider text-slate-700">
+                    Programar nueva vigencia de tope por cargo y categoría
+                  </h4>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 text-xs">
+                    <label className="block">
+                      <span className="font-semibold text-slate-600">Cargo</span>
+                      <select
+                        value={topeCargo}
+                        onChange={(e) => setTopeCargo(e.target.value)}
+                        className="mt-1 w-full px-3 py-2 border border-slate-300 rounded-lg bg-white text-sm"
+                      >
+                        {configuracion.cargos.map((c) => (
+                          <option key={c.codigo} value={c.codigo}>
+                            {resolverEtiquetaCargo(c.codigo, configuracion.cargos)}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                    <label className="block">
+                      <span className="font-semibold text-slate-600">Categoría</span>
+                      <select
+                        value={topeCategoria}
+                        onChange={(e) => setTopeCategoria(e.target.value as CategoriaViatico)}
+                        className="mt-1 w-full px-3 py-2 border border-slate-300 rounded-lg bg-white text-sm"
+                      >
+                        {CATEGORIAS_VIATICO.map((cat) => (
+                          <option key={cat} value={cat}>
+                            {cat}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                    <label className="block">
+                      <span className="font-semibold text-slate-600">
+                        Tope máximo por misión ({moneda})
+                      </span>
+                      <input
+                        type="number"
+                        min="0"
+                        step="50"
+                        value={topeMonto}
+                        onChange={(e) => setTopeMonto(e.target.value)}
+                        className="mt-1 w-full px-3 py-2 border border-slate-300 rounded-lg text-sm tabular-nums bg-white"
+                      />
+                    </label>
+                    <label className="block">
+                      <span className="font-semibold text-slate-600">Vigencia desde</span>
+                      <input
+                        type="date"
+                        value={topeVigencia}
+                        onChange={(e) => setTopeVigencia(e.target.value)}
+                        className="mt-1 w-full px-3 py-2 border border-slate-300 rounded-lg text-sm bg-white"
+                      />
+                    </label>
+                  </div>
+
+                  {Number(topeMonto) === 0 && (
+                    <div className="rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-900">
+                      Aviso: un tope de {formatRD(0, moneda)} indica que la categoría{' '}
+                      <strong>{topeCategoria}</strong> no está permitida para este cargo y exigirá
+                      motivo de excedente al registrarse.
+                    </div>
+                  )}
+
+                  <div className="flex justify-end">
+                    <button
+                      type="button"
+                      onClick={() =>
+                        handleAction(
+                          () =>
+                            onAgregarVigenciaTopeViatico({
+                              cargoCodigo: topeCargo,
+                              categoria: topeCategoria,
+                              vigenciaDesde: topeVigencia,
+                              montoMaximoPorMisionRD: Number(topeMonto),
+                            }),
+                          'Nueva vigencia de tope por cargo registrada.'
+                        )
+                      }
+                      className="inline-flex items-center gap-1.5 px-4 py-2 bg-slate-900 hover:bg-slate-800 text-white text-xs font-semibold rounded-lg"
+                    >
+                      <Save className="w-3.5 h-3.5" />
+                      Guardar nueva vigencia de tope
+                    </button>
+                  </div>
+                </div>
+              )}
             </div>
           )}
 

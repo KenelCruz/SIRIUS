@@ -55,6 +55,7 @@ import {
   puedeVerAuditoria,
   puedeVerConfiguracion,
   reiniciarOnboarding,
+  resolverPersonalYCargoUsuario,
   seleccionarPasoOnboarding,
 } from './domain';
 import { useOnlineStatus } from './hooks/useOnlineStatus';
@@ -101,6 +102,7 @@ export default function App() {
     serviciosVigentes,
     factoresTerrenoVigentes,
     reglasViaticosVigentes,
+    rendimientoFlotaVigente,
     onboarding,
     tutorialesPerfil,
     tutorialesVistos,
@@ -833,6 +835,15 @@ export default function App() {
           }}
           proyectos={snapTecnico.proyectos}
           rutas={snapTecnico.rutas}
+          misiones={snapTecnico.misiones}
+          vehiculos={snapTecnico.vehiculos}
+          viaticosExistentes={snapTecnico.viaticos}
+          personalIdUsuario={snapTecnico.personalIdUsuario}
+          cargoUsuario={
+            snapTecnico.personal.find((p) => p.id === snapTecnico.personalIdUsuario)?.cargo ??
+            'tecnico'
+          }
+          rolActivo="tecnico"
           defaultProyectoId={expenseDefaultProyectoId}
           defaultRutaId={expenseDefaultRutaId}
           editingViatico={editingViatico}
@@ -884,6 +895,14 @@ export default function App() {
   const canViewConfig = puedeVerConfiguracion(rol);
   const selectedRuta =
     snapshot.rutas.find((r) => r.id === selectedRutaId) ?? snapshot.rutas[0];
+
+  const membresiaActivaAdmin = sesion.membresias.find((m) => m.empresaId === snapshot.empresa.id);
+  const personalCargoUsuarioAdmin = resolverPersonalYCargoUsuario({
+    usuarioId: sesion.usuario.id,
+    rol,
+    personalIdMembresia: membresiaActivaAdmin?.personalId,
+    personal: snapshot.personal,
+  });
 
   const reglasCapturaAdmin: ReglasCapturaViaticosTecnico | undefined =
     configuracion && reglasViaticosVigentes
@@ -1218,6 +1237,7 @@ export default function App() {
                 cuadrillas={snapshot.cuadrillas}
                 vehiculos={snapshot.vehiculos}
                 viaticos={snapshot.viaticos}
+                rentas={snapshot.rentas}
                 onboarding={onboarding}
                 isDemo={isDemoActivo}
                 onIrAPasoOnboarding={(pasoId) => {
@@ -1303,6 +1323,9 @@ export default function App() {
                 vehiculos={snapshot.vehiculos}
                 equipos={snapshot.equipos}
                 asignaciones={snapshot.asignaciones}
+                rentas={snapshot.rentas}
+                misiones={snapshot.misiones}
+                umbralCercaniaRentaKm={rendimientoFlotaVigente?.umbralCercaniaRentaKm}
                 onGuardarAsignacion={async (datos) => {
                   await actions.guardarAsignacion(datos);
                   showToast(
@@ -1552,6 +1575,11 @@ export default function App() {
                 rol={rol}
                 viaticos={snapshot.viaticos}
                 proyectos={snapshot.proyectos}
+                misiones={snapshot.misiones}
+                rentas={snapshot.rentas}
+                cargos={cargos}
+                configuracion={configuracion ?? undefined}
+                moneda={snapshot.empresa.moneda}
                 onAbrirModalNuevo={() => abrirModalViatico()}
                 onDecidirViatico={async (params) => {
                   await actions.decidirViatico(params);
@@ -1578,6 +1606,15 @@ export default function App() {
                 combustiblesVigentes={combustiblesVigentes}
                 equipos={snapshot.equipos}
                 cuadrillas={snapshot.cuadrillas}
+                misiones={snapshot.misiones}
+                rutas={snapshot.rutas}
+                proyectos={snapshot.proyectos}
+                asignaciones={snapshot.asignaciones}
+                viaticos={snapshot.viaticos}
+                bitacoras={snapshot.bitacoras}
+                rentas={snapshot.rentas}
+                rendimientoConfig={rendimientoFlotaVigente}
+                usuarioActual={sesion.usuario}
                 moneda={snapshot.empresa.moneda}
                 onCrearCliente={async (datos) => {
                   await actions.crearCliente(datos);
@@ -1593,6 +1630,18 @@ export default function App() {
                 }}
                 onGuardarCuadrilla={async (item) => {
                   await actions.guardarCuadrilla(item);
+                }}
+                onGuardarRenta={async (datos) => {
+                  await actions.guardarRenta(datos);
+                  showToast('Renta registrada en flota/equipos.');
+                }}
+                onDevolverRenta={async (params) => {
+                  await actions.devolverRenta(params);
+                  showToast('Devolución de renta registrada.');
+                }}
+                onCrearMision={async (datos) => {
+                  await actions.crearMision(datos);
+                  showToast(`Misión "${datos.nombre}" creada.`);
                 }}
               />
             )}
@@ -1656,6 +1705,18 @@ export default function App() {
                 onAgregarVigenciaReglasViaticos={async (reglas) => {
                   await actions.agregarVigenciaReglasViaticos(reglas);
                   showToast(`Reglas vigentes desde ${reglas.vigenciaDesde} guardadas.`);
+                }}
+                onAgregarVigenciaTopeViatico={async (params) => {
+                  await actions.agregarVigenciaTopeViatico(params);
+                  showToast(
+                    `Tope de viático (${params.categoria}) vigente desde ${params.vigenciaDesde} guardado.`
+                  );
+                }}
+                onAgregarVigenciaRendimientoFlota={async (regla) => {
+                  await actions.agregarVigenciaRendimientoFlota(regla);
+                  showToast(
+                    `Parámetros de rendimiento y cercanía vigentes desde ${regla.vigenciaDesde} guardados.`
+                  );
                 }}
                 onAbrirTutorial={() => setIsTutorialOpen(true)}
                 onReiniciarOnboarding={async () => {
@@ -1775,6 +1836,9 @@ export default function App() {
               personal: snapActual.personal,
               vehiculos: snapActual.vehiculos,
               equipos: snapActual.equipos,
+              rentasExistentes: snapActual.rentas,
+              misiones: snapActual.misiones,
+              umbralCercaniaRentaKm: rendimientoFlotaVigente?.umbralCercaniaRentaKm,
             });
 
             if (conflictos.length > 0) {
@@ -1813,6 +1877,13 @@ export default function App() {
         }}
         proyectos={snapshot.proyectos}
         rutas={snapshot.rutas}
+        misiones={snapshot.misiones}
+        vehiculos={snapshot.vehiculos}
+        viaticosExistentes={snapshot.viaticos}
+        configuracion={configuracion ?? undefined}
+        cargoUsuario={personalCargoUsuarioAdmin.cargoCodigo}
+        personalIdUsuario={personalCargoUsuarioAdmin.personalId}
+        rolActivo={rol}
         defaultProyectoId={expenseDefaultProyectoId}
         defaultRutaId={expenseDefaultRutaId}
         editingViatico={editingViatico}

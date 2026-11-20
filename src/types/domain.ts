@@ -12,7 +12,12 @@ export type EstadoServicio =
 
 export type RolEmpresa = 'admin' | 'coordinador' | 'tecnico';
 
-export type CargoBasePersonal = 'tecnico' | 'ingeniero' | 'jefe_brigada' | 'chofer';
+export type CargoBasePersonal =
+  | 'tecnico'
+  | 'ingeniero'
+  | 'jefe_brigada'
+  | 'chofer'
+  | 'administrativo';
 
 export type CargoPersonal = CargoBasePersonal | (string & {});
 
@@ -116,6 +121,30 @@ export interface ReglasViaticosVersion {
   presetsRapidos: PresetViaticoConfig[];
 }
 
+export interface TopeViaticoCargoVersion {
+  version: number;
+  vigenciaDesde: string;
+  montoMaximoPorMisionRD: number;
+  esEjemploPendienteConfirmar?: boolean;
+}
+
+export interface TopeViaticoCargoConfig {
+  cargoCodigo: CargoPersonal;
+  categoria: CategoriaViatico;
+  versiones: TopeViaticoCargoVersion[];
+}
+
+export type FuenteKmRendimiento = 'ruta_asignada' | 'bitacora' | 'manual';
+
+export interface ReglaRendimientoFlotaVersion {
+  version: number;
+  vigenciaDesde: string;
+  fuenteKm: FuenteKmRendimiento;
+  umbralAlertaPct: number;
+  umbralCercaniaRentaKm: number;
+  esEjemploPendienteConfirmar?: boolean;
+}
+
 export interface ConfiguracionEmpresa {
   empresaId: string;
   cargos: CargoConfig[];
@@ -123,6 +152,8 @@ export interface ConfiguracionEmpresa {
   servicios: ServicioCatalogoConfig[];
   factoresTerreno: TerrenoFactorVersion[];
   reglasViaticos: ReglasViaticosVersion[];
+  topesViatico: TopeViaticoCargoConfig[];
+  rendimientoFlota: ReglaRendimientoFlotaVersion[];
   categoriasViatico: CategoriaViatico[];
   versionGlobal: number;
 }
@@ -356,6 +387,7 @@ export interface BitacoraEntrada {
   autorNombre: string;
   fechaAST: string;
   nota: string;
+  kmRecorridos?: number;
   fotos: string[];
   syncStatus: EstadoSync;
 }
@@ -387,12 +419,73 @@ export interface RepartoProyecto {
   montoRD: number;
 }
 
+export interface Mision {
+  id: string;
+  empresaId: string;
+  nombre: string;
+  zona: string;
+  provincia: string;
+  fechaInicio: string;
+  fechaFin: string;
+  rutaIds: string[];
+  notas?: string;
+  version: number;
+  updatedAt: string;
+  syncStatus: EstadoSync;
+}
+
+export type MisionTecnico = Pick<
+  Mision,
+  'id' | 'empresaId' | 'nombre' | 'zona' | 'provincia' | 'fechaInicio' | 'fechaFin' | 'rutaIds'
+>;
+
+export type RentaRecursoTipo = 'vehiculo' | 'equipo';
+export type ModalidadTarifaRenta = 'por_dia' | 'por_km';
+export type EstadoRenta = 'reservada' | 'activa' | 'finalizada' | 'cancelada';
+
+export interface Renta {
+  id: string;
+  empresaId: string;
+  recursoTipo: RentaRecursoTipo;
+  recursoId: string;
+  recursoEtiqueta?: string;
+  proveedor: string;
+  misionId?: string;
+  rutaId?: string;
+  fechaInicio: string;
+  fechaFin: string;
+  modalidadTarifa: ModalidadTarifaRenta;
+  tarifaRD: number;
+  cantidadEstimada: number;
+  incluyeItbis: boolean;
+  itbisRD: number;
+  costoTotalRD: number;
+  comprobanteBase64?: string;
+  estado: EstadoRenta;
+  fechaDevolucion?: string;
+  notas?: string;
+  repartos: RepartoProyecto[];
+  overrideConflicto?: OverrideConflicto;
+  configVersion?: number;
+  umbralDistanciaKmUsado?: number;
+  version: number;
+  updatedAt: string;
+  syncStatus: EstadoSync;
+}
+
+export type DecisionExcedenteViatico = 'aprobado_empresa' | 'cargo_colaborador';
+
 export interface Viatico {
   id: string;
   empresaId: string;
   creadoPorUsuarioId: string;
   creadoPorNombre: string;
+  personalId?: string;
+  cargoUsado?: CargoPersonal;
+  misionId?: string;
   rutaId?: string;
+  vehiculoId?: string;
+  galonesCargados?: number;
   fechaIso: string;
   timestampAST: string;
   categoria: CategoriaViatico;
@@ -416,6 +509,12 @@ export interface Viatico {
   motivoDecision?: string;
   aprobadoPorUsuarioId?: string;
   aprobadoEn?: string;
+  topeAplicadoRD?: number;
+  excedenteRD?: number;
+  motivoExcedente?: string;
+  decisionExcedente?: DecisionExcedenteViatico;
+  montoAprobadoEmpresaRD?: number;
+  montoCargoColaboradorRD?: number;
   repartos: RepartoProyecto[];
   configVersion?: number;
   tarifaUsadaRD?: number;
@@ -434,6 +533,9 @@ export type TipoConflicto =
   | 'vehiculo_mantenimiento'
   | 'equipo'
   | 'equipo_mantenimiento'
+  | 'renta_solapada'
+  | 'renta_cercana'
+  | 'renta_lejana'
   | 'spatial';
 
 export type SeveridadConflicto = 'advertencia' | 'bloqueante';
@@ -448,12 +550,22 @@ export interface ConflictDetail {
   conflictingRutaTitle: string;
   overlapDates?: string[];
   overlapPct?: number;
+  distanceKm?: number;
 }
 
 export interface HistorialEvento {
   id: string;
   empresaId: string;
-  entidadTipo: 'proyecto' | 'ruta' | 'servicio' | 'asignacion' | 'viatico' | 'empresa' | 'catalogo';
+  entidadTipo:
+    | 'proyecto'
+    | 'ruta'
+    | 'servicio'
+    | 'asignacion'
+    | 'viatico'
+    | 'mision'
+    | 'renta'
+    | 'empresa'
+    | 'catalogo';
   entidadId: string;
   accion: string;
   detalle: string;
@@ -480,6 +592,8 @@ export interface EstadoEmpresaSnapshot {
   bitacoras: BitacoraEntrada[];
   asignaciones: Asignacion[];
   viaticos: Viatico[];
+  misiones: Mision[];
+  rentas: Renta[];
   historial: HistorialEvento[];
   configuracion?: ConfiguracionEmpresa;
   onboarding?: EstadoOnboardingEmpresa;
@@ -513,12 +627,19 @@ export type RutaTecnico = Omit<Ruta, 'routeSummary'> & {
   routeSummary?: RouteSummaryTecnico;
 };
 
+export interface TopeViaticoUsuarioResumen {
+  montoMaximoPorMisionRD: number;
+  vigenciaDesde: string;
+  cargoCodigo: string;
+}
+
 export interface ReglasCapturaViaticosTecnico {
   version: number;
   vigenciaDesde: string;
   gpsRuta: ReglaGpsRutaConfig;
   presetsRapidos: PresetViaticoConfig[];
   categoriasViatico: CategoriaViatico[];
+  topesUsuario?: Partial<Record<CategoriaViatico, TopeViaticoUsuarioResumen>>;
 }
 
 export interface SnapshotTecnico {
@@ -535,6 +656,8 @@ export interface SnapshotTecnico {
   bitacoras: BitacoraEntrada[];
   asignaciones: Asignacion[];
   viaticos: Viatico[];
+  misiones: MisionTecnico[];
+  personalIdUsuario?: string;
   reglasCapturaViaticos: ReglasCapturaViaticosTecnico;
   lastSyncedAt?: string;
 }
@@ -560,7 +683,7 @@ export interface ConteoPendientesPorTipo {
 }
 
 export interface AvisoSobrescrituraLWW {
-  entidadTipo: 'proyecto' | 'ruta' | 'servicio' | 'asignacion' | 'viatico';
+  entidadTipo: 'proyecto' | 'ruta' | 'servicio' | 'asignacion' | 'viatico' | 'mision' | 'renta';
   entidadId: string;
   descripcion: string;
   fecha: string;

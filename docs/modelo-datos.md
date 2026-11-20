@@ -9,8 +9,8 @@ Este documento describe el esquema relacional y las políticas de Row-Level Secu
 ```sql
 create type rol_empresa as enum ('admin', 'coordinador', 'tecnico');
 
--- Nota A1: `cargo_personal` pasa de enum cerrado a texto referenciado a `cargos_empresa(empresa_id, codigo)`
--- para permitir cargos extensibles conservando los cuatro códigos base ('tecnico', 'ingeniero', 'jefe_brigada', 'chofer').
+-- Nota A1/B1: `cargo_personal` pasa de enum cerrado a texto referenciado a `cargos_empresa(empresa_id, codigo)`
+-- para permitir cargos extensibles conservando los cinco códigos base ('tecnico', 'ingeniero', 'jefe_brigada', 'chofer', 'administrativo').
 
 create type estado_recurso as enum ('disponible', 'en_mantenimiento', 'fuera_servicio');
 
@@ -207,6 +207,7 @@ create table bitacoras (
   autor_usuario_id uuid not null references usuarios(id),
   fecha_ast text not null,
   nota text not null,
+  km_recorridos numeric(10,2),
   fotos_paths text[] not null default '{}'
 );
 
@@ -227,11 +228,71 @@ create table asignaciones (
   constraint chk_rango_fechas check (fecha_inicio <= fecha_fin)
 );
 
+create table misiones (
+  id uuid primary key default gen_random_uuid(),
+  empresa_id uuid not null references empresas(id) on delete cascade,
+  nombre text not null,
+  zona text not null,
+  provincia text not null,
+  fecha_inicio date not null,
+  fecha_fin date not null,
+  ruta_ids uuid[] not null default '{}',
+  notas text,
+  version integer not null default 1,
+  updated_at timestamptz not null default now(),
+  constraint chk_mision_fechas check (fecha_inicio <= fecha_fin)
+);
+
+create table rentas (
+  id uuid primary key default gen_random_uuid(),
+  empresa_id uuid not null references empresas(id) on delete cascade,
+  recurso_tipo text not null check (recurso_tipo in ('vehiculo', 'equipo')),
+  recurso_id uuid not null,
+  recurso_etiqueta text,
+  proveedor text not null,
+  mision_id uuid references misiones(id) on delete set null,
+  ruta_id uuid references rutas(id) on delete set null,
+  fecha_inicio date not null,
+  fecha_fin date not null,
+  modalidad_tarifa text not null check (modalidad_tarifa in ('por_dia', 'por_km')),
+  tarifa_rd numeric(12,2) not null check (tarifa_rd >= 0),
+  cantidad_estimada numeric(10,2) not null check (cantidad_estimada > 0),
+  incluye_itbis boolean not null default false,
+  itbis_rd numeric(12,2) not null default 0,
+  costo_total_rd numeric(12,2) not null check (costo_total_rd >= 0),
+  comprobante_storage_path text,
+  estado text not null default 'reservada' check (estado in ('reservada', 'activa', 'finalizada', 'cancelada')),
+  fecha_devolucion date,
+  notas text,
+  override_motivo text,
+  override_usuario_id uuid references usuarios(id),
+  override_fecha date,
+  config_version integer,
+  umbral_distancia_km_usado numeric(8,2),
+  version integer not null default 1,
+  updated_at timestamptz not null default now(),
+  constraint chk_renta_fechas check (fecha_inicio <= fecha_fin)
+);
+
+create table renta_repartos (
+  id uuid primary key default gen_random_uuid(),
+  renta_id uuid not null references rentas(id) on delete cascade,
+  empresa_id uuid not null references empresas(id) on delete cascade,
+  proyecto_id uuid references proyectos(id) on delete cascade, -- NULL representa 'sin_asignar'
+  monto_rd numeric(12,2) not null check (monto_rd >= 0),
+  unique (renta_id, proyecto_id)
+);
+
 create table viaticos (
   id uuid primary key default gen_random_uuid(),
   empresa_id uuid not null references empresas(id) on delete cascade,
   creado_por_usuario_id uuid not null references usuarios(id),
+  personal_id uuid references personal(id) on delete set null,
+  cargo_usado text,
+  mision_id uuid references misiones(id) on delete set null,
   ruta_id uuid references rutas(id) on delete set null,
+  vehiculo_id uuid references vehiculos(id) on delete set null,
+  galones_cargados numeric(10,2),
   fecha_iso date not null,
   timestamp_ast text not null,
   categoria categoria_viatico not null,
@@ -248,8 +309,15 @@ create table viaticos (
   comprobante_storage_path text,
   estado_aprobacion estado_aprobacion_viatico not null default 'pendiente',
   motivo_rechazo text,
+  motivo_decision text,
   aprobado_por_usuario_id uuid references usuarios(id),
   aprobado_en text,
+  tope_aplicado_rd numeric(12,2),
+  excedente_rd numeric(12,2) default 0,
+  motivo_excedente text,
+  decision_excedente text check (decision_excedente in ('aprobado_empresa', 'cargo_colaborador')),
+  monto_aprobado_empresa_rd numeric(12,2),
+  monto_cargo_colaborador_rd numeric(12,2),
   notas text,
   version integer not null default 1,
   updated_at timestamptz not null default now()
@@ -262,6 +330,20 @@ create table viatico_repartos (
   proyecto_id uuid references proyectos(id) on delete cascade, -- NULL representa 'sin_asignar'
   monto_rd numeric(12,2) not null check (monto_rd >= 0),
   unique (viatico_id, proyecto_id)
+);
+
+create table topes_viatico (
+  id uuid primary key default gen_random_uuid(),
+  empresa_id uuid not null references empresas(id) on delete cascade,
+  cargo_codigo text not null,
+  categoria categoria_viatico not null,
+  monto_maximo_por_mision_rd numeric(12,2) not null check (monto_maximo_por_mision_rd >= 0),
+  vigencia_desde date not null,
+  es_ejemplo_pendiente_confirmar boolean not null default true,
+  version integer not null check (version >= 1),
+  created_at timestamptz not null default now(),
+  foreign key (empresa_id, cargo_codigo) references cargos_empresa(empresa_id, codigo) on update cascade on delete restrict,
+  unique (empresa_id, cargo_codigo, categoria, vigencia_desde)
 );
 
 create table configuracion_empresa (
@@ -277,7 +359,7 @@ create table configuracion_empresa (
 create table tarifas (
   id uuid primary key default gen_random_uuid(),
   empresa_id uuid not null references empresas(id) on delete cascade,
-  concepto text not null, -- ej. 'combustible:diesel_optimo', 'servicio:deslinde', 'factores_terreno', 'reglas_viaticos'
+  concepto text not null, -- ej. 'combustible:diesel_optimo', 'servicio:deslinde', 'factores_terreno', 'reglas_viaticos', 'rendimiento_flota'
   version integer not null check (version >= 1),
   valor jsonb not null,
   vigencia_desde date not null,
@@ -316,8 +398,13 @@ create index idx_proyectos_empresa on proyectos (empresa_id, estado);
 create index idx_rutas_empresa_proyecto on rutas (empresa_id, proyecto_id);
 create index idx_servicios_empresa_ruta on servicios (empresa_id, ruta_id, estado);
 create index idx_asignaciones_rango on asignaciones (empresa_id, fecha_inicio, fecha_fin);
+create index idx_misiones_empresa on misiones (empresa_id, fecha_inicio, fecha_fin);
+create index idx_rentas_empresa_recurso on rentas (empresa_id, recurso_tipo, recurso_id, estado, fecha_inicio, fecha_fin);
+create index idx_renta_repartos_proyecto on renta_repartos (empresa_id, proyecto_id);
 create index idx_viaticos_empresa_estado on viaticos (empresa_id, estado_aprobacion, fecha_iso);
+create index idx_viaticos_mision_personal on viaticos (empresa_id, mision_id, personal_id, categoria);
 create index idx_repartos_proyecto on viatico_repartos (empresa_id, proyecto_id);
+create index idx_topes_viatico_vigencia on topes_viatico (empresa_id, cargo_codigo, categoria, vigencia_desde desc);
 create index idx_historial_empresa on historial_eventos (empresa_id, fecha_ast desc);
 create index idx_tarifas_vigencia on tarifas (empresa_id, concepto, vigencia_desde desc);
 create index idx_cargos_empresa on cargos_empresa (empresa_id, activo);
@@ -355,13 +442,13 @@ $$;
 
 Políticas base:
 - **Todas las tablas multi-tenant** habilitan `alter table ... enable row level security;`.
-- **`admin`**: lectura/escritura completa en su `empresa_id`, incluidas `empresas`, `membresias_empresa`, `cargos_empresa`, `configuracion_empresa`, `tarifas` y `onboarding_empresa`. Los campos de suscripción (`plan_mensual_rd`, `estado_suscripcion`) se protegen mediante trigger/privilegios de servidor para que no puedan alterarse desde el cliente.
+- **`admin`**: lectura/escritura completa en su `empresa_id`, incluidas `empresas`, `membresias_empresa`, `cargos_empresa`, `configuracion_empresa`, `tarifas`, `topes_viatico`, `misiones`, `rentas`, `renta_repartos` y `onboarding_empresa`. Los campos de suscripción (`plan_mensual_rd`, `estado_suscripcion`) se protegen mediante trigger/privilegios de servidor para que no puedan alterarse desde el cliente. Un viático en estado `'aprobado'` es inmutable en edición para todos los roles (incluido `admin`).
 - **`coordinador`**:
-  - Lectura/escritura operativa en su `empresa_id` (`clientes`, `proyectos`, `rutas`, `servicios`, `asignaciones`, `personal`, `vehiculos`, `equipos_gnss`, `cuadrillas`, `viaticos`, `viatico_repartos`, `historial_eventos`).
-  - Solo lectura (`SELECT`) sobre `cargos_empresa`, `configuracion_empresa` y `tarifas` para servicios, terreno y combustibles; sin escritura en configuración ni onboarding.
+  - Lectura/escritura operativa en su `empresa_id` (`clientes`, `proyectos`, `rutas`, `servicios`, `asignaciones`, `misiones`, `rentas`, `renta_repartos`, `personal`, `vehiculos`, `equipos_gnss`, `cuadrillas`, `viaticos`, `viatico_repartos`, `historial_eventos`).
+  - Solo lectura (`SELECT`) sobre `cargos_empresa`, `configuracion_empresa`, `topes_viatico` y `tarifas` para servicios, terreno, combustibles y rendimiento de flota; sin escritura en configuración ni onboarding.
 - **`tecnico`**:
-  - `SELECT` en `rutas`, `servicios`, `bitacoras` filtrado por `app_es_ruta_asignada_a_usuario(ruta_id)`.
+  - `SELECT` en `rutas`, `misiones` (solo las asociadas a sus rutas asignadas), `servicios`, `bitacoras` filtrado por `app_es_ruta_asignada_a_usuario(ruta_id)`.
   - `UPDATE` en `servicios` restringido a cambios `programado -> en_campo -> procesando` en rutas asignadas.
   - `INSERT` en `bitacoras` únicamente sobre servicios en rutas asignadas.
-  - `SELECT` / `INSERT` en `viaticos` donde `creado_por_usuario_id = auth.uid()`; sin permisos de aprobación/rechazo ni eliminación de aprobados.
-  - `SELECT` únicamente sobre `cargos_empresa` (etiquetas activas) y proyección segura de reglas no financieras de captura (`gpsRuta` y presets rápidos). Sin acceso a `tarifas` de servicios/combustible ni `onboarding_empresa`.
+  - `SELECT` / `INSERT` en `viaticos` donde `creado_por_usuario_id = auth.uid()` (con validación de vinculación a `personal`); sin permisos de aprobación/rechazo ni edición o eliminación de aprobados.
+  - `SELECT` únicamente sobre `cargos_empresa` (etiquetas activas) y proyección segura de reglas no financieras de captura (`gpsRuta`, presets rápidos y topes propios del cargo del usuario). Sin acceso a `rentas`, `tarifas` de servicios/combustible ni `onboarding_empresa`.

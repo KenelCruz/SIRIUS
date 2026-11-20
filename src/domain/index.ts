@@ -6,4 +6,5 @@ export * from './sync';
 export * from './tecnico';
 export * from './configuracion';
 export * from './onboarding';
+export * from './rendimiento';
 

@@ -68,6 +68,7 @@ export const TecnicoBitacoraModal: React.FC<TecnicoBitacoraModalProps> = ({
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [servicioId, setServicioId] = useState<string>('');
   const [nota, setNota] = useState<string>('');
+  const [kmRecorridos, setKmRecorridos] = useState<string>('');
   const [fotos, setFotos] = useState<string[]>([]);
   const [isSaving, setIsSaving] = useState(false);
   const [isProcessingPhoto, setIsProcessingPhoto] = useState(false);
@@ -85,6 +86,7 @@ export const TecnicoBitacoraModal: React.FC<TecnicoBitacoraModalProps> = ({
     setErrorMsg(null);
     setSuccessMsg(null);
     setNota('');
+    setKmRecorridos('');
     setFotos([]);
 
     if (defaultServicioId && snapshot.servicios.some((s) => s.id === defaultServicioId)) {
@@ -148,6 +150,12 @@ export const TecnicoBitacoraModal: React.FC<TecnicoBitacoraModalProps> = ({
       return;
     }
 
+    const kmNum = kmRecorridos.trim() ? Number(kmRecorridos) : undefined;
+    if (kmNum !== undefined && (!Number.isFinite(kmNum) || kmNum < 0)) {
+      setErrorMsg('Los kilómetros recorridos deben ser un número mayor o igual a 0.');
+      return;
+    }
+
     setIsSaving(true);
     try {
       await onAgregarBitacora({
@@ -156,9 +164,11 @@ export const TecnicoBitacoraModal: React.FC<TecnicoBitacoraModalProps> = ({
         autorUsuarioId: usuarioActual.id,
         autorNombre: usuarioActual.nombre,
         nota: nota.trim(),
+        kmRecorridos: kmNum && kmNum > 0 ? kmNum : undefined,
         fotos,
       });
       setNota('');
+      setKmRecorridos('');
       setFotos([]);
       setSuccessMsg(
         isOnline
@@ -259,6 +269,21 @@ export const TecnicoBitacoraModal: React.FC<TecnicoBitacoraModalProps> = ({
                   onChange={(e) => setNota(e.target.value)}
                   placeholder="Ej. Base RTK fijada en vértice V1 con PDOP 1.3; replanteo completado sin obstrucciones."
                   className="w-full rounded-sm border border-[#CBD5E1] px-3 py-2 text-xs text-[#0D1C2F] focus:border-[#0284C7] focus:outline-none"
+                />
+              </div>
+
+              <div>
+                <label className="block font-semibold text-[#334155] mb-1">
+                  Kilómetros recorridos en jornada (opcional)
+                </label>
+                <input
+                  type="number"
+                  step="0.1"
+                  min={0}
+                  value={kmRecorridos}
+                  onChange={(e) => setKmRecorridos(e.target.value)}
+                  placeholder="Ej. 84.5 (para control de rendimiento de flota)"
+                  className="w-full rounded-sm border border-[#CBD5E1] px-3 py-2 font-mono text-xs text-[#0D1C2F] min-h-[42px]"
                 />
               </div>
 
@@ -378,6 +403,11 @@ export const TecnicoBitacoraModal: React.FC<TecnicoBitacoraModalProps> = ({
                       </div>
                     </div>
                     <p className="text-[#334155]">{b.nota}</p>
+                    {typeof b.kmRecorridos === 'number' && b.kmRecorridos > 0 && (
+                      <div className="font-mono text-[11px] text-[#0284C7]">
+                        Recorrido reportado: {b.kmRecorridos} km
+                      </div>
+                    )}
                   </div>
                 ))}
               </div>

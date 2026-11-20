@@ -11,6 +11,8 @@ import {
   WifiOff,
 } from 'lucide-react';
 import {
+  ERROR_TECNICO_SIN_PERSONAL,
+  puedeEditarViatico,
   validarEdicionViaticoTecnico,
   validarEliminacionViaticoTecnico,
 } from '../../domain';
@@ -166,6 +168,13 @@ export const TecnicoViaticosView: React.FC<TecnicoViaticosViewProps> = ({
         </div>
       </div>
 
+      {!snapshot.personalIdUsuario && (
+        <div className="flex items-start gap-2 rounded-sm border border-[#FCA5A5] bg-[#FEF2F2] px-3.5 py-2.5 text-xs text-[#93000A]">
+          <AlertTriangle className="h-4 w-4 shrink-0 mt-0.5" />
+          <span>{ERROR_TECNICO_SIN_PERSONAL}</span>
+        </div>
+      )}
+
       {!isOnline && (
         <div className="flex items-center gap-2 rounded-sm border border-[#FDE047] bg-[#FEF9C3]/60 px-3 py-2 text-xs text-[#92400E]">
           <WifiOff className="h-4 w-4 shrink-0" />
@@ -233,8 +242,13 @@ export const TecnicoViaticosView: React.FC<TecnicoViaticosViewProps> = ({
             const ruta = v.rutaId
               ? snapshot.rutas.find((r) => r.id === v.rutaId)
               : undefined;
+            const mision = v.misionId
+              ? snapshot.misiones?.find((m) => m.id === v.misionId)
+              : undefined;
             const badge = BADGE_APROBACION[v.estadoAprobacion];
-            const puedeEditar = validarEdicionViaticoTecnico(v, usuarioId).valido;
+            const puedeEditar =
+              puedeEditarViatico('tecnico', v, usuarioId) &&
+              validarEdicionViaticoTecnico(v, usuarioId).valido;
             const puedeEliminar = validarEliminacionViaticoTecnico(v, usuarioId).valido;
             const confirmandoBorrado = confirmDeleteId === v.id;
 
@@ -268,6 +282,11 @@ export const TecnicoViaticosView: React.FC<TecnicoViaticosViewProps> = ({
                       {ruta && (
                         <span className="ml-2 text-[#0F2942] font-medium">
                           · {ruta.codigoParcela}
+                        </span>
+                      )}
+                      {mision && (
+                        <span className="ml-2 text-[#0284C7] font-medium">
+                          · Misión: {mision.nombre}
                         </span>
                       )}
                     </div>
@@ -306,6 +325,19 @@ export const TecnicoViaticosView: React.FC<TecnicoViaticosViewProps> = ({
                 {v.estadoAprobacion === 'rechazado' && v.motivoRechazo && (
                   <div className="rounded-sm border border-[#FCA5A5] bg-[#FEE2E2] px-3 py-2 text-xs text-[#93000A]">
                     <strong>Motivo de rechazo:</strong> {v.motivoRechazo}
+                  </div>
+                )}
+
+                {typeof v.excedenteRD === 'number' && v.excedenteRD > 0 && (
+                  <div className="rounded-sm border border-[#FDE047] bg-[#FEF9C3]/70 px-3 py-2 text-xs text-[#92400E] space-y-0.5">
+                    <div>
+                      <strong>Excedente sobre tope de misión:</strong> {formatRD(v.excedenteRD)}
+                      {v.decisionExcedente === 'cargo_colaborador' && ' (A cargo del colaborador)'}
+                      {v.decisionExcedente === 'aprobado_empresa' && ' (Cubierto por la empresa)'}
+                    </div>
+                    {v.motivoExcedente && (
+                      <div className="text-[11px]">Motivo: {v.motivoExcedente}</div>
+                    )}
                   </div>
                 )}
 

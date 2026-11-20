@@ -1,5 +1,6 @@
 import React from 'react';
 import {
+  AlertTriangle,
   ArrowRight,
   CalendarDays,
   CheckCircle2,
@@ -10,7 +11,11 @@ import {
   Wrench,
   X,
 } from 'lucide-react';
-import { obtenerFechaHoyAST, obtenerResumenOnboarding } from '../domain';
+import {
+  obtenerFechaHoyAST,
+  obtenerRentasVencidasSinDevolucion,
+  obtenerResumenOnboarding,
+} from '../domain';
 import type {
   Asignacion,
   Cuadrilla,
@@ -19,6 +24,7 @@ import type {
   OnboardingPasoId,
   Personal,
   Proyecto,
+  Renta,
   Ruta,
   Servicio,
   ServicioCatalogoConfig,
@@ -38,6 +44,7 @@ interface AdminHoyViewProps {
   cuadrillas: Cuadrilla[];
   vehiculos: Vehiculo[];
   viaticos: Viatico[];
+  rentas?: Renta[];
   onboarding: EstadoOnboardingEmpresa;
   isDemo: boolean;
   onIrAPasoOnboarding: (pasoId: OnboardingPasoId) => void;
@@ -57,6 +64,7 @@ export const AdminHoyView: React.FC<AdminHoyViewProps> = ({
   cuadrillas,
   vehiculos,
   viaticos,
+  rentas = [],
   onboarding,
   isDemo,
   onIrAPasoOnboarding,
@@ -83,6 +91,7 @@ export const AdminHoyView: React.FC<AdminHoyViewProps> = ({
   const totalPendientesRD = viaticosPendientes.reduce((acc, v) => acc + v.montoRD, 0);
   const vehiculosMantenimiento = vehiculos.filter((v) => v.estado === 'en_mantenimiento');
   const serviciosEnCampo = servicios.filter((s) => s.estado === 'en_campo');
+  const rentasVencidas = obtenerRentasVencidasSinDevolucion(rentas, hoyIso);
 
   return (
     <div className="space-y-6">
@@ -204,6 +213,35 @@ export const AdminHoyView: React.FC<AdminHoyViewProps> = ({
               );
             })}
           </div>
+        </div>
+      )}
+
+      {/* Alerta de rentas vencidas sin devolución */}
+      {rentasVencidas.length > 0 && (
+        <div className="bg-amber-50 border border-amber-300 rounded-xl p-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+          <div className="flex items-start gap-3">
+            <AlertTriangle className="w-5 h-5 text-amber-700 shrink-0 mt-0.5" />
+            <div className="space-y-1 text-xs text-amber-950">
+              <div className="font-bold">
+                {rentasVencidas.length} renta(s) vencida(s) sin devolución registrada
+              </div>
+              <div className="text-amber-900">
+                {rentasVencidas
+                  .map(
+                    (r) =>
+                      `${r.recursoEtiqueta || r.recursoId} (${r.proveedor}, venció ${r.fechaFin})`
+                  )
+                  .join(' · ')}
+              </div>
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={() => onIrATab('catalogos')}
+            className="px-3 py-1.5 bg-amber-900 hover:bg-amber-800 text-white text-xs font-semibold rounded-lg whitespace-nowrap shrink-0"
+          >
+            Revisar rentas
+          </button>
         </div>
       )}
 

@@ -433,6 +433,7 @@ describe('Flujos Admin y Coordinador (F2 a F16) — SIRIUS', () => {
       empresaId: 'emp-aia',
       viaticoId: 'via-3',
       nuevoEstado: 'aprobado',
+      decisionExcedente: 'aprobado_empresa',
       motivoDecision: 'Dieta validada contra bitácora de brigada',
     });
     expect(viaAprobado.estadoAprobacion).toBe('aprobado');

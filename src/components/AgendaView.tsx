@@ -23,8 +23,10 @@ import type {
   ConflictDetail,
   Cuadrilla,
   EquipoGNSS,
+  Mision,
   OverrideConflicto,
   Personal,
+  Renta,
   RolEmpresa,
   Ruta,
   Vehiculo,
@@ -40,6 +42,9 @@ interface AgendaViewProps {
   vehiculos: Vehiculo[];
   equipos: EquipoGNSS[];
   asignaciones: Asignacion[];
+  rentas?: Renta[];
+  misiones?: Mision[];
+  umbralCercaniaRentaKm?: number;
   onGuardarAsignacion: (
     datos: Omit<Asignacion, 'id' | 'empresaId' | 'version' | 'updatedAt' | 'syncStatus'> & {
       id?: string;
@@ -76,6 +81,9 @@ export const AgendaView: React.FC<AgendaViewProps> = ({
   vehiculos,
   equipos,
   asignaciones,
+  rentas = [],
+  misiones = [],
+  umbralCercaniaRentaKm,
   onGuardarAsignacion,
   onEliminarAsignacion,
 }) => {
@@ -192,6 +200,9 @@ export const AgendaView: React.FC<AgendaViewProps> = ({
       personal,
       vehiculos,
       equipos,
+      rentasExistentes: rentas,
+      misiones,
+      umbralCercaniaRentaKm,
     });
 
     const payloadLimpio = {

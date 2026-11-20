@@ -4,8 +4,10 @@ import type {
   ConceptoDistanciaGps,
   ConfiguracionEmpresa,
   Empresa,
+  FuenteKmRendimiento,
   Personal,
   PresetViaticoConfig,
+  ReglaRendimientoFlotaVersion,
   ReglasViaticosVersion,
   RolEmpresa,
   SeccionConfiguracion,
@@ -14,6 +16,8 @@ import type {
   TarifaServicioVersion,
   TerrenoFactorVersion,
   TipoCombustibleConfig,
+  TopeViaticoCargoConfig,
+  TopeViaticoCargoVersion,
   Vehiculo,
 } from '../types/domain';
 import { obtenerFechaHoyAST } from './tecnico';
@@ -43,12 +47,86 @@ export const ZONAS_HORARIAS_SUGERIDAS = [
 
 export const MONEDAS_SUGERIDAS = ['RD$', 'USD$', 'EUR€'] as const;
 
+export const ETIQUETA_EJEMPLO_CONFIRMAR = 'EJEMPLO – PENDIENTE DE CONFIRMAR';
+export const UMBRAL_CERCANIA_RENTA_KM_DEFAULT = 30;
+export const UMBRAL_ALERTA_RENDIMIENTO_PCT_DEFAULT = 15;
+
+export const FUENTES_KM_RENDIMIENTO: readonly FuenteKmRendimiento[] = [
+  'ruta_asignada',
+  'bitacora',
+  'manual',
+] as const;
+
 export const CARGOS_BASE_INICIALES: CargoConfig[] = [
   { codigo: 'tecnico', etiqueta: 'Técnico', esBase: true, activo: true },
   { codigo: 'ingeniero', etiqueta: 'Ingeniero', esBase: true, activo: true },
   { codigo: 'jefe_brigada', etiqueta: 'Jefe de Brigada', esBase: true, activo: true },
   { codigo: 'chofer', etiqueta: 'Chofer', esBase: true, activo: true },
+  { codigo: 'administrativo', etiqueta: 'Administrativo', esBase: true, activo: true },
 ];
+
+const TOPES_JEFE_BRIGADA_EJEMPLO: Record<CategoriaViatico, number> = {
+  Combustible: 5500,
+  Dieta: 2800,
+  Hospedaje: 5500,
+  Peaje: 1500,
+  Materiales: 4500,
+  Otro: 2000,
+};
+
+export const TOPES_VIATICO_EJEMPLO_POR_CARGO: Record<
+  string,
+  Record<CategoriaViatico, number>
+> = {
+  tecnico: {
+    Combustible: 4000,
+    Dieta: 2200,
+    Hospedaje: 4800,
+    Peaje: 1200,
+    Materiales: 3500,
+    Otro: 1500,
+  },
+  ingeniero: {
+    Combustible: 6000,
+    Dieta: 3000,
+    Hospedaje: 6500,
+    Peaje: 1800,
+    Materiales: 5000,
+    Otro: 2500,
+  },
+  jefe_brigada: { ...TOPES_JEFE_BRIGADA_EJEMPLO },
+  chofer: {
+    Combustible: 8500,
+    Dieta: 2200,
+    Hospedaje: 4800,
+    Peaje: 2500,
+    Materiales: 1000,
+    Otro: 1500,
+  },
+  administrativo: { ...TOPES_JEFE_BRIGADA_EJEMPLO },
+};
+
+export function crearTopesViaticoIniciales(): TopeViaticoCargoConfig[] {
+  const resultado: TopeViaticoCargoConfig[] = [];
+  for (const cargo of CARGOS_BASE_INICIALES) {
+    const montos = TOPES_VIATICO_EJEMPLO_POR_CARGO[cargo.codigo] ?? TOPES_JEFE_BRIGADA_EJEMPLO;
+    for (const categoria of CATEGORIAS_VIATICO) {
+      resultado.push({
+        cargoCodigo: cargo.codigo,
+        categoria,
+        versiones: [
+          {
+            version: 1,
+            vigenciaDesde: FECHA_VIGENCIA_INICIAL,
+            montoMaximoPorMisionRD: montos[categoria],
+            esEjemploPendienteConfirmar: true,
+          },
+        ],
+      });
+    }
+  }
+  return resultado;
+}
 
 export const PRESETS_RAPIDOS_INICIALES: PresetViaticoConfig[] = [
   {
@@ -236,6 +314,17 @@ export function crearConfiguracionInicialEmpresa(empresaId: string): Configuraci
         presetsRapidos: PRESETS_RAPIDOS_INICIALES.map((p) => ({ ...p })),
       },
     ],
+    topesViatico: crearTopesViaticoIniciales(),
+    rendimientoFlota: [
+      {
+        version: 1,
+        vigenciaDesde: FECHA_VIGENCIA_INICIAL,
+        fuenteKm: 'ruta_asignada',
+        umbralAlertaPct: UMBRAL_ALERTA_RENDIMIENTO_PCT_DEFAULT,
+        umbralCercaniaRentaKm: UMBRAL_CERCANIA_RENTA_KM_DEFAULT,
+        esEjemploPendienteConfirmar: true,
+      },
+    ],
     categoriasViatico: [...CATEGORIAS_VIATICO],
     versionGlobal: 1,
   };
@@ -247,15 +336,34 @@ export function asegurarConfiguracionEmpresa(
 ): ConfiguracionEmpresa {
   const base = crearConfiguracionInicialEmpresa(empresaId);
   if (!config) return base;
+
+  const cargosExistentes = config.cargos?.length ? config.cargos : base.cargos;
+  const codigosCargos = new Set(cargosExistentes.map((c) => c.codigo));
+  const cargosCompletos = [
+    ...cargosExistentes,
+    ...base.cargos.filter((b) => !codigosCargos.has(b.codigo)),
+  ];
+
+  const topesExistentes = config.topesViatico?.length ? config.topesViatico : base.topesViatico;
+  const clavesTope = new Set(topesExistentes.map((t) => `${t.cargoCodigo}::${t.categoria}`));
+  const topesCompletos = [
+    ...topesExistentes,
+    ...base.topesViatico.filter((b) => !clavesTope.has(`${b.cargoCodigo}::${b.categoria}`)),
+  ];
+
   return {
     empresaId,
-    cargos: config.cargos?.length ? config.cargos : base.cargos,
+    cargos: cargosCompletos,
     combustibles: config.combustibles?.length ? config.combustibles : base.combustibles,
     servicios: config.servicios?.length ? config.servicios : base.servicios,
     factoresTerreno: config.factoresTerreno?.length
       ? config.factoresTerreno
       : base.factoresTerreno,
     reglasViaticos: config.reglasViaticos?.length ? config.reglasViaticos : base.reglasViaticos,
+    topesViatico: topesCompletos,
+    rendimientoFlota: config.rendimientoFlota?.length
+      ? config.rendimientoFlota
+      : base.rendimientoFlota,
     categoriasViatico: config.categoriasViatico?.length
       ? config.categoriasViatico
       : base.categoriasViatico,
@@ -358,6 +466,67 @@ export function obtenerReglasViaticosVigentes(
   return obtenerVersionVigente(config.reglasViaticos, fechaCalculoIso);
 }
 
+export interface TopeViaticoVigente {
+  cargoCodigo: string;
+  categoria: CategoriaViatico;
+  montoMaximoPorMisionRD: number;
+  version: number;
+  vigenciaDesde: string;
+  esEjemploPendienteConfirmar: boolean;
+}
+
+export function obtenerTopesViaticoVigentes(
+  config: ConfiguracionEmpresa,
+  fechaCalculoIso: string = obtenerFechaHoyAST()
+): TopeViaticoVigente[] {
+  const lista = config.topesViatico?.length ? config.topesViatico : crearTopesViaticoIniciales();
+  return lista.map((item) => {
+    const v = obtenerVersionVigente(item.versiones, fechaCalculoIso);
+    return {
+      cargoCodigo: item.cargoCodigo,
+      categoria: item.categoria,
+      montoMaximoPorMisionRD: v.montoMaximoPorMisionRD,
+      version: v.version,
+      vigenciaDesde: v.vigenciaDesde,
+      esEjemploPendienteConfirmar: Boolean(v.esEjemploPendienteConfirmar),
+    };
+  });
+}
+
+export function obtenerTopeViaticoParaCargoCategoria(params: {
+  config: ConfiguracionEmpresa;
+  cargoCodigo: string;
+  categoria: CategoriaViatico;
+  fechaCalculoIso?: string;
+}): TopeViaticoVigente | undefined {
+  const vigentes = obtenerTopesViaticoVigentes(
+    params.config,
+    params.fechaCalculoIso ?? obtenerFechaHoyAST()
+  );
+  return vigentes.find(
+    (t) => t.cargoCodigo === params.cargoCodigo && t.categoria === params.categoria
+  );
+}
+
+export function obtenerRendimientoConfigVigente(
+  config: ConfiguracionEmpresa,
+  fechaCalculoIso: string = obtenerFechaHoyAST()
+): ReglaRendimientoFlotaVersion {
+  const lista = config.rendimientoFlota?.length
+    ? config.rendimientoFlota
+    : [
+        {
+          version: 1,
+          vigenciaDesde: FECHA_VIGENCIA_INICIAL,
+          fuenteKm: 'ruta_asignada' as const,
+          umbralAlertaPct: UMBRAL_ALERTA_RENDIMIENTO_PCT_DEFAULT,
+          umbralCercaniaRentaKm: UMBRAL_CERCANIA_RENTA_KM_DEFAULT,
+          esEjemploPendienteConfirmar: true,
+        },
+      ];
+  return obtenerVersionVigente(lista, fechaCalculoIso);
+}
+
 export function resolverEtiquetaCargo(codigo: string, cargos: CargoConfig[] = []): string {
   const match = cargos.find((c) => c.codigo === codigo);
   if (match) return match.etiqueta;
@@ -442,7 +611,12 @@ export function puedeVerSeccionConfiguracion(
 ): boolean {
   if (rol === 'admin') return true;
   if (rol === 'coordinador') {
-    return seccion === 'servicios' || seccion === 'flota' || seccion === 'ayuda';
+    return (
+      seccion === 'servicios' ||
+      seccion === 'flota' ||
+      seccion === 'viaticos_categorias' ||
+      seccion === 'ayuda'
+    );
   }
   return false;
 }
@@ -735,6 +909,46 @@ export function validarVehiculoConfig(
   }
   if (!Number.isFinite(v.mantenimientoPorKmRD) || v.mantenimientoPorKmRD < 0) {
     return { valido: false, error: 'El costo de mantenimiento por km no puede ser negativo.' };
+  }
+  return { valido: true };
+}
+
+export function validarNuevaVigenciaTopeViatico(
+  versionesExistentes: TopeViaticoCargoVersion[],
+  nueva: Pick<TopeViaticoCargoVersion, 'vigenciaDesde' | 'montoMaximoPorMisionRD'>
+): { valido: boolean; error?: string; advertencia?: string } {
+  const solapamiento = validarSolapamientoVigencia(versionesExistentes, nueva.vigenciaDesde);
+  if (!solapamiento.valido) return solapamiento;
+  if (!Number.isFinite(nueva.montoMaximoPorMisionRD) || nueva.montoMaximoPorMisionRD < 0) {
+    return {
+      valido: false,
+      error: 'El tope máximo por misión no puede ser negativo.',
+    };
+  }
+  if (nueva.montoMaximoPorMisionRD === 0) {
+    return {
+      valido: true,
+      advertencia:
+        'Un tope de RD$ 0 indica que la categoría NO está permitida para este cargo; cualquier gasto en esta categoría generará aviso de excedente.',
+    };
+  }
+  return { valido: true };
+}
+
+export function validarNuevaVigenciaRendimientoFlota(
+  versionesExistentes: ReglaRendimientoFlotaVersion[],
+  nueva: Omit<ReglaRendimientoFlotaVersion, 'version'>
+): { valido: boolean; error?: string } {
+  const solapamiento = validarSolapamientoVigencia(versionesExistentes, nueva.vigenciaDesde);
+  if (!solapamiento.valido) return solapamiento;
+  if (!FUENTES_KM_RENDIMIENTO.includes(nueva.fuenteKm)) {
+    return { valido: false, error: 'La fuente de kilómetros seleccionada no es válida.' };
+  }
+  if (!Number.isFinite(nueva.umbralAlertaPct) || nueva.umbralAlertaPct <= 0) {
+    return { valido: false, error: 'El umbral de alerta de rendimiento (%) debe ser mayor que 0.' };
+  }
+  if (!Number.isFinite(nueva.umbralCercaniaRentaKm) || nueva.umbralCercaniaRentaKm <= 0) {
+    return { valido: false, error: 'El umbral de cercanía de renta (km) debe ser mayor que 0.' };
   }
   return { valido: true };
 }

@@ -8,7 +8,9 @@ import {
   obtenerCombustiblesVigentes,
   obtenerFactoresTerrenoVigentes,
   obtenerReglasViaticosVigentes,
+  obtenerRendimientoConfigVigente,
   obtenerServiciosVigentes,
+  obtenerTopesViaticoVigentes,
 } from '../domain';
 import type { PayloadTransicionServicio } from '../domain/estados';
 import type {
@@ -16,18 +18,23 @@ import type {
   AvisoSobrescrituraLWW,
   BitacoraEntrada,
   CargoConfig,
+  CategoriaViatico,
   Cliente,
   ConteoPendientesPorTipo,
   Cuadrilla,
+  DecisionExcedenteViatico,
   Empresa,
   EquipoGNSS,
   EstadoAprobacionViatico,
   EstadoOnboardingEmpresa,
   EstadoServicio,
+  Mision,
   Personal,
   ProyeccionSnapshotPorRol,
   Proyecto,
+  ReglaRendimientoFlotaVersion,
   ReglasViaticosVersion,
+  Renta,
   RepartoProyecto,
   RolEmpresa,
   Ruta,
@@ -269,6 +276,16 @@ export function useOperacionEmpresa(isOnline: boolean) {
     [configuracion]
   );
 
+  const topesViaticoVigentes = useMemo(
+    () => (configuracion ? obtenerTopesViaticoVigentes(configuracion) : []),
+    [configuracion]
+  );
+
+  const rendimientoFlotaVigente = useMemo(
+    () => (configuracion ? obtenerRendimientoConfigVigente(configuracion) : null),
+    [configuracion]
+  );
+
   const onboarding = useMemo<EstadoOnboardingEmpresa | null>(() => {
     if (!proyeccion || proyeccion.rol === 'tecnico') return null;
     return asegurarEstadoOnboarding(
@@ -415,8 +432,34 @@ export function useOperacionEmpresa(isOnline: boolean) {
         nuevoEstado: EstadoAprobacionViatico;
         motivoRechazo?: string;
         motivoDecision?: string;
+        decisionExcedente?: DecisionExcedenteViatico;
       }) => {
         const res = await repositorioOperacion.decidirViatico({ empresaId, ...params });
+        await refrescar();
+        return res;
+      },
+      crearMision: async (
+        datos: Omit<Mision, 'id' | 'empresaId' | 'version' | 'updatedAt' | 'syncStatus'>
+      ) => {
+        const res = await repositorioOperacion.crearMision(empresaId, datos);
+        await refrescar();
+        return res;
+      },
+      guardarRenta: async (
+        datos: Omit<Renta, 'id' | 'empresaId' | 'version' | 'updatedAt' | 'syncStatus'> & {
+          id?: string;
+        }
+      ) => {
+        const res = await repositorioOperacion.guardarRenta(empresaId, datos);
+        await refrescar();
+        return res;
+      },
+      devolverRenta: async (params: {
+        rentaId: string;
+        fechaDevolucion?: string;
+        notas?: string;
+      }) => {
+        const res = await repositorioOperacion.devolverRenta({ empresaId, ...params });
         await refrescar();
         return res;
       },
@@ -562,6 +605,29 @@ export function useOperacionEmpresa(isOnline: boolean) {
         await refrescar();
         return res;
       },
+      agregarVigenciaTopeViatico: async (params: {
+        cargoCodigo: string;
+        categoria: CategoriaViatico;
+        vigenciaDesde: string;
+        montoMaximoPorMisionRD: number;
+      }) => {
+        const res = await repositorioOperacion.agregarVigenciaTopeViatico({
+          empresaId,
+          ...params,
+        });
+        await refrescar();
+        return res;
+      },
+      agregarVigenciaRendimientoFlota: async (
+        regla: Omit<ReglaRendimientoFlotaVersion, 'version'>
+      ) => {
+        const res = await repositorioOperacion.agregarVigenciaRendimientoFlota({
+          empresaId,
+          regla,
+        });
+        await refrescar();
+        return res;
+      },
       guardarOnboarding: async (nuevoEstado: EstadoOnboardingEmpresa) => {
         const res = await repositorioOperacion.guardarOnboarding(empresaId, nuevoEstado);
         await refrescar();
@@ -584,6 +650,8 @@ export function useOperacionEmpresa(isOnline: boolean) {
     serviciosVigentes,
     factoresTerrenoVigentes,
     reglasViaticosVigentes,
+    topesViaticoVigentes,
+    rendimientoFlotaVigente,
     onboarding,
     tutorialesPerfil,
     tutorialesVistos,

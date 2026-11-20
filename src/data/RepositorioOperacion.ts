@@ -3,19 +3,24 @@ import type {
   AvisoSobrescrituraLWW,
   BitacoraEntrada,
   CargoConfig,
+  CategoriaViatico,
   Cliente,
   ConfiguracionEmpresa,
   Cuadrilla,
+  DecisionExcedenteViatico,
   Empresa,
   EquipoGNSS,
   EstadoAprobacionViatico,
   EstadoEmpresaSnapshot,
   EstadoOnboardingEmpresa,
   EstadoServicio,
+  Mision,
   Personal,
   ProyeccionSnapshotPorRol,
   Proyecto,
+  ReglaRendimientoFlotaVersion,
   ReglasViaticosVersion,
+  Renta,
   RepartoProyecto,
   RolEmpresa,
   Ruta,
@@ -136,8 +141,27 @@ export interface RepositorioOperacion {
     nuevoEstado: EstadoAprobacionViatico;
     motivoRechazo?: string;
     motivoDecision?: string;
+    decisionExcedente?: DecisionExcedenteViatico;
   }): Promise<Viatico>;
   eliminarViatico(empresaId: string, viaticoId: string): Promise<void>;
+
+  // B3: Misiones y rentas de vehículos/equipos
+  crearMision(
+    empresaId: string,
+    datos: Omit<Mision, 'id' | 'empresaId' | 'version' | 'updatedAt' | 'syncStatus'>
+  ): Promise<Mision>;
+  guardarRenta(
+    empresaId: string,
+    datos: Omit<Renta, 'id' | 'empresaId' | 'version' | 'updatedAt' | 'syncStatus'> & {
+      id?: string;
+    }
+  ): Promise<Renta>;
+  devolverRenta(params: {
+    empresaId: string;
+    rentaId: string;
+    fechaDevolucion?: string;
+    notas?: string;
+  }): Promise<Renta>;
 
   // Catálogos y Administración de Empresa / Usuarios
   guardarPersonal(empresaId: string, item: Omit<Personal, 'id' | 'empresaId'> & { id?: string }): Promise<Personal>;
@@ -201,6 +225,17 @@ export interface RepositorioOperacion {
   agregarVigenciaReglasViaticos(params: {
     empresaId: string;
     reglas: Omit<ReglasViaticosVersion, 'version'>;
+  }): Promise<ConfiguracionEmpresa>;
+  agregarVigenciaTopeViatico(params: {
+    empresaId: string;
+    cargoCodigo: string;
+    categoria: CategoriaViatico;
+    vigenciaDesde: string;
+    montoMaximoPorMisionRD: number;
+  }): Promise<ConfiguracionEmpresa>;
+  agregarVigenciaRendimientoFlota(params: {
+    empresaId: string;
+    regla: Omit<ReglaRendimientoFlotaVersion, 'version'>;
   }): Promise<ConfiguracionEmpresa>;
 
   // A2: Onboarding opcional por empresa

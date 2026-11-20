@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
+  AlertTriangle,
   Camera,
   CheckCircle2,
   Loader2,
@@ -14,20 +15,26 @@ import {
 } from 'lucide-react';
 import {
   CATEGORIAS_VIATICO,
+  ERROR_TECNICO_SIN_PERSONAL,
   calcularCombustibleGpsRuta,
   completarRepartoConSinAsignar,
   crearConfiguracionInicialEmpresa,
+  evaluarTopeViaticoEnMision,
   obtenerReglasViaticosVigentes,
   validarRepartoViatico,
 } from '../domain';
 import type {
   CategoriaViatico,
+  ConfiguracionEmpresa,
   MetodoViatico,
+  MisionTecnico,
   PresetViaticoConfig,
   Proyecto,
   ReglasCapturaViaticosTecnico,
   RepartoProyecto,
+  RolEmpresa,
   Ruta,
+  Vehiculo,
   Viatico,
 } from '../types/domain';
 import {
@@ -67,6 +74,13 @@ interface MobileExpenseCaptureModalProps {
   onClose: () => void;
   proyectos: ProyectoSelectorItem[];
   rutas: RutaSelectorItem[];
+  misiones?: MisionTecnico[];
+  vehiculos?: Array<Pick<Vehiculo, 'id' | 'etiqueta' | 'placa' | 'estado'>>;
+  viaticosExistentes?: Viatico[];
+  configuracion?: ConfiguracionEmpresa;
+  cargoUsuario?: string;
+  personalIdUsuario?: string;
+  rolActivo?: RolEmpresa;
   defaultProyectoId?: string;
   defaultRutaId?: string;
   editingViatico?: Viatico | null;
@@ -131,6 +145,13 @@ export const MobileExpenseCaptureModal: React.FC<MobileExpenseCaptureModalProps>
   onClose,
   proyectos,
   rutas,
+  misiones = [],
+  vehiculos = [],
+  viaticosExistentes = [],
+  configuracion,
+  cargoUsuario,
+  personalIdUsuario,
+  rolActivo,
   defaultProyectoId,
   defaultRutaId,
   editingViatico = null,
@@ -150,6 +171,10 @@ export const MobileExpenseCaptureModal: React.FC<MobileExpenseCaptureModalProps>
   const cameraInputRef = useRef<HTMLInputElement>(null);
   const [captureMode, setCaptureMode] = useState<'ocr' | 'gps' | 'quick'>('ocr');
   const [rutaId, setRutaId] = useState(defaultRutaId || rutas[0]?.id || '');
+  const [misionId, setMisionId] = useState('');
+  const [vehiculoId, setVehiculoId] = useState(vehiculos[0]?.id || '');
+  const [galonesCargados, setGalonesCargados] = useState('');
+  const [motivoExcedente, setMotivoExcedente] = useState('');
 
   const resolveInitialProyectoId = () => {
     if (defaultProyectoId) return defaultProyectoId;
@@ -198,6 +223,14 @@ export const MobileExpenseCaptureModal: React.FC<MobileExpenseCaptureModalProps>
 
     if (editingViatico) {
       setRutaId(editingViatico.rutaId || '');
+      setMisionId(editingViatico.misionId || '');
+      setVehiculoId(editingViatico.vehiculoId || vehiculos[0]?.id || '');
+      setGalonesCargados(
+        typeof editingViatico.galonesCargados === 'number'
+          ? String(editingViatico.galonesCargados)
+          : ''
+      );
+      setMotivoExcedente(editingViatico.motivoExcedente || '');
       setCategory(editingViatico.categoria);
       setMerchant(editingViatico.comercio);
       setAmountRD(String(editingViatico.montoRD));
@@ -233,9 +266,16 @@ export const MobileExpenseCaptureModal: React.FC<MobileExpenseCaptureModalProps>
     const rutaObj = rutas.find((r) => r.id === nextRutaId);
     const nextProyectoId =
       defaultProyectoId || rutaObj?.proyectoId || proyectos[0]?.id || 'sin_asignar';
+    const nextMisionId = nextRutaId
+      ? misiones.find((m) => m.rutaIds.includes(nextRutaId))?.id || ''
+      : '';
 
     setCaptureMode('ocr');
     setRutaId(nextRutaId);
+    setMisionId(nextMisionId);
+    setVehiculoId(vehiculos[0]?.id || '');
+    setGalonesCargados('');
+    setMotivoExcedente('');
     setCategory('Combustible');
     setMerchant('');
     setAmountRD('');
@@ -252,10 +292,42 @@ export const MobileExpenseCaptureModal: React.FC<MobileExpenseCaptureModalProps>
     setNeedsOfflineOcr(false);
     setGpsCoords(null);
     setDistanceKm(undefined);
-  }, [isOpen, defaultRutaId, defaultProyectoId, editingViatico, rutas, proyectos]);
+  }, [isOpen, defaultRutaId, defaultProyectoId, editingViatico, rutas, proyectos, misiones, vehiculos]);
 
   const selectedRuta = useMemo(() => rutas.find((r) => r.id === rutaId), [rutas, rutaId]);
   const montoNumerico = Number(amountRD) || 0;
+  const cargoEfectivo =
+    cargoUsuario || (rolActivo === 'tecnico' ? 'tecnico' : 'administrativo');
+
+  const evalTope = useMemo(
+    () =>
+      evaluarTopeViaticoEnMision({
+        misionId: misionId || undefined,
+        categoria: category,
+        montoRD: montoNumerico,
+        cargoCodigo: cargoEfectivo,
+        usuarioId: creadoPorUsuario.id,
+        personalId: personalIdUsuario,
+        viaticosExistentes,
+        excluirViaticoId: editingViatico?.id,
+        config: configuracion,
+        topeDirecto: reglasCaptura.topesUsuario?.[category],
+        fechaCalculoIso: dateIso,
+      }),
+    [
+      misionId,
+      category,
+      montoNumerico,
+      cargoEfectivo,
+      creadoPorUsuario.id,
+      personalIdUsuario,
+      viaticosExistentes,
+      editingViatico?.id,
+      configuracion,
+      reglasCaptura.topesUsuario,
+      dateIso,
+    ]
+  );
 
   const repartosCalculados = useMemo<RepartoProyecto[]>(() => {
     if (repartoModo === 'sin_asignar') {
@@ -442,10 +514,31 @@ export const MobileExpenseCaptureModal: React.FC<MobileExpenseCaptureModalProps>
       return;
     }
 
+    const requiereMotivoExc =
+      evalTope.motivoExcedenteRequerido || (evalTope.categoriaNoPermitida && parsedAmount > 0);
+    if (requiereMotivoExc && motivoExcedente.trim().length < 3) {
+      setErrorMsg(
+        'Este gasto supera el tope de la misión (o la categoría no está permitida). Indica el motivo del excedente (mín. 3 caracteres).'
+      );
+      return;
+    }
+
+    const galonesNum =
+      category === 'Combustible' && galonesCargados.trim()
+        ? Number(galonesCargados)
+        : undefined;
+    if (galonesNum !== undefined && (!Number.isFinite(galonesNum) || galonesNum < 0)) {
+      setErrorMsg('Los galones cargados deben ser un número válido mayor o igual a 0.');
+      return;
+    }
+
     setIsSaving(true);
     try {
       const payloadBase: ViaticoEdicionPayload = {
+        misionId: misionId || undefined,
         rutaId: rutaId || undefined,
+        vehiculoId: category === 'Combustible' && vehiculoId ? vehiculoId : undefined,
+        galonesCargados: galonesNum && galonesNum > 0 ? galonesNum : undefined,
         fechaIso: dateIso,
         timestampAST: editingViatico?.timestampAST || formatSantoDomingoAST(new Date()),
         categoria: category,
@@ -456,6 +549,7 @@ export const MobileExpenseCaptureModal: React.FC<MobileExpenseCaptureModalProps>
         metodo: method,
         gpsCoords: gpsCoords ?? undefined,
         distanceKm,
+        motivoExcedente: motivoExcedente.trim() || undefined,
         receiptThumbnail: receiptPreview ?? undefined,
         pendingReceiptBase64: needsOfflineOcr ? receiptPreview ?? undefined : undefined,
         pendingReceiptMime: needsOfflineOcr ? pendingReceiptMime : undefined,
@@ -556,30 +650,61 @@ export const MobileExpenseCaptureModal: React.FC<MobileExpenseCaptureModalProps>
             </button>
           </div>
 
-          {/* Ruta de referencia */}
-          <div>
-            <label className="block text-xs font-semibold text-[#334155] mb-1">
-              Ruta de Campo de Referencia
-            </label>
-            <select
-              value={rutaId}
-              onChange={(e) => {
-                const nextRutaId = e.target.value;
-                setRutaId(nextRutaId);
-                const r = rutas.find((x) => x.id === nextRutaId);
-                if (r && repartoModo === 'unico') {
-                  setProyectoUnicoId(r.proyectoId);
-                }
-              }}
-              className="w-full rounded-sm border border-[#CBD5E1] bg-white px-3 py-2.5 text-xs text-[#0D1C2F] min-h-[44px]"
-            >
-              <option value="">Sin ruta específica (gasto general)</option>
-              {rutas.map((r) => (
-                <option key={r.id} value={r.id}>
-                  {r.codigoParcela} — {r.nombre} ({r.provincia})
-                </option>
-              ))}
-            </select>
+          {rolActivo === 'tecnico' && !personalIdUsuario && (
+            <div className="flex items-start gap-2 rounded-sm border border-[#FCA5A5] bg-[#FEE2E2] px-3 py-2 text-xs text-[#93000A]">
+              <AlertTriangle className="h-4 w-4 shrink-0 mt-0.5" />
+              <span>{ERROR_TECNICO_SIN_PERSONAL}</span>
+            </div>
+          )}
+
+          {/* Misión y Ruta de referencia */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div>
+              <label className="block text-xs font-semibold text-[#334155] mb-1">
+                Misión (controla topes por cargo)
+              </label>
+              <select
+                value={misionId}
+                onChange={(e) => setMisionId(e.target.value)}
+                className="w-full rounded-sm border border-[#CBD5E1] bg-white px-3 py-2.5 text-xs text-[#0D1C2F] min-h-[44px]"
+              >
+                <option value="">Sin misión (gasto suelto / administrativo)</option>
+                {misiones.map((m) => (
+                  <option key={m.id} value={m.id}>
+                    {m.nombre} ({m.provincia})
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div>
+              <label className="block text-xs font-semibold text-[#334155] mb-1">
+                Ruta de Campo de Referencia
+              </label>
+              <select
+                value={rutaId}
+                onChange={(e) => {
+                  const nextRutaId = e.target.value;
+                  setRutaId(nextRutaId);
+                  const r = rutas.find((x) => x.id === nextRutaId);
+                  if (r && repartoModo === 'unico') {
+                    setProyectoUnicoId(r.proyectoId);
+                  }
+                  if (!editingViatico && nextRutaId) {
+                    const matchMision = misiones.find((m) => m.rutaIds.includes(nextRutaId));
+                    if (matchMision) setMisionId(matchMision.id);
+                  }
+                }}
+                className="w-full rounded-sm border border-[#CBD5E1] bg-white px-3 py-2.5 text-xs text-[#0D1C2F] min-h-[44px]"
+              >
+                <option value="">Sin ruta específica (gasto general)</option>
+                {rutas.map((r) => (
+                  <option key={r.id} value={r.id}>
+                    {r.codigoParcela} — {r.nombre} ({r.provincia})
+                  </option>
+                ))}
+              </select>
+            </div>
           </div>
 
           {captureMode === 'ocr' && (
@@ -779,7 +904,89 @@ export const MobileExpenseCaptureModal: React.FC<MobileExpenseCaptureModalProps>
                 className="w-full rounded-sm border border-[#CBD5E1] px-3 py-2 text-xs text-[#0D1C2F] min-h-[42px]"
               />
             </div>
+
+            {category === 'Combustible' && (
+              <>
+                <div>
+                  <label className="block font-semibold text-[#334155] mb-1">
+                    Vehículo abastecido (para rendimiento)
+                  </label>
+                  <select
+                    value={vehiculoId}
+                    onChange={(e) => setVehiculoId(e.target.value)}
+                    className="w-full rounded-sm border border-[#CBD5E1] bg-white px-3 py-2 text-xs text-[#0D1C2F] min-h-[42px]"
+                  >
+                    <option value="">Sin vehículo específico</option>
+                    {vehiculos.map((v) => (
+                      <option key={v.id} value={v.id}>
+                        {v.etiqueta} ({v.placa})
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="block font-semibold text-[#334155] mb-1">
+                    Galones cargados (opcional)
+                  </label>
+                  <input
+                    type="number"
+                    step="0.01"
+                    min={0}
+                    value={galonesCargados}
+                    onChange={(e) => setGalonesCargados(e.target.value)}
+                    placeholder="Ej. 11.2"
+                    className="w-full rounded-sm border border-[#CBD5E1] px-3 py-2 font-mono text-xs text-[#0D1C2F] min-h-[42px]"
+                  />
+                </div>
+              </>
+            )}
           </div>
+
+          {/* Evaluación de Tope en Misión (B2) */}
+          {evalTope.aplicaTope && (
+            <div
+              className={`rounded-md border p-3 text-xs space-y-2 ${
+                evalTope.categoriaNoPermitida || evalTope.superaTope
+                  ? 'border-[#FCA5A5] bg-[#FEF2F2] text-[#93000A]'
+                  : 'border-[#CBD5E1] bg-[#F8FAFC] text-[#334155]'
+              }`}
+            >
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <span className="font-semibold">
+                  Tope de misión ({evalTope.cargoCodigo} · {category}):{' '}
+                  {formatRD(evalTope.topeAplicadoRD ?? 0, moneda)}
+                </span>
+                <span className="font-mono text-[11px]">
+                  Acumulado: {formatRD(evalTope.acumuladoPrevioRD, moneda)} &rarr; Nuevo total:{' '}
+                  {formatRD(evalTope.totalConNuevoRD, moneda)}
+                </span>
+              </div>
+
+              {evalTope.mensajeAviso && (
+                <div className="flex items-start gap-2 font-semibold">
+                  <AlertTriangle className="h-4 w-4 shrink-0 mt-0.5" />
+                  <span>{evalTope.mensajeAviso}</span>
+                </div>
+              )}
+
+              {(evalTope.motivoExcedenteRequerido ||
+                (evalTope.categoriaNoPermitida && montoNumerico > 0)) && (
+                <div>
+                  <label className="block font-semibold text-[#93000A] mb-1">
+                    Motivo obligatorio del excedente (no bloquea el registro)
+                  </label>
+                  <textarea
+                    rows={2}
+                    required
+                    value={motivoExcedente}
+                    onChange={(e) => setMotivoExcedente(e.target.value)}
+                    placeholder="Ej. Extensión de jornada por lluvia o zona remota..."
+                    className="w-full rounded-sm border border-[#FCA5A5] bg-white px-3 py-2 text-xs text-[#0D1C2F]"
+                  />
+                </div>
+              )}
+            </div>
+          )}
 
           {/* Exact Project Split Editor (F10) */}
           <div className="rounded-md border border-[#CBD5E1] bg-[#F8FAFC] p-3.5 space-y-2.5 text-xs">

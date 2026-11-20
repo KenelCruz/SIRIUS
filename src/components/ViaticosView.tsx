@@ -1,8 +1,10 @@
 import React, { useMemo, useState } from 'react';
 import {
+  AlertTriangle,
   BarChart3,
   Camera,
   CheckCircle2,
+  Compass,
   FileSpreadsheet,
   MapPin,
   Plus,
@@ -13,15 +15,23 @@ import {
 } from 'lucide-react';
 import {
   CATEGORIAS_VIATICO,
+  calcularReporteViaticosPorMision,
   calcularReporteViaticosPorProyecto,
   completarRepartoConSinAsignar,
+  generarCsvReporteMisiones,
   puedeAprobarViatico,
+  resolverEtiquetaCargo,
   validarRepartoViatico,
 } from '../domain';
 import type {
+  CargoConfig,
   CategoriaViatico,
+  ConfiguracionEmpresa,
+  DecisionExcedenteViatico,
   EstadoAprobacionViatico,
+  Mision,
   Proyecto,
+  Renta,
   RepartoProyecto,
   RolEmpresa,
   Viatico,
@@ -32,12 +42,18 @@ interface ViaticosViewProps {
   rol: RolEmpresa;
   viaticos: Viatico[];
   proyectos: Array<Pick<Proyecto, 'id' | 'nombre' | 'codigoContrato' | 'presupuestoViaticosRD'>>;
+  misiones?: Mision[];
+  rentas?: Renta[];
+  cargos?: CargoConfig[];
+  configuracion?: ConfiguracionEmpresa;
+  moneda?: string;
   onAbrirModalNuevo: () => void;
   onDecidirViatico: (params: {
     viaticoId: string;
     nuevoEstado: EstadoAprobacionViatico;
     motivoRechazo?: string;
     motivoDecision?: string;
+    decisionExcedente?: DecisionExcedenteViatico;
   }) => Promise<void>;
   onActualizarReparto: (viaticoId: string, repartos: RepartoProyecto[]) => Promise<void>;
   onEliminarViatico: (viaticoId: string) => Promise<void>;
@@ -47,6 +63,11 @@ export const ViaticosView: React.FC<ViaticosViewProps> = ({
   rol,
   viaticos,
   proyectos,
+  misiones = [],
+  rentas = [],
+  cargos = [],
+  configuracion,
+  moneda = 'RD$',
   onAbrirModalNuevo,
   onDecidirViatico,
   onActualizarReparto,
@@ -56,9 +77,11 @@ export const ViaticosView: React.FC<ViaticosViewProps> = ({
   const [filtroCat, setFiltroCat] = useState<CategoriaViatico | 'ALL'>('ALL');
   const [filtroEstado, setFiltroEstado] = useState<EstadoAprobacionViatico | 'ALL'>('ALL');
 
-  // Modal aprobación con motivo opcional
+  // Modal aprobación con motivo opcional (obligatorio si excede tope)
   const [aprobacionTarget, setAprobacionTarget] = useState<Viatico | null>(null);
   const [motivoAprobacion, setMotivoAprobacion] = useState('');
+  const [decisionExcedente, setDecisionExcedente] =
+    useState<DecisionExcedenteViatico>('aprobado_empresa');
 
   // Modal rechazo (motivo obligatorio)
   const [rechazoTarget, setRechazoTarget] = useState<Viatico | null>(null);
@@ -85,9 +108,13 @@ export const ViaticosView: React.FC<ViaticosViewProps> = ({
     let rechazado = 0;
     let sinAsignar = 0;
     for (const v of viaticos) {
-      if (v.estadoAprobacion === 'aprobado') aprobado += v.montoRD;
-      else if (v.estadoAprobacion === 'rechazado') rechazado += v.montoRD;
-      else pendiente += v.montoRD;
+      if (v.estadoAprobacion === 'aprobado') {
+        aprobado += v.montoAprobadoEmpresaRD ?? v.montoRD;
+      } else if (v.estadoAprobacion === 'rechazado') {
+        rechazado += v.montoRD;
+      } else {
+        pendiente += v.montoRD;
+      }
 
       if (v.estadoAprobacion !== 'rechazado') {
         for (const r of v.repartos) {
@@ -101,6 +128,18 @@ export const ViaticosView: React.FC<ViaticosViewProps> = ({
   const reportePorProyecto = useMemo(
     () => calcularReporteViaticosPorProyecto(proyectos, viaticos),
     [proyectos, viaticos]
+  );
+
+  const reportePorMision = useMemo(
+    () =>
+      calcularReporteViaticosPorMision({
+        misiones,
+        viaticos,
+        rentas,
+        cargos,
+        config: configuracion,
+      }),
+    [misiones, viaticos, rentas, cargos, configuracion]
   );
 
   const proyectoNombre = (proyectoId: string) => {
@@ -199,18 +238,40 @@ export const ViaticosView: React.FC<ViaticosViewProps> = ({
     URL.revokeObjectURL(url);
   };
 
+  const handleExportReporteMisionesCsv = () => {
+    const csv = generarCsvReporteMisiones(reportePorMision);
+    const blob = new Blob(['\uFEFF' + csv], {
+      type: 'text/csv;charset=utf-8;',
+    });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `reporte_viaticos_misiones_${new Date().toISOString().slice(0, 10)}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
   const handleConfirmAprobacion = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!aprobacionTarget) return;
     setModalError(null);
+    const tieneExcedente = (aprobacionTarget.excedenteRD ?? 0) > 0;
+    if (tieneExcedente && motivoAprobacion.trim().length < 4) {
+      setModalError(
+        'Debes indicar el motivo de la decisión sobre el excedente (mínimo 4 caracteres).'
+      );
+      return;
+    }
     try {
       await onDecidirViatico({
         viaticoId: aprobacionTarget.id,
         nuevoEstado: 'aprobado',
         motivoDecision: motivoAprobacion.trim() || undefined,
+        decisionExcedente: tieneExcedente ? decisionExcedente : undefined,
       });
       setAprobacionTarget(null);
       setMotivoAprobacion('');
+      setDecisionExcedente('aprobado_empresa');
     } catch (err: unknown) {
       setModalError(err instanceof Error ? err.message : 'No se pudo aprobar el viático.');
     }
@@ -233,13 +294,17 @@ export const ViaticosView: React.FC<ViaticosViewProps> = ({
     }
   };
 
+  const montoObjetivoReparto = repartoTarget
+    ? repartoTarget.montoAprobadoEmpresaRD ?? repartoTarget.montoRD
+    : 0;
+
   const handleConfirmReparto = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!repartoTarget) return;
     setModalError(null);
-    const check = validarRepartoViatico(repartoTarget.montoRD, repartoEdicion);
+    const check = validarRepartoViatico(montoObjetivoReparto, repartoEdicion);
     if (!check.valido) {
-      setModalError(check.error || 'La suma del reparto debe igualar el gasto.');
+      setModalError(check.error || 'La suma del reparto debe igualar el gasto aprobado.');
       return;
     }
     try {
@@ -408,6 +473,150 @@ export const ViaticosView: React.FC<ViaticosViewProps> = ({
         </div>
       </div>
 
+      {/* B5: Reporte de Viáticos y Rentas por Misión + CSV */}
+      <div className="rounded-md border border-[#CBD5E1] bg-white overflow-hidden">
+        <div className="flex flex-wrap items-center justify-between gap-2 border-b border-[#E2E8F0] bg-[#F8FAFC] px-4 py-3">
+          <div className="flex items-center gap-2">
+            <Compass className="h-4 w-4 text-[#0284C7]" />
+            <div>
+              <h2 className="text-xs sm:text-sm font-bold text-[#0F2942]">
+                Reporte por Misión: Viáticos vs Topes por Cargo y Costo de Rentas
+              </h2>
+              <p className="text-[11px] text-[#43474D]">
+                Los excedentes a cargo del colaborador se muestran aparte y quedan excluidos de los totales de la empresa.
+              </p>
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={handleExportReporteMisionesCsv}
+            className="inline-flex items-center gap-1.5 rounded-sm border border-[#CBD5E1] bg-white px-2.5 py-1.5 text-[11px] font-semibold text-[#0F2942] hover:bg-[#EFF6FF]"
+          >
+            <FileSpreadsheet className="h-3.5 w-3.5" />
+            Exportar Reporte Misiones CSV
+          </button>
+        </div>
+
+        <div className="overflow-x-auto">
+          <table className="w-full border-collapse text-left text-xs">
+            <thead>
+              <tr className="border-b border-[#E2E8F0] bg-white text-[11px] font-semibold text-[#43474D]">
+                <th className="px-4 py-2.5">Misión / Zona</th>
+                <th className="px-4 py-2.5 text-right">Aprobado Empresa</th>
+                <th className="px-4 py-2.5 text-right">Cargo Colaborador</th>
+                <th className="px-4 py-2.5 text-right">Pendiente</th>
+                <th className="px-4 py-2.5 text-right">Rentas Misión</th>
+                <th className="px-4 py-2.5 text-right">Costo Total Empresa</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-[#E2E8F0]">
+              {reportePorMision.misiones.map((m) => (
+                <React.Fragment key={m.misionId}>
+                  <tr className="bg-white hover:bg-[#F8FAFC]">
+                    <td className="px-4 py-2.5">
+                      <div className="font-bold text-[#0D1C2F]">{m.nombre}</div>
+                      <div className="text-[11px] text-[#43474D]">
+                        {m.zona} · {m.provincia} · {m.fechaInicio} → {m.fechaFin}
+                      </div>
+                    </td>
+                    <td className="px-4 py-2.5 text-right font-mono tabular-nums text-[#15803D]">
+                      {formatRD(m.aprobadoEmpresaRD, moneda)}
+                    </td>
+                    <td className="px-4 py-2.5 text-right font-mono tabular-nums text-[#93000A]">
+                      {formatRD(m.cargoColaboradorRD, moneda)}
+                    </td>
+                    <td className="px-4 py-2.5 text-right font-mono tabular-nums text-[#D97706]">
+                      {formatRD(m.pendienteRD, moneda)}
+                    </td>
+                    <td className="px-4 py-2.5 text-right font-mono tabular-nums text-[#0F2942]">
+                      {formatRD(m.costoRentasRD, moneda)}
+                    </td>
+                    <td className="px-4 py-2.5 text-right font-mono font-bold tabular-nums text-[#0F2942]">
+                      {formatRD(m.totalCostoEmpresaRD, moneda)}
+                    </td>
+                  </tr>
+                  {m.desglose.length > 0 && (
+                    <tr className="bg-[#F8FAFC]">
+                      <td colSpan={6} className="px-4 py-2">
+                        <div className="flex flex-wrap gap-2">
+                          {m.desglose.map((d) => (
+                            <span
+                              key={`${m.misionId}-${d.cargoCodigo}-${d.categoria}`}
+                              className={`inline-flex items-center gap-1.5 rounded-sm border px-2 py-1 text-[11px] ${
+                                d.excedenteRD > 0
+                                  ? 'border-[#FCA5A5] bg-[#FEE2E2]/60 text-[#93000A]'
+                                  : 'border-[#E2E8F0] bg-white text-[#334155]'
+                              }`}
+                            >
+                              <strong>{d.cargoEtiqueta}</strong> · {d.categoria}:{' '}
+                              <span className="font-mono font-semibold">
+                                {formatRD(d.gastoTotalRD, moneda)}
+                              </span>
+                              {typeof d.topeRD === 'number' && (
+                                <span className="font-mono text-[10px] text-[#43474D]">
+                                  (tope {formatRD(d.topeRD, moneda)})
+                                </span>
+                              )}
+                              {d.excedenteRD > 0 && (
+                                <span className="font-mono font-bold">
+                                  · Exc {formatRD(d.excedenteRD, moneda)}
+                                </span>
+                              )}
+                            </span>
+                          ))}
+                        </div>
+                      </td>
+                    </tr>
+                  )}
+                </React.Fragment>
+              ))}
+              {reportePorMision.sinMision.cantidadViaticos > 0 && (
+                <tr className="bg-[#FEF9C3]/35">
+                  <td className="px-4 py-2.5 font-semibold text-[#A16207]">
+                    Gastos sueltos sin misión ({reportePorMision.sinMision.cantidadViaticos})
+                  </td>
+                  <td className="px-4 py-2.5 text-right font-mono tabular-nums">
+                    {formatRD(reportePorMision.sinMision.aprobadoEmpresaRD, moneda)}
+                  </td>
+                  <td className="px-4 py-2.5 text-right font-mono tabular-nums text-[#43474D]">
+                    {formatRD(0, moneda)}
+                  </td>
+                  <td className="px-4 py-2.5 text-right font-mono tabular-nums">
+                    {formatRD(reportePorMision.sinMision.pendienteRD, moneda)}
+                  </td>
+                  <td className="px-4 py-2.5 text-right font-mono tabular-nums">
+                    {formatRD(0, moneda)}
+                  </td>
+                  <td className="px-4 py-2.5 text-right font-mono font-semibold tabular-nums">
+                    {formatRD(reportePorMision.sinMision.aprobadoEmpresaRD, moneda)}
+                  </td>
+                </tr>
+              )}
+            </tbody>
+            <tfoot>
+              <tr className="border-t-2 border-[#CBD5E1] bg-[#F8FAFC] font-bold text-[#0F2942]">
+                <td className="px-4 py-2.5">Total General por Misiones</td>
+                <td className="px-4 py-2.5 text-right font-mono tabular-nums text-[#15803D]">
+                  {formatRD(reportePorMision.totales.aprobadoEmpresaRD, moneda)}
+                </td>
+                <td className="px-4 py-2.5 text-right font-mono tabular-nums text-[#93000A]">
+                  {formatRD(reportePorMision.totales.cargoColaboradorRD, moneda)}
+                </td>
+                <td className="px-4 py-2.5 text-right font-mono tabular-nums text-[#D97706]">
+                  {formatRD(reportePorMision.totales.pendienteRD, moneda)}
+                </td>
+                <td className="px-4 py-2.5 text-right font-mono tabular-nums">
+                  {formatRD(reportePorMision.totales.costoRentasRD, moneda)}
+                </td>
+                <td className="px-4 py-2.5 text-right font-mono tabular-nums">
+                  {formatRD(reportePorMision.totales.totalCostoEmpresaRD, moneda)}
+                </td>
+              </tr>
+            </tfoot>
+          </table>
+        </div>
+      </div>
+
       {/* Controls */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 rounded-md border border-[#CBD5E1] bg-white p-4">
         <div className="flex flex-wrap items-center gap-2 text-xs">
@@ -470,134 +679,166 @@ export const ViaticosView: React.FC<ViaticosViewProps> = ({
             </tr>
           </thead>
           <tbody className="divide-y divide-[#E2E8F0]">
-            {viaticosFiltrados.map((v, idx) => (
-              <tr key={v.id} className={idx % 2 === 0 ? 'bg-white' : 'bg-[#F8FAFC]'}>
-                <td className="px-4 py-2.5 align-top font-mono">
-                  <div className="font-semibold text-[#0D1C2F]">{v.fechaIso}</div>
-                  <div className="text-[11px] text-[#43474D]">{v.timestampAST}</div>
-                  <div className="mt-0.5 font-sans text-[11px] text-[#43474D]">
-                    {v.creadoPorNombre}
-                  </div>
-                </td>
-                <td className="px-4 py-2.5 align-top">
-                  <div className="font-semibold text-[#0D1C2F]">{v.comercio}</div>
-                  <div className="mt-0.5 flex flex-wrap items-center gap-1.5 text-[11px] text-[#43474D]">
-                    <span className="font-medium text-[#0F2942]">{v.categoria}</span>
-                    <span>·</span>
-                    <span>{v.metodo}</span>
-                    {typeof v.distanceKm === 'number' && (
-                      <span className="inline-flex items-center gap-0.5 font-mono text-[#0284C7]">
-                        · <MapPin className="h-3 w-3" />
-                        {v.distanceKm} km
-                      </span>
-                    )}
-                  </div>
-                  {v.notas && <div className="mt-0.5 text-[11px] text-[#74777E]">{v.notas}</div>}
-                </td>
-                <td className="px-4 py-2.5 align-top">
-                  <div className="space-y-1">
-                    {v.repartos.map((r) => (
-                      <div
-                        key={r.proyectoId}
-                        className="flex items-center justify-between gap-2 text-[11px]"
-                      >
-                        <span
-                          className={`font-mono font-semibold ${
-                            r.proyectoId === 'sin_asignar' ? 'text-[#D97706]' : 'text-[#0F2942]'
-                          }`}
-                        >
-                          {proyectoNombre(r.proyectoId)}
+            {viaticosFiltrados.map((v, idx) => {
+              const mision = v.misionId ? misiones.find((m) => m.id === v.misionId) : undefined;
+              const cargoLabel = v.cargoUsado
+                ? resolverEtiquetaCargo(v.cargoUsado, cargos)
+                : undefined;
+              return (
+                <tr key={v.id} className={idx % 2 === 0 ? 'bg-white' : 'bg-[#F8FAFC]'}>
+                  <td className="px-4 py-2.5 align-top font-mono">
+                    <div className="font-semibold text-[#0D1C2F]">{v.fechaIso}</div>
+                    <div className="text-[11px] text-[#43474D]">{v.timestampAST}</div>
+                    <div className="mt-0.5 font-sans text-[11px] text-[#43474D]">
+                      {v.creadoPorNombre}
+                      {cargoLabel ? ` · ${cargoLabel}` : ''}
+                    </div>
+                  </td>
+                  <td className="px-4 py-2.5 align-top">
+                    <div className="font-semibold text-[#0D1C2F]">{v.comercio}</div>
+                    <div className="mt-0.5 flex flex-wrap items-center gap-1.5 text-[11px] text-[#43474D]">
+                      <span className="font-medium text-[#0F2942]">{v.categoria}</span>
+                      <span>·</span>
+                      <span>{v.metodo}</span>
+                      {mision && (
+                        <span className="rounded-sm bg-[#EFF6FF] px-1.5 py-0.5 font-semibold text-[#0284C7]">
+                          {mision.nombre}
                         </span>
-                        <span className="font-mono tabular-nums text-[#334155]">
-                          {formatRD(r.montoRD)}
+                      )}
+                      {typeof v.distanceKm === 'number' && (
+                        <span className="inline-flex items-center gap-0.5 font-mono text-[#0284C7]">
+                          · <MapPin className="h-3 w-3" />
+                          {v.distanceKm} km
                         </span>
+                      )}
+                    </div>
+                    {typeof v.excedenteRD === 'number' && v.excedenteRD > 0 && (
+                      <div className="mt-1 rounded-sm border border-[#FDE047] bg-[#FEF9C3]/70 px-2 py-1 text-[11px] text-[#92400E]">
+                        <strong>Excedente:</strong> {formatRD(v.excedenteRD, moneda)} (tope{' '}
+                        {formatRD(v.topeAplicadoRD ?? 0, moneda)})
+                        {v.motivoExcedente ? ` · Motivo: ${v.motivoExcedente}` : ''}
+                        {v.decisionExcedente === 'cargo_colaborador' && (
+                          <div className="font-semibold text-[#93000A]">
+                            Cargo colaborador: {formatRD(v.montoCargoColaboradorRD ?? v.excedenteRD, moneda)} · Empresa:{' '}
+                            {formatRD(v.montoAprobadoEmpresaRD ?? 0, moneda)}
+                          </div>
+                        )}
                       </div>
-                    ))}
-                  </div>
-                </td>
-                <td className="px-4 py-2.5 align-top text-right font-mono tabular-nums">
-                  <div>{formatRD(v.itbisRD)}</div>
-                  <div className="text-[11px] text-[#43474D]">{v.ncf || 'Sin NCF'}</div>
-                </td>
-                <td className="px-4 py-2.5 align-top text-right font-mono font-bold text-[#0D1C2F] tabular-nums">
-                  {formatRD(v.montoRD)}
-                </td>
-                <td className="px-4 py-2.5 align-top">
-                  <span
-                    className={`inline-block rounded-sm border px-2 py-0.5 text-[11px] font-semibold uppercase ${estadoStyle(
-                      v.estadoAprobacion
-                    )}`}
-                  >
-                    {v.estadoAprobacion}
-                  </span>
-                  {v.motivoRechazo && (
-                    <div className="mt-1 text-[11px] text-[#DC2626] max-w-[190px]">
-                      {v.motivoRechazo}
+                    )}
+                    {v.notas && <div className="mt-0.5 text-[11px] text-[#74777E]">{v.notas}</div>}
+                  </td>
+                  <td className="px-4 py-2.5 align-top">
+                    <div className="space-y-1">
+                      {v.repartos.map((r) => (
+                        <div
+                          key={r.proyectoId}
+                          className="flex items-center justify-between gap-2 text-[11px]"
+                        >
+                          <span
+                            className={`font-mono font-semibold ${
+                              r.proyectoId === 'sin_asignar' ? 'text-[#D97706]' : 'text-[#0F2942]'
+                            }`}
+                          >
+                            {proyectoNombre(r.proyectoId)}
+                          </span>
+                          <span className="font-mono tabular-nums text-[#334155]">
+                            {formatRD(r.montoRD)}
+                          </span>
+                        </div>
+                      ))}
                     </div>
-                  )}
-                  {v.motivoDecision && !v.motivoRechazo && (
-                    <div className="mt-1 text-[11px] text-[#15803D] max-w-[190px]">
-                      {v.motivoDecision}
+                  </td>
+                  <td className="px-4 py-2.5 align-top text-right font-mono tabular-nums">
+                    <div>{formatRD(v.itbisRD)}</div>
+                    <div className="text-[11px] text-[#43474D]">{v.ncf || 'Sin NCF'}</div>
+                  </td>
+                  <td className="px-4 py-2.5 align-top text-right font-mono font-bold text-[#0D1C2F] tabular-nums">
+                    <div>{formatRD(v.montoRD)}</div>
+                    {v.decisionExcedente === 'cargo_colaborador' &&
+                      typeof v.montoAprobadoEmpresaRD === 'number' && (
+                        <div className="text-[10px] font-semibold text-[#15803D]">
+                          Emp: {formatRD(v.montoAprobadoEmpresaRD)}
+                        </div>
+                      )}
+                  </td>
+                  <td className="px-4 py-2.5 align-top">
+                    <span
+                      className={`inline-block rounded-sm border px-2 py-0.5 text-[11px] font-semibold uppercase ${estadoStyle(
+                        v.estadoAprobacion
+                      )}`}
+                    >
+                      {v.estadoAprobacion}
+                    </span>
+                    {v.motivoRechazo && (
+                      <div className="mt-1 text-[11px] text-[#DC2626] max-w-[190px]">
+                        {v.motivoRechazo}
+                      </div>
+                    )}
+                    {v.motivoDecision && !v.motivoRechazo && (
+                      <div className="mt-1 text-[11px] text-[#15803D] max-w-[190px]">
+                        {v.motivoDecision}
+                      </div>
+                    )}
+                  </td>
+                  <td className="px-4 py-2.5 align-top text-right whitespace-nowrap">
+                    <div className="inline-flex items-center gap-1">
+                      {canDecide && v.estadoAprobacion !== 'aprobado' && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setModalError(null);
+                            setMotivoAprobacion(v.motivoDecision || '');
+                            setDecisionExcedente(v.decisionExcedente || 'aprobado_empresa');
+                            setAprobacionTarget(v);
+                          }}
+                          title="Aprobar viático"
+                          className="rounded-sm bg-[#15803D] px-2 py-1 text-[11px] font-semibold text-white hover:bg-[#166534]"
+                        >
+                          Aprobar
+                        </button>
+                      )}
+                      {canDecide && v.estadoAprobacion !== 'rechazado' && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setModalError(null);
+                            setRechazoTarget(v);
+                          }}
+                          title="Rechazar viático"
+                          className="rounded-sm border border-[#FCA5A5] bg-white px-2 py-1 text-[11px] font-semibold text-[#DC2626] hover:bg-[#FEE2E2]"
+                        >
+                          Rechazar
+                        </button>
+                      )}
+                      {canDecide && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setModalError(null);
+                            setRepartoTarget(v);
+                            setRepartoEdicion(v.repartos.map((r) => ({ ...r })));
+                          }}
+                          title="Editar reparto por proyecto"
+                          className="rounded-sm border border-[#CBD5E1] bg-white p-1.5 text-[#0F2942] hover:bg-[#F8FAFC]"
+                        >
+                          <Split className="h-3.5 w-3.5" />
+                        </button>
+                      )}
+                      {(canDecide || v.estadoAprobacion === 'pendiente') && (
+                        <button
+                          type="button"
+                          onClick={() => onEliminarViatico(v.id)}
+                          title="Eliminar viático"
+                          className="rounded-sm p-1.5 text-[#DC2626] hover:bg-[#FEE2E2]"
+                        >
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </button>
+                      )}
                     </div>
-                  )}
-                </td>
-                <td className="px-4 py-2.5 align-top text-right whitespace-nowrap">
-                  <div className="inline-flex items-center gap-1">
-                    {canDecide && v.estadoAprobacion !== 'aprobado' && (
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setModalError(null);
-                          setMotivoAprobacion(v.motivoDecision || '');
-                          setAprobacionTarget(v);
-                        }}
-                        title="Aprobar viático"
-                        className="rounded-sm bg-[#15803D] px-2 py-1 text-[11px] font-semibold text-white hover:bg-[#166534]"
-                      >
-                        Aprobar
-                      </button>
-                    )}
-                    {canDecide && v.estadoAprobacion !== 'rechazado' && (
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setModalError(null);
-                          setRechazoTarget(v);
-                        }}
-                        title="Rechazar viático"
-                        className="rounded-sm border border-[#FCA5A5] bg-white px-2 py-1 text-[11px] font-semibold text-[#DC2626] hover:bg-[#FEE2E2]"
-                      >
-                        Rechazar
-                      </button>
-                    )}
-                    {canDecide && (
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setModalError(null);
-                          setRepartoTarget(v);
-                          setRepartoEdicion(v.repartos.map((r) => ({ ...r })));
-                        }}
-                        title="Editar reparto por proyecto"
-                        className="rounded-sm border border-[#CBD5E1] bg-white p-1.5 text-[#0F2942] hover:bg-[#F8FAFC]"
-                      >
-                        <Split className="h-3.5 w-3.5" />
-                      </button>
-                    )}
-                    {(canDecide || v.estadoAprobacion === 'pendiente') && (
-                      <button
-                        type="button"
-                        onClick={() => onEliminarViatico(v.id)}
-                        title="Eliminar viático"
-                        className="rounded-sm p-1.5 text-[#DC2626] hover:bg-[#FEE2E2]"
-                      >
-                        <Trash2 className="h-3.5 w-3.5" />
-                      </button>
-                    )}
-                  </div>
-                </td>
-              </tr>
-            ))}
+                  </td>
+                </tr>
+              );
+            })}
           </tbody>
         </table>
         {viaticosFiltrados.length === 0 && (
@@ -638,6 +879,18 @@ export const ViaticosView: React.FC<ViaticosViewProps> = ({
               </span>
             </div>
 
+            {typeof v.excedenteRD === 'number' && v.excedenteRD > 0 && (
+              <div className="rounded-sm border border-[#FDE047] bg-[#FEF9C3]/70 px-2.5 py-1.5 text-[11px] text-[#92400E]">
+                <strong>Excedente:</strong> {formatRD(v.excedenteRD, moneda)}
+                {v.motivoExcedente ? ` · ${v.motivoExcedente}` : ''}
+                {v.decisionExcedente === 'cargo_colaborador' && (
+                  <div className="font-semibold text-[#93000A]">
+                    Cargo colaborador: {formatRD(v.montoCargoColaboradorRD ?? v.excedenteRD, moneda)}
+                  </div>
+                )}
+              </div>
+            )}
+
             {v.motivoRechazo && (
               <div className="rounded-sm border border-[#FCA5A5] bg-[#FEE2E2]/60 px-2.5 py-1.5 text-[11px] text-[#93000A]">
                 Motivo rechazo: {v.motivoRechazo}
@@ -650,30 +903,35 @@ export const ViaticosView: React.FC<ViaticosViewProps> = ({
             )}
 
             {canDecide ? (
-              <div className="grid grid-cols-4 gap-2 pt-1">
-                <button
-                  type="button"
-                  onClick={() => {
-                    setModalError(null);
-                    setMotivoAprobacion(v.motivoDecision || '');
-                    setAprobacionTarget(v);
-                  }}
-                  className="inline-flex items-center justify-center gap-1 rounded-sm bg-[#15803D] py-2 text-xs font-semibold text-white min-h-[40px]"
-                >
-                  <CheckCircle2 className="h-3.5 w-3.5" />
-                  Aprobar
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setModalError(null);
-                    setRechazoTarget(v);
-                  }}
-                  className="inline-flex items-center justify-center gap-1 rounded-sm border border-[#FCA5A5] bg-white py-2 text-xs font-semibold text-[#DC2626] min-h-[40px]"
-                >
-                  <XCircle className="h-3.5 w-3.5" />
-                  Rechazar
-                </button>
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 pt-1">
+                {v.estadoAprobacion !== 'aprobado' && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setModalError(null);
+                      setMotivoAprobacion(v.motivoDecision || '');
+                      setDecisionExcedente(v.decisionExcedente || 'aprobado_empresa');
+                      setAprobacionTarget(v);
+                    }}
+                    className="inline-flex items-center justify-center gap-1 rounded-sm bg-[#15803D] py-2 text-xs font-semibold text-white min-h-[40px]"
+                  >
+                    <CheckCircle2 className="h-3.5 w-3.5" />
+                    Aprobar
+                  </button>
+                )}
+                {v.estadoAprobacion !== 'rechazado' && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setModalError(null);
+                      setRechazoTarget(v);
+                    }}
+                    className="inline-flex items-center justify-center gap-1 rounded-sm border border-[#FCA5A5] bg-white py-2 text-xs font-semibold text-[#DC2626] min-h-[40px]"
+                  >
+                    <XCircle className="h-3.5 w-3.5" />
+                    Rechazar
+                  </button>
+                )}
                 <button
                   type="button"
                   onClick={() => {
@@ -714,13 +972,13 @@ export const ViaticosView: React.FC<ViaticosViewProps> = ({
         ))}
       </div>
 
-      {/* Modal Aprobar Viático (F12 con motivo opcional auditado) */}
+      {/* Modal Aprobar Viático (F12 + decisión de excedente B2) */}
       {aprobacionTarget && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-[#0F2942]/65 p-4">
           <div className="w-full max-w-md rounded-md border border-[#CBD5E1] bg-white p-5 space-y-4 shadow-xl">
             <div className="flex items-center justify-between border-b border-[#E2E8F0] pb-3">
               <h3 className="text-sm font-bold text-[#0D1C2F]">
-                Aprobar Viático ({formatRD(aprobacionTarget.montoRD)})
+                Aprobar Viático ({formatRD(aprobacionTarget.montoRD, moneda)})
               </h3>
               <button
                 type="button"
@@ -747,12 +1005,70 @@ export const ViaticosView: React.FC<ViaticosViewProps> = ({
                     .join(' · ')}
                 </div>
               </div>
+
+              {(aprobacionTarget.excedenteRD ?? 0) > 0 && (
+                <div className="rounded-sm border border-[#FCA5A5] bg-[#FEF2F2] p-3 space-y-2.5 text-[11px] text-[#93000A]">
+                  <div className="flex items-start gap-2 font-semibold">
+                    <AlertTriangle className="h-4 w-4 shrink-0 mt-0.5" />
+                    <span>
+                      Este viático excede el tope de misión (
+                      {formatRD(aprobacionTarget.topeAplicadoRD ?? 0, moneda)}) por{' '}
+                      <strong>{formatRD(aprobacionTarget.excedenteRD ?? 0, moneda)}</strong>.
+                    </span>
+                  </div>
+                  {aprobacionTarget.motivoExcedente && (
+                    <div className="text-[#334155]">
+                      <strong>Motivo reportado:</strong> {aprobacionTarget.motivoExcedente}
+                    </div>
+                  )}
+                  <div className="space-y-1.5 pt-1 text-[#0D1C2F]">
+                    <label className="flex items-start gap-2 cursor-pointer">
+                      <input
+                        type="radio"
+                        name="decisionExcedente"
+                        checked={decisionExcedente === 'aprobado_empresa'}
+                        onChange={() => setDecisionExcedente('aprobado_empresa')}
+                        className="mt-0.5 accent-[#0F2942]"
+                      />
+                      <span>
+                        <strong>Aprobar excedente (cubre empresa):</strong> se imputa el total de{' '}
+                        {formatRD(aprobacionTarget.montoRD, moneda)} a proyectos.
+                      </span>
+                    </label>
+                    <label className="flex items-start gap-2 cursor-pointer">
+                      <input
+                        type="radio"
+                        name="decisionExcedente"
+                        checked={decisionExcedente === 'cargo_colaborador'}
+                        onChange={() => setDecisionExcedente('cargo_colaborador')}
+                        className="mt-0.5 accent-[#0F2942]"
+                      />
+                      <span>
+                        <strong>Cargar excedente al colaborador:</strong> la empresa solo cubre{' '}
+                        {formatRD(
+                          Math.max(
+                            0,
+                            aprobacionTarget.montoRD - (aprobacionTarget.excedenteRD ?? 0)
+                          ),
+                          moneda
+                        )}{' '}
+                        y {formatRD(aprobacionTarget.excedenteRD ?? 0, moneda)} queda a cargo de la
+                        persona (excluido de proyectos).
+                      </span>
+                    </label>
+                  </div>
+                </div>
+              )}
+
               <div>
                 <label className="block font-semibold text-[#334155] mb-1">
-                  Motivo / Observación de aprobación (opcional para auditoría)
+                  {(aprobacionTarget.excedenteRD ?? 0) > 0
+                    ? 'Motivo de decisión sobre el excedente (obligatorio, mín. 4 caracteres)'
+                    : 'Motivo / Observación de aprobación (opcional para auditoría)'}
                 </label>
                 <textarea
                   rows={2}
+                  required={(aprobacionTarget.excedenteRD ?? 0) > 0}
                   value={motivoAprobacion}
                   onChange={(e) => setMotivoAprobacion(e.target.value)}
                   placeholder="Ej. Comprobante fiscal verificado contra cálculo de ruta GPS..."
@@ -844,7 +1160,12 @@ export const ViaticosView: React.FC<ViaticosViewProps> = ({
                   Reparto Exacto a Proyectos — {repartoTarget.comercio}
                 </h3>
                 <p className="text-xs text-[#43474D]">
-                  Total del comprobante: <strong>{formatRD(repartoTarget.montoRD)}</strong>
+                  Total imputable a proyectos: <strong>{formatRD(montoObjetivoReparto, moneda)}</strong>
+                  {repartoTarget.decisionExcedente === 'cargo_colaborador' && (
+                    <span className="ml-1 text-[#93000A]">
+                      (excedente de {formatRD(repartoTarget.montoCargoColaboradorRD ?? 0, moneda)} a cargo del colaborador)
+                    </span>
+                  )}
                 </p>
               </div>
               <button
@@ -913,12 +1234,12 @@ export const ViaticosView: React.FC<ViaticosViewProps> = ({
                 <span>Asignado: {formatRD(sumaRepartoActual)}</span>
                 <span
                   className={
-                    Math.round((repartoTarget.montoRD - sumaRepartoActual) * 100) === 0
+                    Math.round((montoObjetivoReparto - sumaRepartoActual) * 100) === 0
                       ? 'font-bold text-[#15803D]'
                       : 'font-bold text-[#DC2626]'
                   }
                 >
-                  Diferencia: {formatRD(repartoTarget.montoRD - sumaRepartoActual)}
+                  Diferencia: {formatRD(montoObjetivoReparto - sumaRepartoActual)}
                 </span>
               </div>
 
@@ -939,7 +1260,7 @@ export const ViaticosView: React.FC<ViaticosViewProps> = ({
                   type="button"
                   onClick={() =>
                     setRepartoEdicion(
-                      completarRepartoConSinAsignar(repartoTarget.montoRD, repartoEdicion)
+                      completarRepartoConSinAsignar(montoObjetivoReparto, repartoEdicion)
                     )
                   }
                   className="rounded-sm bg-[#FEF3C7] px-2.5 py-1.5 font-semibold text-[#A16207]"
