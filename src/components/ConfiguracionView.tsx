@@ -1108,12 +1108,12 @@ export const ConfiguracionView: React.FC<ConfiguracionViewProps> = ({
                       className="mt-1 w-full px-3 py-2 border border-slate-300 rounded-lg bg-white disabled:bg-slate-50"
                     >
                       {FUENTES_KM_RENDIMIENTO.map((f) => (
-                        <option key={f} value={f}>
+                        <option key={f} value={f} disabled={f !== 'ruta_asignada'}>
                           {f === 'ruta_asignada'
-                            ? 'Ruta asignada (ida y vuelta)'
+                            ? 'Ruta asignada (según GPS Ruta)'
                             : f === 'bitacora'
-                            ? 'Bitácora de campo'
-                            : 'Captura manual'}
+                            ? 'Bitácora de campo (Próximamente)'
+                            : 'Captura manual (Próximamente)'}
                         </option>
                       ))}
                     </select>

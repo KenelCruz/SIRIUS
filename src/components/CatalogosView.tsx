@@ -42,6 +42,7 @@ import type {
   Personal,
   Proyecto,
   ReglaRendimientoFlotaVersion,
+  ReglasViaticosVersion,
   Renta,
   RentaRecursoTipo,
   RepartoProyecto,
@@ -76,6 +77,7 @@ interface CatalogosViewProps {
   bitacoras?: BitacoraEntrada[];
   rentas?: Renta[];
   rendimientoConfig?: ReglaRendimientoFlotaVersion | null;
+  reglasViaticos?: ReglasViaticosVersion | null;
   usuarioActual?: { id: string; nombre: string };
   moneda?: string;
   onCrearCliente: (datos: Omit<Cliente, 'id' | 'empresaId'>) => Promise<void>;
@@ -119,6 +121,7 @@ export const CatalogosView: React.FC<CatalogosViewProps> = ({
   bitacoras = [],
   rentas = [],
   rendimientoConfig,
+  reglasViaticos,
   usuarioActual,
   moneda = 'RD$',
   onCrearCliente,
@@ -218,6 +221,7 @@ export const CatalogosView: React.FC<CatalogosViewProps> = ({
   const fuenteKmActiva = rendimientoConfig?.fuenteKm ?? 'ruta_asignada';
   const umbralAlertaPct = rendimientoConfig?.umbralAlertaPct ?? 15;
   const umbralCercaniaKm = rendimientoConfig?.umbralCercaniaRentaKm ?? 30;
+  const conceptoDistanciaActivo = reglasViaticos?.gpsRuta.conceptoDistancia ?? 'ida_vuelta';
 
   const resumenRendimiento = useMemo(
     () =>
@@ -230,8 +234,19 @@ export const CatalogosView: React.FC<CatalogosViewProps> = ({
         kmManualPorVehiculo,
         fuenteKm: fuenteKmActiva,
         umbralAlertaPct,
+        conceptoDistancia: conceptoDistanciaActivo,
       }),
-    [vehiculos, viaticos, asignaciones, rutas, bitacoras, kmManualPorVehiculo, fuenteKmActiva, umbralAlertaPct]
+    [
+      vehiculos,
+      viaticos,
+      asignaciones,
+      rutas,
+      bitacoras,
+      kmManualPorVehiculo,
+      fuenteKmActiva,
+      umbralAlertaPct,
+      conceptoDistanciaActivo,
+    ]
   );
 
   const totalesRentaPreview = useMemo(
@@ -719,12 +734,12 @@ export const CatalogosView: React.FC<CatalogosViewProps> = ({
                   Fuente km:{' '}
                   <strong className="text-[#0F2942]">
                     {fuenteKmActiva === 'ruta_asignada'
-                      ? 'Rutas asignadas (ida y vuelta)'
+                      ? `Rutas asignadas (${conceptoDistanciaActivo === 'solo_ida' ? 'solo ida' : 'ida y vuelta'})`
                       : fuenteKmActiva === 'bitacora'
-                      ? 'Bitácora de campo'
-                      : 'Km manuales'}
+                      ? 'Bitácora de campo (Próximamente)'
+                      : 'Km manuales (Próximamente)'}
                   </strong>{' '}
-                  · Alerta si desviación &gt; {umbralAlertaPct}% (mínimo 3 cargas aprobadas).
+                  · Ventana 90 días · Alerta si cae &gt; {umbralAlertaPct}% por debajo del teórico (mínimo 3 cargas aprobadas).
                 </span>
               </div>
             </div>
@@ -861,12 +876,14 @@ export const CatalogosView: React.FC<CatalogosViewProps> = ({
                                 ? 'border-[#CBD5E1] bg-white text-[#475569]'
                                 : rend.alerta
                                 ? 'border-[#FCA5A5] bg-[#FEE2E2] text-[#93000A]'
+                                : rend.estado === 'mejor_que_esperado'
+                                ? 'border-[#7DD3FC] bg-[#F0F9FF] text-[#0369A1]'
                                 : 'border-[#86EFAC] bg-[#F0FDF4] text-[#15803D]'
                             }`}
                           >
                             {rend.alerta ? (
                               <AlertTriangle className="h-3 w-3" />
-                            ) : rend.estado === 'normal' ? (
+                            ) : rend.estado === 'normal' || rend.estado === 'mejor_que_esperado' ? (
                               <CheckCircle2 className="h-3 w-3" />
                             ) : null}
                             {rend.etiqueta}

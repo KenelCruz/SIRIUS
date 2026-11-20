@@ -1614,6 +1614,7 @@ export default function App() {
                 bitacoras={snapshot.bitacoras}
                 rentas={snapshot.rentas}
                 rendimientoConfig={rendimientoFlotaVigente}
+                reglasViaticos={reglasViaticosVigentes}
                 usuarioActual={sesion.usuario}
                 moneda={snapshot.empresa.moneda}
                 onCrearCliente={async (datos) => {

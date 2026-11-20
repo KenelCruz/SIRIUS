@@ -944,6 +944,12 @@ export function validarNuevaVigenciaRendimientoFlota(
   if (!FUENTES_KM_RENDIMIENTO.includes(nueva.fuenteKm)) {
     return { valido: false, error: 'La fuente de kilómetros seleccionada no es válida.' };
   }
+  if (nueva.fuenteKm !== 'ruta_asignada') {
+    return {
+      valido: false,
+      error: 'Esta fuente de kilómetros estará disponible próximamente.',
+    };
+  }
   if (!Number.isFinite(nueva.umbralAlertaPct) || nueva.umbralAlertaPct <= 0) {
     return { valido: false, error: 'El umbral de alerta de rendimiento (%) debe ser mayor que 0.' };
   }
