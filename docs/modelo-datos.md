@@ -442,13 +442,15 @@ $$;
 
 Políticas base:
 - **Todas las tablas multi-tenant** habilitan `alter table ... enable row level security;`.
-- **`admin`**: lectura/escritura completa en su `empresa_id`, incluidas `empresas`, `membresias_empresa`, `cargos_empresa`, `configuracion_empresa`, `tarifas`, `topes_viatico`, `misiones`, `rentas`, `renta_repartos` y `onboarding_empresa`. Los campos de suscripción (`plan_mensual_rd`, `estado_suscripcion`) se protegen mediante trigger/privilegios de servidor para que no puedan alterarse desde el cliente. Un viático en estado `'aprobado'` es inmutable en edición para todos los roles (incluido `admin`).
+- **Inmutabilidad de viáticos**: únicamente los viáticos en estado `'pendiente'` pueden decidirse (`aprobado` o `rechazado`), editarse, redistribuirse (`viatico_repartos`) o eliminarse (según permisos). El estado `'pendiente'` no es un destino válido de decisión. Un viático `'aprobado'` es inmutable para todos los roles (incluidos `admin` y `coordinador`; si `decision_excedente = 'cargo_colaborador'`, sus repartos quedan escalados al monto asumido por la empresa), y un viático `'rechazado'` es de solo lectura. Cualquier corrección posterior se manejará mediante un nuevo registro de ajuste en una fase futura.
+- **Inmutabilidad de rentas cerradas**: las rentas en estado `'finalizada'` o `'cancelada'` son de solo lectura y no admiten modificaciones posteriores; solo las rentas `'reservada'` o `'activa'` pueden editarse.
+- **`admin`**: lectura/escritura completa en su `empresa_id`, incluidas `empresas`, `membresias_empresa`, `cargos_empresa`, `configuracion_empresa`, `tarifas`, `topes_viatico`, `misiones`, `rentas`, `renta_repartos` y `onboarding_empresa`. Los campos de suscripción (`plan_mensual_rd`, `estado_suscripcion`) se protegen mediante trigger/privilegios de servidor para que no puedan alterarse desde el cliente.
 - **`coordinador`**:
-  - Lectura/escritura operativa en su `empresa_id` (`clientes`, `proyectos`, `rutas`, `servicios`, `asignaciones`, `misiones`, `rentas`, `renta_repartos`, `personal`, `vehiculos`, `equipos_gnss`, `cuadrillas`, `viaticos`, `viatico_repartos`, `historial_eventos`).
+  - Lectura/escritura operativa en su `empresa_id` (`clientes`, `proyectos`, `rutas`, `servicios`, `asignaciones`, `misiones`, `rentas`, `renta_repartos`, `personal`, `vehiculos`, `equipos_gnss`, `cuadrillas`, `viaticos`, `viatico_repartos`, `historial_eventos`), sujeto a las reglas de inmutabilidad de viáticos decididos y rentas cerradas.
   - Solo lectura (`SELECT`) sobre `cargos_empresa`, `configuracion_empresa`, `topes_viatico` y `tarifas` para servicios, terreno, combustibles y rendimiento de flota; sin escritura en configuración ni onboarding.
 - **`tecnico`**:
   - `SELECT` en `rutas`, `misiones` (solo las asociadas a sus rutas asignadas), `servicios`, `bitacoras` filtrado por `app_es_ruta_asignada_a_usuario(ruta_id)`.
   - `UPDATE` en `servicios` restringido a cambios `programado -> en_campo -> procesando` en rutas asignadas.
   - `INSERT` en `bitacoras` únicamente sobre servicios en rutas asignadas.
-  - `SELECT` / `INSERT` en `viaticos` donde `creado_por_usuario_id = auth.uid()` (con validación de vinculación a `personal`); sin permisos de aprobación/rechazo ni edición o eliminación de aprobados.
+  - `SELECT` / `INSERT` en `viaticos` donde `creado_por_usuario_id = auth.uid()` (con validación de vinculación a `personal`); sin permisos de aprobación/rechazo ni edición o eliminación de aprobados/rechazados.
   - `SELECT` únicamente sobre `cargos_empresa` (etiquetas activas) y proyección segura de reglas no financieras de captura (`gpsRuta`, presets rápidos y topes propios del cargo del usuario). Sin acceso a `rentas`, `tarifas` de servicios/combustible ni `onboarding_empresa`.

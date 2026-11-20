@@ -379,11 +379,16 @@ describe('Viáticos, reparto exacto a proyectos y LWW sync', () => {
 
   it('Exige motivo al rechazar un viático y excluye rechazados del gasto real', () => {
     expect(
-      validarDecisionViatico({ rol: 'coordinador', nuevoEstado: 'rechazado', motivoRechazo: '' })
-        .valido
+      validarDecisionViatico({
+        estadoActual: 'pendiente',
+        rol: 'coordinador',
+        nuevoEstado: 'rechazado',
+        motivoRechazo: '',
+      }).valido
     ).toBe(false);
     expect(
       validarDecisionViatico({
+        estadoActual: 'pendiente',
         rol: 'coordinador',
         nuevoEstado: 'rechazado',
         motivoRechazo: 'Factura duplicada sin NCF',

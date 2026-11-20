@@ -27,7 +27,9 @@ import {
   sumarDiasIso,
   validarCargoConfig,
   validarDecisionViatico,
+  validarEdicionRenta,
   validarEdicionViatico,
+  validarEliminacionViatico,
   validarEliminacionViaticoTecnico,
   validarEliminarCargo,
   validarEmpresaConfig,
@@ -40,6 +42,7 @@ import {
   validarNuevoServicioCatalogo,
   validarNuevoTipoCombustible,
   validarRangoFechas,
+  validarRedistribucionViatico,
   validarRenta,
   validarRepartoViatico,
   validarResolucionConflictos,
@@ -1912,12 +1915,17 @@ export class LocalRepositorioOperacion implements RepositorioOperacion {
     repartos: RepartoProyecto[]
   ): Promise<Viatico> {
     const sesion = this.obtenerSesionRequerida();
-    if (!puedeAprobarViatico(sesion.rolActivo)) {
-      throw new Error('Solo Coordinador o Admin pueden redistribuir el reparto a proyectos.');
-    }
     const snap = this.obtenerSnapshot(empresaId);
     const viatico = snap.viaticos.find((v) => v.id === viaticoId);
     if (!viatico) throw new Error('Viático no encontrado.');
+
+    const checkRedist = validarRedistribucionViatico({
+      viatico,
+      rol: sesion.rolActivo,
+    });
+    if (!checkRedist.valido) {
+      throw new Error(checkRedist.error);
+    }
 
     const montoBaseReparto = viatico.montoAprobadoEmpresaRD ?? viatico.montoRD;
     const check = validarRepartoViatico(montoBaseReparto, repartos);
@@ -1977,6 +1985,7 @@ export class LocalRepositorioOperacion implements RepositorioOperacion {
     if (!viatico) throw new Error('Viático no encontrado.');
 
     const check = validarDecisionViatico({
+      estadoActual: viatico.estadoAprobacion,
       rol: sesion.rolActivo,
       nuevoEstado: params.nuevoEstado,
       motivoRechazo: params.motivoRechazo,
@@ -2168,6 +2177,10 @@ export class LocalRepositorioOperacion implements RepositorioOperacion {
     const snap = this.obtenerSnapshot(empresaId);
     const target = snap.viaticos.find((v) => v.id === viaticoId);
     if (!target) return;
+    const checkEstado = validarEliminacionViatico(target);
+    if (!checkEstado.valido) {
+      throw new Error(checkEstado.error);
+    }
     if (sesion.rolActivo === 'tecnico') {
       const checkElim = validarEliminacionViaticoTecnico(target, sesion.usuario.id);
       if (!checkElim.valido) {
@@ -2234,9 +2247,17 @@ export class LocalRepositorioOperacion implements RepositorioOperacion {
       throw new Error(checkDatos.error || 'Datos de renta inválidos.');
     }
     const snap = this.obtenerSnapshot(empresaId);
+    const rentaId = datos.id || `rent-${Date.now()}-${Math.random().toString(36).slice(2, 5)}`;
+    const existente = (snap.rentas ?? []).find((r) => r.id === rentaId);
+    if (existente) {
+      const checkEdicionRenta = validarEdicionRenta(existente);
+      if (!checkEdicionRenta.valido) {
+        throw new Error(checkEdicionRenta.error);
+      }
+    }
+
     const config = asegurarConfiguracionEmpresa(empresaId, snap.configuracion);
     const umbralKm = obtenerRendimientoConfigVigente(config, datos.fechaInicio).umbralCercaniaRentaKm;
-    const rentaId = datos.id || `rent-${Date.now()}-${Math.random().toString(36).slice(2, 5)}`;
 
     const conflictos = detectarConflictosRenta({
       candidata: {
@@ -2270,7 +2291,6 @@ export class LocalRepositorioOperacion implements RepositorioOperacion {
         : snap.equipos.find((e) => e.id === datos.recursoId)?.nombre) ||
       datos.recursoId;
 
-    const existente = (snap.rentas ?? []).find((r) => r.id === rentaId);
     const guardada: Renta = {
       ...datos,
       id: rentaId,

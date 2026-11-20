@@ -782,49 +782,47 @@ export const ViaticosView: React.FC<ViaticosViewProps> = ({
                   </td>
                   <td className="px-4 py-2.5 align-top text-right whitespace-nowrap">
                     <div className="inline-flex items-center gap-1">
-                      {canDecide && v.estadoAprobacion !== 'aprobado' && (
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setModalError(null);
-                            setMotivoAprobacion(v.motivoDecision || '');
-                            setDecisionExcedente(v.decisionExcedente || 'aprobado_empresa');
-                            setAprobacionTarget(v);
-                          }}
-                          title="Aprobar viático"
-                          className="rounded-sm bg-[#15803D] px-2 py-1 text-[11px] font-semibold text-white hover:bg-[#166534]"
-                        >
-                          Aprobar
-                        </button>
+                      {canDecide && v.estadoAprobacion === 'pendiente' && (
+                        <>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setModalError(null);
+                              setMotivoAprobacion(v.motivoDecision || '');
+                              setDecisionExcedente(v.decisionExcedente || 'aprobado_empresa');
+                              setAprobacionTarget(v);
+                            }}
+                            title="Aprobar viático"
+                            className="rounded-sm bg-[#15803D] px-2 py-1 text-[11px] font-semibold text-white hover:bg-[#166534]"
+                          >
+                            Aprobar
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setModalError(null);
+                              setRechazoTarget(v);
+                            }}
+                            title="Rechazar viático"
+                            className="rounded-sm border border-[#FCA5A5] bg-white px-2 py-1 text-[11px] font-semibold text-[#DC2626] hover:bg-[#FEE2E2]"
+                          >
+                            Rechazar
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setModalError(null);
+                              setRepartoTarget(v);
+                              setRepartoEdicion(v.repartos.map((r) => ({ ...r })));
+                            }}
+                            title="Editar reparto por proyecto"
+                            className="rounded-sm border border-[#CBD5E1] bg-white p-1.5 text-[#0F2942] hover:bg-[#F8FAFC]"
+                          >
+                            <Split className="h-3.5 w-3.5" />
+                          </button>
+                        </>
                       )}
-                      {canDecide && v.estadoAprobacion !== 'rechazado' && (
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setModalError(null);
-                            setRechazoTarget(v);
-                          }}
-                          title="Rechazar viático"
-                          className="rounded-sm border border-[#FCA5A5] bg-white px-2 py-1 text-[11px] font-semibold text-[#DC2626] hover:bg-[#FEE2E2]"
-                        >
-                          Rechazar
-                        </button>
-                      )}
-                      {canDecide && (
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setModalError(null);
-                            setRepartoTarget(v);
-                            setRepartoEdicion(v.repartos.map((r) => ({ ...r })));
-                          }}
-                          title="Editar reparto por proyecto"
-                          className="rounded-sm border border-[#CBD5E1] bg-white p-1.5 text-[#0F2942] hover:bg-[#F8FAFC]"
-                        >
-                          <Split className="h-3.5 w-3.5" />
-                        </button>
-                      )}
-                      {(canDecide || v.estadoAprobacion === 'pendiente') && (
+                      {v.estadoAprobacion === 'pendiente' && (
                         <button
                           type="button"
                           onClick={() => onEliminarViatico(v.id)}
@@ -902,9 +900,9 @@ export const ViaticosView: React.FC<ViaticosViewProps> = ({
               </div>
             )}
 
-            {canDecide ? (
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 pt-1">
-                {v.estadoAprobacion !== 'aprobado' && (
+            {v.estadoAprobacion === 'pendiente' &&
+              (canDecide ? (
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 pt-1">
                   <button
                     type="button"
                     onClick={() => {
@@ -918,8 +916,6 @@ export const ViaticosView: React.FC<ViaticosViewProps> = ({
                     <CheckCircle2 className="h-3.5 w-3.5" />
                     Aprobar
                   </button>
-                )}
-                {v.estadoAprobacion !== 'rechazado' && (
                   <button
                     type="button"
                     onClick={() => {
@@ -931,31 +927,29 @@ export const ViaticosView: React.FC<ViaticosViewProps> = ({
                     <XCircle className="h-3.5 w-3.5" />
                     Rechazar
                   </button>
-                )}
-                <button
-                  type="button"
-                  onClick={() => {
-                    setModalError(null);
-                    setRepartoTarget(v);
-                    setRepartoEdicion(v.repartos.map((r) => ({ ...r })));
-                  }}
-                  className="inline-flex items-center justify-center gap-1 rounded-sm border border-[#CBD5E1] bg-white py-2 text-xs font-semibold text-[#0F2942] min-h-[40px]"
-                >
-                  <Split className="h-3.5 w-3.5" />
-                  Repartir
-                </button>
-                <button
-                  type="button"
-                  onClick={() => onEliminarViatico(v.id)}
-                  title="Eliminar viático"
-                  className="inline-flex items-center justify-center gap-1 rounded-sm border border-[#FCA5A5] bg-white py-2 text-xs font-semibold text-[#DC2626] min-h-[40px]"
-                >
-                  <Trash2 className="h-3.5 w-3.5" />
-                  Borrar
-                </button>
-              </div>
-            ) : (
-              v.estadoAprobacion === 'pendiente' && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setModalError(null);
+                      setRepartoTarget(v);
+                      setRepartoEdicion(v.repartos.map((r) => ({ ...r })));
+                    }}
+                    className="inline-flex items-center justify-center gap-1 rounded-sm border border-[#CBD5E1] bg-white py-2 text-xs font-semibold text-[#0F2942] min-h-[40px]"
+                  >
+                    <Split className="h-3.5 w-3.5" />
+                    Repartir
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => onEliminarViatico(v.id)}
+                    title="Eliminar viático"
+                    className="inline-flex items-center justify-center gap-1 rounded-sm border border-[#FCA5A5] bg-white py-2 text-xs font-semibold text-[#DC2626] min-h-[40px]"
+                  >
+                    <Trash2 className="h-3.5 w-3.5" />
+                    Borrar
+                  </button>
+                </div>
+              ) : (
                 <div className="flex justify-end pt-1">
                   <button
                     type="button"
@@ -966,8 +960,7 @@ export const ViaticosView: React.FC<ViaticosViewProps> = ({
                     Eliminar pendiente
                   </button>
                 </div>
-              )
-            )}
+              ))}
           </div>
         ))}
       </div>

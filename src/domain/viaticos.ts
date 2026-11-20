@@ -341,7 +341,40 @@ export function validarEdicionViatico(params: {
   return { valido: true };
 }
 
+export function validarRedistribucionViatico(params: {
+  viatico: Pick<Viatico, 'estadoAprobacion'>;
+  rol: RolEmpresa;
+}): { valido: boolean; error?: string } {
+  const { viatico, rol } = params;
+  if (viatico.estadoAprobacion !== 'pendiente') {
+    return {
+      valido: false,
+      error: 'Este viático ya fue revisado y su reparto no puede modificarse.',
+    };
+  }
+  if (rol !== 'admin' && rol !== 'coordinador') {
+    return {
+      valido: false,
+      error: 'Solo Coordinador o Admin pueden redistribuir el reparto a proyectos.',
+    };
+  }
+  return { valido: true };
+}
+
+export function validarEliminacionViatico(
+  viatico: Pick<Viatico, 'estadoAprobacion'>
+): { valido: boolean; error?: string } {
+  if (viatico.estadoAprobacion !== 'pendiente') {
+    return {
+      valido: false,
+      error: 'Un viático aprobado o rechazado no puede eliminarse. Si fue un error, regístralo como ajuste.',
+    };
+  }
+  return { valido: true };
+}
+
 export function validarDecisionViatico(params: {
+  estadoActual: EstadoAprobacionViatico;
   rol: RolEmpresa;
   nuevoEstado: EstadoAprobacionViatico;
   motivoRechazo?: string;
@@ -350,6 +383,7 @@ export function validarDecisionViatico(params: {
   decisionExcedente?: DecisionExcedenteViatico;
 }): { valido: boolean; error?: string } {
   const {
+    estadoActual,
     rol,
     nuevoEstado,
     motivoRechazo,
@@ -357,6 +391,18 @@ export function validarDecisionViatico(params: {
     excedenteRD = 0,
     decisionExcedente,
   } = params;
+  if (estadoActual !== 'pendiente') {
+    return {
+      valido: false,
+      error: 'Este viático ya fue revisado y no puede decidirse de nuevo.',
+    };
+  }
+  if (nuevoEstado === 'pendiente') {
+    return {
+      valido: false,
+      error: 'Un viático no puede devolverse a pendiente. Si hubo un error, regístralo como ajuste.',
+    };
+  }
   if (rol !== 'admin' && rol !== 'coordinador') {
     return { valido: false, error: 'Solo Admin o Coordinador pueden aprobar o rechazar viáticos.' };
   }

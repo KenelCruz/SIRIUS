@@ -428,6 +428,17 @@ describe('Flujos Admin y Coordinador (F2 a F16) — SIRIUS', () => {
       saldoRD: 5000,
     });
 
+    // Redistribuir reparto en viático pendiente (via-3) exige suma exacta (4400)
+    await expect(
+      repo.actualizarRepartoViatico('emp-aia', 'via-3', [{ proyectoId: 'proy-1', montoRD: 4000 }])
+    ).rejects.toThrow(/igualar exactamente/i);
+
+    const viaRepartido = await repo.actualizarRepartoViatico('emp-aia', 'via-3', [
+      { proyectoId: 'proy-1', montoRD: 4100 },
+      { proyectoId: 'sin_asignar', montoRD: 300 },
+    ]);
+    expect(viaRepartido.repartos).toHaveLength(2);
+
     // En repositorio: aprobar viático pendiente con motivoDecision y verificar auditoría
     const viaAprobado = await repo.decidirViatico({
       empresaId: 'emp-aia',
@@ -439,16 +450,13 @@ describe('Flujos Admin y Coordinador (F2 a F16) — SIRIUS', () => {
     expect(viaAprobado.estadoAprobacion).toBe('aprobado');
     expect(viaAprobado.motivoDecision).toBe('Dieta validada contra bitácora de brigada');
 
-    // Redistribuir reparto en via-1 exige suma exacta (4500)
+    // Un viático ya aprobado (via-1) no puede redistribuirse
     await expect(
-      repo.actualizarRepartoViatico('emp-aia', 'via-1', [{ proyectoId: 'proy-1', montoRD: 4000 }])
-    ).rejects.toThrow(/igualar exactamente/i);
-
-    const viaRepartido = await repo.actualizarRepartoViatico('emp-aia', 'via-1', [
-      { proyectoId: 'proy-1', montoRD: 4200 },
-      { proyectoId: 'sin_asignar', montoRD: 300 },
-    ]);
-    expect(viaRepartido.repartos).toHaveLength(2);
+      repo.actualizarRepartoViatico('emp-aia', 'via-1', [
+        { proyectoId: 'proy-1', montoRD: 4200 },
+        { proyectoId: 'sin_asignar', montoRD: 300 },
+      ])
+    ).rejects.toThrow(/ya fue revisado/i);
   });
 
   it('F14 y F16: Vehículo en mantenimiento y cuadrilla dada de baja bloquean asignación sin borrar historial', async () => {
