@@ -1,13 +1,18 @@
 import {
   asegurarConfiguracionEmpresa,
   asegurarEstadoOnboarding,
+  asegurarPresupuestosProyectos,
+  calcularTotalPlanificadoPresupuesto,
   crearConfiguracionInicialEmpresa,
   crearEstadoOnboardingInicial,
+  crearLineasBasePresupuesto,
   detectarConflictosAsignacion,
   detectarConflictosRenta,
   ERROR_TECNICO_SIN_PERSONAL,
   escalarRepartosAMontoEmpresa,
   evaluarTopeViaticoEnMision,
+  migrarProyectoAPresupuestoInicial,
+  normalizarLineasPresupuesto,
   obtenerCuadrillasDeUsuario,
   obtenerFechaHoyAST,
   obtenerPersonalIdsUsuario,
@@ -19,6 +24,7 @@ import {
   puedeEditarConfiguracion,
   puedeGestionarCatalogos,
   puedeGestionarEmpresa,
+  puedeGestionarPresupuesto,
   puedeRegistrarBitacoraEnServicio,
   reconciliarColeccionLWWConReporte,
   resolverEtiquetaCargo,
@@ -27,6 +33,7 @@ import {
   sumarDiasIso,
   validarCargoConfig,
   validarDecisionViatico,
+  validarEdicionPresupuesto,
   validarEdicionRenta,
   validarEdicionViatico,
   validarEliminacionViatico,
@@ -39,6 +46,7 @@ import {
   validarNuevaVigenciaServicio,
   validarNuevaVigenciaTerreno,
   validarNuevaVigenciaTopeViatico,
+  validarNuevoPresupuestoVersion,
   validarNuevoServicioCatalogo,
   validarNuevoTipoCombustible,
   validarRangoFechas,
@@ -46,6 +54,7 @@ import {
   validarRenta,
   validarRepartoViatico,
   validarResolucionConflictos,
+  validarTransicionPresupuesto,
   validarTransicionServicio,
   validarVehiculoConfig,
 } from '../domain';
@@ -65,11 +74,14 @@ import type {
   EstadoAprobacionViatico,
   EstadoEmpresaSnapshot,
   EstadoOnboardingEmpresa,
+  EstadoPresupuestoProyecto,
   EstadoServicio,
   HistorialEvento,
+  LineaPresupuestoProyecto,
   MembresiaEmpresa,
   Mision,
   Personal,
+  PresupuestoProyecto,
   ProyeccionSnapshotPorRol,
   Proyecto,
   ReglaRendimientoFlotaVersion,
@@ -1002,6 +1014,28 @@ function crearSeedDatabase(): DatabaseLocal {
         syncStatus: 'synced',
       },
     ],
+    presupuestos: [
+      migrarProyectoAPresupuestoInicial(
+        {
+          id: 'proy-c1',
+          empresaId: 'emp-caribe',
+          presupuestoViaticosRD: 12000,
+          fechaCreacion: '2026-11-16',
+          updatedAt: '2026-11-16T10:00:00-04:00',
+        },
+        {
+          estado: 'aprobado',
+          usuarioId: 'usr-admin',
+          usuarioNombre: 'Ing. Roberto Almonte',
+          otrasLineas: {
+            personal: 18000,
+            vehiculos: 6500,
+            equipos_gnss: 5400,
+            otros: 2000,
+          },
+        }
+      ),
+    ],
     rutas: [
       {
         id: 'ruta-c1',
@@ -1046,6 +1080,84 @@ function crearSeedDatabase(): DatabaseLocal {
     onboarding: crearEstadoOnboardingInicial('emp-caribe'),
   };
 
+  const presupuestosAia: PresupuestoProyecto[] = [
+    {
+      id: 'pre-proy-1-v1',
+      empresaId: 'emp-aia',
+      proyectoId: 'proy-1',
+      version: 1,
+      vigenciaDesde: hace8Dias,
+      estado: 'aprobado',
+      lineas: crearLineasBasePresupuesto({
+        viaticos: 18500,
+        rentas: 0,
+        personal: 38000,
+        vehiculos: 12000,
+        equipos_gnss: 9000,
+        otros: 3500,
+      }),
+      totalPlanificadoRD: 81000,
+      notas: 'Presupuesto base de ejecución para deslinde y densificación en Macorís + Yamasá.',
+      creadoPorUsuarioId: 'usr-admin',
+      creadoPorNombre: 'Ing. Roberto Almonte',
+      aprobadoPorUsuarioId: 'usr-admin',
+      aprobadoEn: `${hace8Dias}T09:00:00-04:00`,
+      motivoCambio: 'Aprobación inicial de contrato',
+      updatedAt: `${ayer}T09:15:00-04:00`,
+      syncStatus: 'synced',
+    },
+    {
+      id: 'pre-proy-2-v1',
+      empresaId: 'emp-aia',
+      proyectoId: 'proy-2',
+      version: 1,
+      vigenciaDesde: hace5Dias,
+      estado: 'aprobado',
+      lineas: crearLineasBasePresupuesto({
+        viaticos: 24800,
+        rentas: 15000,
+        personal: 32000,
+        vehiculos: 14000,
+        equipos_gnss: 8000,
+        otros: 4000,
+      }),
+      totalPlanificadoRD: 97800,
+      notas: 'Incluye reserva para renta de base RTK auxiliar en Santiago.',
+      creadoPorUsuarioId: 'usr-coord',
+      creadoPorNombre: 'Lic. Patricia Vargas',
+      aprobadoPorUsuarioId: 'usr-admin',
+      aprobadoEn: `${hace5Dias}T10:30:00-04:00`,
+      motivoCambio: 'Presupuesto inicial Gurabo II',
+      updatedAt: `${hace2Dias}T16:40:00-04:00`,
+      syncStatus: 'synced',
+    },
+    {
+      id: 'pre-proy-3-v1',
+      empresaId: 'emp-aia',
+      proyectoId: 'proy-3',
+      version: 1,
+      vigenciaDesde: hace8Dias,
+      estado: 'aprobado',
+      lineas: crearLineasBasePresupuesto({
+        viaticos: 8600,
+        rentas: 0,
+        personal: 18000,
+        vehiculos: 5000,
+        equipos_gnss: 4500,
+        otros: 2000,
+      }),
+      totalPlanificadoRD: 38100,
+      notas: 'Presupuesto base actualización parcelaria Parque Haina.',
+      creadoPorUsuarioId: 'usr-admin',
+      creadoPorNombre: 'Ing. Roberto Almonte',
+      aprobadoPorUsuarioId: 'usr-admin',
+      aprobadoEn: `${hace8Dias}T08:30:00-04:00`,
+      motivoCambio: 'Aprobación inicial Haina',
+      updatedAt: `${hace2Dias}T14:05:00-04:00`,
+      syncStatus: 'synced',
+    },
+  ];
+
   const snapshotAia: EstadoEmpresaSnapshot = {
     empresa: empresas[0],
     membresias: membresias.filter((m) => m.empresaId === 'emp-aia'),
@@ -1056,6 +1168,7 @@ function crearSeedDatabase(): DatabaseLocal {
     cuadrillas: cuadrillasAia,
     clientes: clientesAia,
     proyectos: proyectosAia,
+    presupuestos: presupuestosAia,
     rutas: rutasAia,
     servicios: serviciosAia,
     bitacoras: bitacorasAia,
@@ -1105,9 +1218,15 @@ function hidratarDatabase(rawDb: DatabaseLocal): DatabaseLocal {
         tipoCombustibleId: match?.id ?? config.combustibles[0]?.id,
       };
     });
+    const presupuestos = asegurarPresupuestosProyectos(
+      empresaId,
+      snap.proyectos ?? [],
+      snap.presupuestos ?? []
+    );
     snapshotsPorEmpresa[empresaId] = {
       ...snap,
       empresa: empresaHydrated,
+      presupuestos,
       vehiculos,
       misiones: snap.misiones ?? [],
       rentas: snap.rentas ?? [],
@@ -1392,6 +1511,12 @@ export class LocalRepositorioOperacion implements RepositorioOperacion {
       syncStatus: 'pending',
     };
     snap.proyectos = [nuevo, ...snap.proyectos];
+    const presupuestoInicial = migrarProyectoAPresupuestoInicial(nuevo, {
+      estado: 'borrador',
+      usuarioId: sesion.usuario.id,
+      usuarioNombre: sesion.usuario.nombre,
+    });
+    snap.presupuestos = [presupuestoInicial, ...(snap.presupuestos ?? [])];
     this.registrarEvento(snap, {
       entidadTipo: 'proyecto',
       entidadId: nuevo.id,
@@ -1436,6 +1561,198 @@ export class LocalRepositorioOperacion implements RepositorioOperacion {
         },
       });
     }
+    this.guardarDB();
+    return actualizado;
+  }
+
+  async crearVersionPresupuestoProyecto(params: {
+    empresaId: string;
+    proyectoId: string;
+    vigenciaDesde: string;
+    lineas: LineaPresupuestoProyecto[];
+    notas?: string;
+    motivoCambio?: string;
+    aprobarInmediatamente?: boolean;
+  }): Promise<PresupuestoProyecto> {
+    const sesion = this.obtenerSesionRequerida();
+    const snap = this.obtenerSnapshot(params.empresaId);
+    const proyecto = snap.proyectos.find((p) => p.id === params.proyectoId);
+    if (!proyecto) {
+      throw new Error('Proyecto no encontrado para crear presupuesto.');
+    }
+
+    const existentesProyecto = (snap.presupuestos ?? []).filter(
+      (p) => p.proyectoId === params.proyectoId
+    );
+    const lineasNorm = normalizarLineasPresupuesto(params.lineas);
+    const valid = validarNuevoPresupuestoVersion({
+      rol: sesion.rolActivo,
+      existentesProyecto,
+      vigenciaDesde: params.vigenciaDesde,
+      lineas: lineasNorm,
+    });
+    if (!valid.valido) {
+      throw new Error(valid.error || 'No se pudo crear la versión de presupuesto.');
+    }
+
+    const nextVer = siguienteVersion(existentesProyecto);
+    const ahoraIso = new Date().toISOString();
+    const estado: EstadoPresupuestoProyecto = params.aprobarInmediatamente ? 'aprobado' : 'borrador';
+    const totalPlanificadoRD = calcularTotalPlanificadoPresupuesto(lineasNorm);
+
+    const nuevo: PresupuestoProyecto = {
+      id: `pre-${params.proyectoId}-v${nextVer}-${Date.now()}`,
+      empresaId: params.empresaId,
+      proyectoId: params.proyectoId,
+      version: nextVer,
+      vigenciaDesde: params.vigenciaDesde,
+      estado,
+      lineas: lineasNorm,
+      totalPlanificadoRD,
+      notas: params.notas?.trim() || undefined,
+      creadoPorUsuarioId: sesion.usuario.id,
+      creadoPorNombre: sesion.usuario.nombre,
+      aprobadoPorUsuarioId: estado === 'aprobado' ? sesion.usuario.id : undefined,
+      aprobadoEn: estado === 'aprobado' ? ahoraIso : undefined,
+      motivoCambio: params.motivoCambio?.trim() || undefined,
+      updatedAt: ahoraIso,
+      syncStatus: 'pending',
+    };
+
+    snap.presupuestos = [nuevo, ...(snap.presupuestos ?? [])];
+    this.registrarEvento(snap, {
+      entidadTipo: 'presupuesto',
+      entidadId: nuevo.id,
+      accion:
+        estado === 'aprobado'
+          ? `Presupuesto v${nuevo.version} aprobado`
+          : `Borrador de presupuesto v${nuevo.version} creado`,
+      detalle: `Proyecto "${proyecto.nombre}" (${proyecto.codigoContrato}) · Total planificado RD$ ${nuevo.totalPlanificadoRD.toLocaleString('en-US')} · Vigente desde ${nuevo.vigenciaDesde}.`,
+      valorNuevo: `v${nuevo.version} (${nuevo.estado}) · RD$ ${nuevo.totalPlanificadoRD.toLocaleString('en-US')}`,
+      usuarioId: sesion.usuario.id,
+      usuarioNombre: sesion.usuario.nombre,
+    });
+    this.guardarDB();
+    return nuevo;
+  }
+
+  async editarBorradorPresupuestoProyecto(params: {
+    empresaId: string;
+    presupuestoId: string;
+    vigenciaDesde?: string;
+    lineas: LineaPresupuestoProyecto[];
+    notas?: string;
+    motivoCambio?: string;
+  }): Promise<PresupuestoProyecto> {
+    const sesion = this.obtenerSesionRequerida();
+    if (!puedeGestionarPresupuesto(sesion.rolActivo)) {
+      throw new Error('Solo Admin o Coordinador pueden editar presupuestos en borrador.');
+    }
+    const snap = this.obtenerSnapshot(params.empresaId);
+    const target = (snap.presupuestos ?? []).find((p) => p.id === params.presupuestoId);
+    if (!target) {
+      throw new Error('Versión de presupuesto no encontrada.');
+    }
+
+    const existentesProyecto = (snap.presupuestos ?? []).filter(
+      (p) => p.proyectoId === target.proyectoId
+    );
+    const lineasNorm = normalizarLineasPresupuesto(params.lineas);
+    const valid = validarEdicionPresupuesto({
+      rol: sesion.rolActivo,
+      presupuesto: target,
+      existentesProyecto,
+      vigenciaDesde: params.vigenciaDesde,
+      lineas: lineasNorm,
+    });
+    if (!valid.valido) {
+      throw new Error(valid.error || 'No se pudo editar el presupuesto.');
+    }
+
+    const totalPlanificadoRD = calcularTotalPlanificadoPresupuesto(lineasNorm);
+    const actualizado: PresupuestoProyecto = {
+      ...target,
+      vigenciaDesde: params.vigenciaDesde ?? target.vigenciaDesde,
+      lineas: lineasNorm,
+      totalPlanificadoRD,
+      notas: params.notas !== undefined ? params.notas.trim() || undefined : target.notas,
+      motivoCambio:
+        params.motivoCambio !== undefined
+          ? params.motivoCambio.trim() || undefined
+          : target.motivoCambio,
+      esMigracionInicial: false,
+      updatedAt: new Date().toISOString(),
+      syncStatus: 'pending',
+    };
+
+    snap.presupuestos = (snap.presupuestos ?? []).map((p) =>
+      p.id === actualizado.id ? actualizado : p
+    );
+    this.registrarEvento(snap, {
+      entidadTipo: 'presupuesto',
+      entidadId: actualizado.id,
+      accion: `Borrador de presupuesto v${actualizado.version} editado`,
+      detalle: `Proyecto ${actualizado.proyectoId} · Nuevo total planificado RD$ ${actualizado.totalPlanificadoRD.toLocaleString('en-US')} (vigencia ${actualizado.vigenciaDesde}).`,
+      valorAnterior: `RD$ ${target.totalPlanificadoRD.toLocaleString('en-US')}`,
+      valorNuevo: `RD$ ${actualizado.totalPlanificadoRD.toLocaleString('en-US')}`,
+      usuarioId: sesion.usuario.id,
+      usuarioNombre: sesion.usuario.nombre,
+    });
+    this.guardarDB();
+    return actualizado;
+  }
+
+  async transicionarPresupuestoProyecto(params: {
+    empresaId: string;
+    presupuestoId: string;
+    nuevoEstado: EstadoPresupuestoProyecto;
+    motivo?: string;
+  }): Promise<PresupuestoProyecto> {
+    const sesion = this.obtenerSesionRequerida();
+    const snap = this.obtenerSnapshot(params.empresaId);
+    const target = (snap.presupuestos ?? []).find((p) => p.id === params.presupuestoId);
+    if (!target) {
+      throw new Error('Versión de presupuesto no encontrada.');
+    }
+
+    const valid = validarTransicionPresupuesto({
+      rol: sesion.rolActivo,
+      presupuesto: target,
+      nuevoEstado: params.nuevoEstado,
+    });
+    if (!valid.valido) {
+      throw new Error(valid.error || 'Transición de presupuesto no permitida.');
+    }
+
+    const ahoraIso = new Date().toISOString();
+    const actualizado: PresupuestoProyecto = {
+      ...target,
+      estado: params.nuevoEstado,
+      aprobadoPorUsuarioId:
+        params.nuevoEstado === 'aprobado' ? sesion.usuario.id : target.aprobadoPorUsuarioId,
+      aprobadoEn: params.nuevoEstado === 'aprobado' ? ahoraIso : target.aprobadoEn,
+      cerradoPorUsuarioId:
+        params.nuevoEstado === 'cerrado' ? sesion.usuario.id : target.cerradoPorUsuarioId,
+      cerradoEn: params.nuevoEstado === 'cerrado' ? ahoraIso : target.cerradoEn,
+      motivoCambio: params.motivo?.trim() || target.motivoCambio,
+      updatedAt: ahoraIso,
+      syncStatus: 'pending',
+    };
+
+    snap.presupuestos = (snap.presupuestos ?? []).map((p) =>
+      p.id === actualizado.id ? actualizado : p
+    );
+    const proyecto = snap.proyectos.find((p) => p.id === actualizado.proyectoId);
+    this.registrarEvento(snap, {
+      entidadTipo: 'presupuesto',
+      entidadId: actualizado.id,
+      accion: `Presupuesto v${actualizado.version} → ${actualizado.estado}`,
+      detalle: `Proyecto "${proyecto?.nombre || actualizado.proyectoId}" · Total RD$ ${actualizado.totalPlanificadoRD.toLocaleString('en-US')}${params.motivo ? ` · Motivo: ${params.motivo}` : ''}.`,
+      valorAnterior: target.estado,
+      valorNuevo: actualizado.estado,
+      usuarioId: sesion.usuario.id,
+      usuarioNombre: sesion.usuario.nombre,
+    });
     this.guardarDB();
     return actualizado;
   }
@@ -3409,6 +3726,13 @@ export class LocalRepositorioOperacion implements RepositorioOperacion {
       if (serverSnap.rentas) {
         const recRentas = reconciliarColeccionLWWConReporte(snap.rentas ?? [], serverSnap.rentas);
         snap.rentas = recRentas.items.map((r) => ({ ...r, syncStatus: 'synced' }));
+      }
+      if (serverSnap.presupuestos) {
+        const recPresupuestos = reconciliarColeccionLWWConReporte(
+          snap.presupuestos ?? [],
+          serverSnap.presupuestos
+        );
+        snap.presupuestos = recPresupuestos.items.map((p) => ({ ...p, syncStatus: 'synced' }));
       }
       snap.bitacoras = snap.bitacoras.map((b) => ({ ...b, syncStatus: 'synced' }));
       snap.lastSyncedAt = ack.lastSyncedAt;

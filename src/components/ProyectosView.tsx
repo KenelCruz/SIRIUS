@@ -1,5 +1,6 @@
 import React, { useMemo, useState } from 'react';
 import {
+  Calculator,
   Camera,
   CheckCircle2,
   ClipboardList,
@@ -16,33 +17,47 @@ import {
 } from 'lucide-react';
 import {
   calcularCotizacionServicioVigente,
+  calcularEjecutadoProyectoDesdeFuentes,
   calcularEstadoProyecto,
   calcularGastoPorProyecto,
+  compararPresupuestoProyecto,
   crearConfiguracionInicialEmpresa,
   ESTADOS_SERVICIO,
   ETIQUETA_ESTADO,
   obtenerEstadosSiguientesPermitidos,
   obtenerFactoresTerrenoVigentes,
+  obtenerPresupuestoVigenteProyecto,
   obtenerServiciosVigentes,
   puedeCrearOEditarOperacion,
   puedeRegistrarBitacoraEnServicio,
+  type ComparacionPresupuestoProyecto,
   type ServicioCatalogoVigente,
 } from '../domain';
 import type { PayloadTransicionServicio } from '../domain/estados';
 import type {
   AreaUnit,
+  Asignacion,
   BitacoraEntrada,
   Cliente,
+  ConfiguracionEmpresa,
+  Cuadrilla,
+  EstadoPresupuestoProyecto,
   EstadoServicio,
+  LineaPresupuestoProyecto,
+  Personal,
+  PresupuestoProyecto,
   Proyecto,
+  Renta,
   RolEmpresa,
   Ruta,
   Servicio,
   TerrenoFactorVersion,
+  Vehiculo,
   Viatico,
 } from '../types/domain';
 import { formatArea, formatPerimeter, formatRD } from '../utils/geodesy';
 import { MediaThumb } from './MediaThumb';
+import { PresupuestoProyectoModal } from './PresupuestoProyectoModal';
 import { ProyectosViewSkeleton } from './Skeletons';
 import { ViaticosComparisonChart } from './ViaticosComparisonChart';
 import { WorkflowBadge } from './WorkflowBadge';
@@ -57,6 +72,13 @@ interface ProyectosViewProps {
   servicios: Servicio[];
   bitacoras: BitacoraEntrada[];
   viaticos: Viatico[];
+  presupuestos?: PresupuestoProyecto[];
+  asignaciones?: Asignacion[];
+  cuadrillas?: Cuadrilla[];
+  personal?: Personal[];
+  vehiculos?: Vehiculo[];
+  rentas?: Renta[];
+  configuracion?: ConfiguracionEmpresa | null;
   rutasAsignadasIds: Set<string>;
   areaUnit: AreaUnit;
   pendingSyncCount: number;
@@ -71,6 +93,26 @@ interface ProyectosViewProps {
       'id' | 'empresaId' | 'estado' | 'fechaCreacion' | 'version' | 'updatedAt' | 'syncStatus'
     >
   ) => Promise<void>;
+  onCrearVersionPresupuesto?: (params: {
+    proyectoId: string;
+    vigenciaDesde: string;
+    lineas: LineaPresupuestoProyecto[];
+    notas?: string;
+    motivoCambio?: string;
+    aprobarInmediatamente?: boolean;
+  }) => Promise<void>;
+  onEditarBorradorPresupuesto?: (params: {
+    presupuestoId: string;
+    vigenciaDesde?: string;
+    lineas: LineaPresupuestoProyecto[];
+    notas?: string;
+    motivoCambio?: string;
+  }) => Promise<void>;
+  onTransicionarPresupuesto?: (params: {
+    presupuestoId: string;
+    nuevoEstado: EstadoPresupuestoProyecto;
+    motivo?: string;
+  }) => Promise<void>;
   onAbrirNuevaRutaKmz: (proyectoId?: string) => void;
   onAgregarServicioARuta: (
     datos: Omit<Servicio, 'id' | 'empresaId' | 'version' | 'updatedAt' | 'syncStatus'>
@@ -134,6 +176,13 @@ export const ProyectosView: React.FC<ProyectosViewProps> = ({
   servicios,
   bitacoras,
   viaticos,
+  presupuestos = [],
+  asignaciones = [],
+  cuadrillas = [],
+  personal = [],
+  vehiculos = [],
+  rentas = [],
+  configuracion = null,
   rutasAsignadasIds,
   areaUnit,
   pendingSyncCount,
@@ -143,6 +192,9 @@ export const ProyectosView: React.FC<ProyectosViewProps> = ({
   onChangeAreaUnit,
   onCrearCliente,
   onCrearProyecto,
+  onCrearVersionPresupuesto,
+  onEditarBorradorPresupuesto,
+  onTransicionarPresupuesto,
   onAbrirNuevaRutaKmz,
   onAgregarServicioARuta,
   onTransicionarServicio,
@@ -153,6 +205,7 @@ export const ProyectosView: React.FC<ProyectosViewProps> = ({
 }) => {
   const canEdit = puedeCrearOEditarOperacion(rol);
   const canViewFinances = rol === 'admin' || rol === 'coordinador';
+  const [presupuestoModalProyectoId, setPresupuestoModalProyectoId] = useState<string | null>(null);
   const serviciosActivos = useMemo(
     () => serviciosCatalogo.filter((s) => s.activo),
     [serviciosCatalogo]
@@ -240,9 +293,55 @@ export const ProyectosView: React.FC<ProyectosViewProps> = ({
         const srvsProy = servicios.filter((s) => rutasProy.some((r) => r.id === s.rutaId));
         const estadoActual = calcularEstadoProyecto(srvsProy, p.estado);
         const gastoReal = gastosPorProyecto[p.id]?.totalEjecutadoRD || 0;
-        return { proyecto: p, cliente, rutasProy, srvsProy, estadoActual, gastoReal };
+        let comparacionPresupuesto: ComparacionPresupuestoProyecto | undefined;
+        if (canViewFinances) {
+          const vigente = obtenerPresupuestoVigenteProyecto(presupuestos, p.id);
+          const ejecutado = calcularEjecutadoProyectoDesdeFuentes({
+            proyectoId: p.id,
+            rutas,
+            asignaciones,
+            cuadrillas,
+            personal,
+            vehiculos,
+            viaticos,
+            rentas,
+            configuracion: configuracion ?? undefined,
+          });
+          comparacionPresupuesto = compararPresupuestoProyecto({
+            proyecto: p,
+            presupuesto: vigente,
+            ejecutado,
+          });
+        }
+        return {
+          proyecto: p,
+          cliente,
+          rutasProy,
+          srvsProy,
+          estadoActual,
+          gastoReal,
+          comparacionPresupuesto,
+        };
       });
-  }, [proyectos, clientes, rutas, servicios, gastosPorProyecto, searchQuery, estadoFiltro, rol]);
+  }, [
+    proyectos,
+    clientes,
+    rutas,
+    servicios,
+    gastosPorProyecto,
+    searchQuery,
+    estadoFiltro,
+    rol,
+    canViewFinances,
+    presupuestos,
+    asignaciones,
+    cuadrillas,
+    personal,
+    vehiculos,
+    viaticos,
+    rentas,
+    configuracion,
+  ]);
 
   const kpis = useMemo(() => {
     const activos = proyectos.filter((p) => {
@@ -564,8 +663,19 @@ export const ProyectosView: React.FC<ProyectosViewProps> = ({
         </div>
       ) : (
         <div className="space-y-5">
-          {proyectosVisibles.map(({ proyecto, cliente, rutasProy, srvsProy, estadoActual, gastoReal }) => {
-            const overBudget = gastoReal > proyecto.presupuestoViaticosRD;
+          {proyectosVisibles.map(
+            ({
+              proyecto,
+              cliente,
+              rutasProy,
+              srvsProy,
+              estadoActual,
+              gastoReal,
+              comparacionPresupuesto,
+            }) => {
+            const overBudget = comparacionPresupuesto
+              ? comparacionPresupuesto.excedidoTotal
+              : gastoReal > proyecto.presupuestoViaticosRD;
             return (
               <div
                 key={proyecto.id}
@@ -590,26 +700,41 @@ export const ProyectosView: React.FC<ProyectosViewProps> = ({
                     </h3>
                   </div>
 
-                  <div className="flex flex-wrap items-center gap-5 text-xs shrink-0">
-                    {canViewFinances && (
+                  <div className="flex flex-wrap items-center gap-4 text-xs shrink-0">
+                    {canViewFinances && comparacionPresupuesto && (
                       <>
                         <div className="text-right">
                           <div className="text-[11px] text-[#43474D]">Valor Contrato</div>
                           <div className="font-mono font-bold text-[#0D1C2F] tabular-nums">
-                            {formatRD(proyecto.valorContratoRD)}
+                            {formatRD(proyecto.valorContratoRD, moneda)}
                           </div>
                         </div>
                         <div className="text-right">
-                          <div className="text-[11px] text-[#43474D]">Viáticos (Real / Pres.)</div>
+                          <div className="text-[11px] text-[#43474D]">Costo (Real / Pres.)</div>
                           <div
                             className={`font-mono font-bold tabular-nums ${
                               overBudget ? 'text-[#DC2626]' : 'text-[#0F2942]'
                             }`}
                           >
-                            {formatRD(gastoReal)}{' '}
+                            {formatRD(comparacionPresupuesto.totalEjecutadoRD, moneda)}{' '}
                             <span className="font-normal text-[#43474D]">
-                              / {formatRD(proyecto.presupuestoViaticosRD)}
+                              / {formatRD(comparacionPresupuesto.totalPlanificadoRD, moneda)}
                             </span>
+                          </div>
+                        </div>
+                        <div className="text-right">
+                          <div className="text-[11px] text-[#43474D]">Margen Real</div>
+                          <div
+                            className={`font-mono font-bold tabular-nums ${
+                              comparacionPresupuesto.margenRealRD < 0
+                                ? 'text-[#DC2626]'
+                                : 'text-[#15803D]'
+                            }`}
+                          >
+                            {formatRD(comparacionPresupuesto.margenRealRD, moneda)}
+                            {comparacionPresupuesto.margenRealPct !== null
+                              ? ` (${comparacionPresupuesto.margenRealPct}%)`
+                              : ''}
                           </div>
                         </div>
                         {srvsProy.some((s) => s.estado === 'cobrado' && typeof s.montoCobradoRD === 'number') && (
@@ -624,12 +749,23 @@ export const ProyectosView: React.FC<ProyectosViewProps> = ({
                                       ? s.montoCobradoRD
                                       : 0),
                                   0
-                                )
+                                ),
+                                moneda
                               )}
                             </div>
                           </div>
                         )}
                       </>
+                    )}
+                    {canViewFinances && (
+                      <button
+                        type="button"
+                        onClick={() => setPresupuestoModalProyectoId(proyecto.id)}
+                        className="inline-flex items-center gap-1.5 rounded-md border border-slate-300 bg-white px-3.5 py-2 text-xs font-semibold text-[#0F2942] hover:bg-slate-50 whitespace-nowrap shrink-0 min-h-[40px]"
+                      >
+                        <Calculator className="h-3.5 w-3.5 text-[#0284C7]" />
+                        Presupuesto
+                      </button>
                     )}
                     {canEdit && (
                       <button
@@ -1333,6 +1469,40 @@ export const ProyectosView: React.FC<ProyectosViewProps> = ({
             </div>
           </div>
         </div>
+      )}
+
+      {canViewFinances && (
+        <PresupuestoProyectoModal
+          isOpen={Boolean(presupuestoModalProyectoId)}
+          onClose={() => setPresupuestoModalProyectoId(null)}
+          rol={rol}
+          proyecto={proyectos.find((p) => p.id === presupuestoModalProyectoId) ?? null}
+          presupuestos={presupuestos}
+          rutas={rutas}
+          asignaciones={asignaciones}
+          cuadrillas={cuadrillas}
+          personal={personal}
+          vehiculos={vehiculos}
+          viaticos={viaticos}
+          rentas={rentas}
+          configuracion={configuracion}
+          moneda={moneda}
+          onCrearVersion={async (params) => {
+            if (onCrearVersionPresupuesto) {
+              await onCrearVersionPresupuesto(params);
+            }
+          }}
+          onEditarBorrador={async (params) => {
+            if (onEditarBorradorPresupuesto) {
+              await onEditarBorradorPresupuesto(params);
+            }
+          }}
+          onTransicionarEstado={async (params) => {
+            if (onTransicionarPresupuesto) {
+              await onTransicionarPresupuesto(params);
+            }
+          }}
+        />
       )}
     </section>
   );

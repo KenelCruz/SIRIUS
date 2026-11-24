@@ -27,7 +27,9 @@ import type {
   EquipoGNSS,
   EstadoAprobacionViatico,
   EstadoOnboardingEmpresa,
+  EstadoPresupuestoProyecto,
   EstadoServicio,
+  LineaPresupuestoProyecto,
   Mision,
   Personal,
   ProyeccionSnapshotPorRol,
@@ -378,6 +380,47 @@ export function useOperacionEmpresa(isOnline: boolean) {
       },
       actualizarProyecto: async (proyecto: Proyecto) => {
         const res = await repositorioOperacion.actualizarProyecto(empresaId, proyecto);
+        await refrescar();
+        return res;
+      },
+      crearVersionPresupuestoProyecto: async (params: {
+        proyectoId: string;
+        vigenciaDesde: string;
+        lineas: LineaPresupuestoProyecto[];
+        notas?: string;
+        motivoCambio?: string;
+        aprobarInmediatamente?: boolean;
+      }) => {
+        const res = await repositorioOperacion.crearVersionPresupuestoProyecto({
+          empresaId,
+          ...params,
+        });
+        await refrescar();
+        return res;
+      },
+      editarBorradorPresupuestoProyecto: async (params: {
+        presupuestoId: string;
+        vigenciaDesde?: string;
+        lineas: LineaPresupuestoProyecto[];
+        notas?: string;
+        motivoCambio?: string;
+      }) => {
+        const res = await repositorioOperacion.editarBorradorPresupuestoProyecto({
+          empresaId,
+          ...params,
+        });
+        await refrescar();
+        return res;
+      },
+      transicionarPresupuestoProyecto: async (params: {
+        presupuestoId: string;
+        nuevoEstado: EstadoPresupuestoProyecto;
+        motivo?: string;
+      }) => {
+        const res = await repositorioOperacion.transicionarPresupuestoProyecto({
+          empresaId,
+          ...params,
+        });
         await refrescar();
         return res;
       },

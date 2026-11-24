@@ -8,3 +8,4 @@ export * from './configuracion';
 export * from './onboarding';
 export * from './rendimiento';
 export * from './rentas';
+export * from './presupuesto';

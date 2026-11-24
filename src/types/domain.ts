@@ -325,6 +325,44 @@ export interface Proyecto {
   syncStatus: EstadoSync;
 }
 
+export type CategoriaPresupuesto =
+  | 'viaticos'
+  | 'rentas'
+  | 'personal'
+  | 'vehiculos'
+  | 'equipos_gnss'
+  | 'otros';
+
+export type EstadoPresupuestoProyecto = 'borrador' | 'aprobado' | 'cerrado';
+
+export interface LineaPresupuestoProyecto {
+  categoria: CategoriaPresupuesto;
+  montoPlanificadoRD: number;
+  notas?: string;
+}
+
+export interface PresupuestoProyecto {
+  id: string;
+  empresaId: string;
+  proyectoId: string;
+  version: number;
+  vigenciaDesde: string;
+  estado: EstadoPresupuestoProyecto;
+  lineas: LineaPresupuestoProyecto[];
+  totalPlanificadoRD: number;
+  notas?: string;
+  creadoPorUsuarioId: string;
+  creadoPorNombre: string;
+  aprobadoPorUsuarioId?: string;
+  aprobadoEn?: string;
+  cerradoPorUsuarioId?: string;
+  cerradoEn?: string;
+  motivoCambio?: string;
+  esMigracionInicial?: boolean;
+  updatedAt: string;
+  syncStatus: EstadoSync;
+}
+
 export interface RouteSummary {
   routeName: string;
   distanceOneWayKm: number;
@@ -558,6 +596,7 @@ export interface HistorialEvento {
   empresaId: string;
   entidadTipo:
     | 'proyecto'
+    | 'presupuesto'
     | 'ruta'
     | 'servicio'
     | 'asignacion'
@@ -587,6 +626,7 @@ export interface EstadoEmpresaSnapshot {
   cuadrillas: Cuadrilla[];
   clientes: Cliente[];
   proyectos: Proyecto[];
+  presupuestos?: PresupuestoProyecto[];
   rutas: Ruta[];
   servicios: Servicio[];
   bitacoras: BitacoraEntrada[];

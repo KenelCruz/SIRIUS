@@ -77,6 +77,7 @@ export const AuditoriaView: React.FC<AuditoriaViewProps> = ({ historial, isLoadi
             <option value="viatico">Viáticos</option>
             <option value="ruta">Rutas</option>
             <option value="proyecto">Proyectos</option>
+            <option value="presupuesto">Presupuestos</option>
             <option value="catalogo">Catálogos</option>
             <option value="empresa">Empresa</option>
           </select>

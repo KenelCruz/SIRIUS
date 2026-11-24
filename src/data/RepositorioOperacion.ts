@@ -13,9 +13,12 @@ import type {
   EstadoAprobacionViatico,
   EstadoEmpresaSnapshot,
   EstadoOnboardingEmpresa,
+  EstadoPresupuestoProyecto,
   EstadoServicio,
+  LineaPresupuestoProyecto,
   Mision,
   Personal,
+  PresupuestoProyecto,
   ProyeccionSnapshotPorRol,
   Proyecto,
   ReglaRendimientoFlotaVersion,
@@ -71,6 +74,29 @@ export interface RepositorioOperacion {
     datos: Omit<Proyecto, 'id' | 'empresaId' | 'estado' | 'fechaCreacion' | 'version' | 'updatedAt' | 'syncStatus'>
   ): Promise<Proyecto>;
   actualizarProyecto(empresaId: string, proyecto: Proyecto): Promise<Proyecto>;
+  crearVersionPresupuestoProyecto(params: {
+    empresaId: string;
+    proyectoId: string;
+    vigenciaDesde: string;
+    lineas: LineaPresupuestoProyecto[];
+    notas?: string;
+    motivoCambio?: string;
+    aprobarInmediatamente?: boolean;
+  }): Promise<PresupuestoProyecto>;
+  editarBorradorPresupuestoProyecto(params: {
+    empresaId: string;
+    presupuestoId: string;
+    vigenciaDesde?: string;
+    lineas: LineaPresupuestoProyecto[];
+    notas?: string;
+    motivoCambio?: string;
+  }): Promise<PresupuestoProyecto>;
+  transicionarPresupuestoProyecto(params: {
+    empresaId: string;
+    presupuestoId: string;
+    nuevoEstado: EstadoPresupuestoProyecto;
+    motivo?: string;
+  }): Promise<PresupuestoProyecto>;
 
   // F3: Rutas desde KMZ/KML/GeoJSON
   crearRuta(

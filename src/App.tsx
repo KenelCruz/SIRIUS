@@ -1269,10 +1269,17 @@ export default function App() {
                 usuarioActual={sesion.usuario}
                 clientes={snapshot.clientes}
                 proyectos={snapshot.proyectos}
+                presupuestos={snapshot.presupuestos ?? []}
                 rutas={snapshot.rutas}
                 servicios={snapshot.servicios}
                 bitacoras={snapshot.bitacoras}
                 viaticos={snapshot.viaticos}
+                asignaciones={snapshot.asignaciones}
+                cuadrillas={snapshot.cuadrillas}
+                personal={snapshot.personal}
+                vehiculos={snapshot.vehiculos}
+                rentas={snapshot.rentas}
+                configuracion={configuracion}
                 rutasAsignadasIds={rutasAsignadasAdminIds}
                 areaUnit={areaUnit}
                 pendingSyncCount={pendingCounts.total}
@@ -1287,6 +1294,20 @@ export default function App() {
                 onCrearProyecto={async (datos) => {
                   await actions.crearProyecto(datos);
                   showToast(`Proyecto "${datos.nombre}" creado en estado Cotizado.`);
+                }}
+                onCrearVersionPresupuesto={async (params) => {
+                  const creado = await actions.crearVersionPresupuestoProyecto(params);
+                  showToast(
+                    `Presupuesto v${creado.version} (${creado.estado}) guardado.`
+                  );
+                }}
+                onEditarBorradorPresupuesto={async (params) => {
+                  const act = await actions.editarBorradorPresupuestoProyecto(params);
+                  showToast(`Borrador de presupuesto v${act.version} actualizado.`);
+                }}
+                onTransicionarPresupuesto={async (params) => {
+                  const act = await actions.transicionarPresupuestoProyecto(params);
+                  showToast(`Presupuesto v${act.version} marcado como ${act.estado}.`);
                 }}
                 onAbrirNuevaRutaKmz={(proyId) => {
                   setPreloadedKmzForModal(null);

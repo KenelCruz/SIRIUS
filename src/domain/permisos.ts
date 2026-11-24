@@ -58,6 +58,10 @@ export function puedeEliminarRegistro(rol: RolEmpresa): boolean {
   return rol === 'admin' || rol === 'coordinador';
 }
 
+export function puedeGestionarPresupuesto(rol: RolEmpresa): boolean {
+  return rol === 'admin' || rol === 'coordinador';
+}
+
 export function obtenerPersonalIdsUsuario(params: {
   usuarioId: string;
   personalIdMembresia?: string;
