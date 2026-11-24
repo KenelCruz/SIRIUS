@@ -37,6 +37,7 @@ import { ProyectosView } from './components/ProyectosView';
 import { PWAInstallButton } from './components/PWAInstallButton';
 import { ResourceConflictModal } from './components/ResourceConflictModal';
 import { RouteServicesCalculator } from './components/RouteServicesCalculator';
+import { AppShellSkeleton } from './components/Skeletons';
 import { TecnicoAgendaView } from './components/tecnico/TecnicoAgendaView';
 import { TecnicoBitacoraModal } from './components/tecnico/TecnicoBitacoraModal';
 import { TecnicoHoyView } from './components/tecnico/TecnicoHoyView';
@@ -308,8 +309,8 @@ export default function App() {
     });
   }, [sesion, proyeccion]);
 
-  // Mostrar AuthGate si no hay sesión o si debe elegir empresa o aún no cargó proyección
-  if (!sesion || requiereElegirEmpresa || !proyeccion) {
+  // Mostrar AuthGate si no hay sesión o si debe elegir empresa
+  if (!sesion || requiereElegirEmpresa) {
     return (
       <AuthGate
         isOnline={isOnline}
@@ -323,6 +324,11 @@ export default function App() {
         onCerrarSesion={handleCerrarSesion}
       />
     );
+  }
+
+  // Skeleton del shell operativo mientras carga el snapshot inicial
+  if (!proyeccion) {
+    return <AppShellSkeleton />;
   }
 
   const rol = proyeccion.rol;
@@ -449,12 +455,12 @@ export default function App() {
           <aside className="hidden lg:flex lg:w-64 lg:flex-col bg-[#0F2942] text-white shrink-0">
             <div className="px-5 py-5 border-b border-[#1E3A5F] space-y-3">
               <div className="flex items-center gap-2.5">
-                <div className="flex h-8 w-8 items-center justify-center rounded-sm bg-[#0284C7] text-white">
+                <div className="flex h-8 w-8 items-center justify-center rounded-md bg-[#0284C7] text-white">
                   <Compass className="h-4 w-4" />
                 </div>
                 <div className="min-w-0">
                   <div className="text-base font-bold tracking-tight truncate">SIRIUS</div>
-                  <div className="text-[10px] leading-tight text-[#CBD5E1] line-clamp-2">
+                  <div className="text-[11px] leading-tight text-[#CBD5E1] line-clamp-2">
                     Módulo de Campo · Técnico
                   </div>
                   <div className="mt-0.5 text-[11px] font-medium text-[#93CCFF] truncate">
@@ -464,7 +470,7 @@ export default function App() {
               </div>
 
               {empresasDisponibles.length > 1 && (
-                <div className="flex items-center gap-1.5 rounded-sm bg-[#091A2C] px-2.5 py-1.5">
+                <div className="flex items-center gap-1.5 rounded-md bg-[#091A2C] px-2.5 py-2 border border-white/10">
                   <Building2 className="h-3.5 w-3.5 text-[#93CCFF] shrink-0" />
                   <select
                     value={empresaId}
@@ -497,9 +503,9 @@ export default function App() {
                     key={item.id}
                     type="button"
                     onClick={() => setTecnicoTab(item.id)}
-                    className={`w-full flex items-center gap-3 rounded-sm px-3 py-2.5 text-xs font-semibold transition-colors whitespace-nowrap ${
+                    className={`w-full flex items-center gap-3 rounded-md px-3 py-2.5 text-xs font-semibold transition-colors whitespace-nowrap shrink-0 min-h-[40px] ${
                       active
-                        ? 'bg-[#0284C7] text-white'
+                        ? 'bg-[#0284C7] text-white shadow-sm'
                         : 'text-[#CBD5E1] hover:bg-[#1E3A5F] hover:text-white'
                     }`}
                   >
@@ -511,14 +517,14 @@ export default function App() {
             </nav>
 
             <div className="p-4 border-t border-[#1E3A5F] space-y-3">
-              <div className="rounded-sm bg-[#091A2C] p-2.5 text-xs">
+              <div className="rounded-lg bg-[#091A2C] p-3 text-xs border border-white/10">
                 <div className="font-bold text-white truncate">{sesion.usuario.nombre}</div>
-                <div className="mt-0.5 flex items-center justify-between text-[11px] text-[#93CCFF]">
+                <div className="mt-1 flex items-center justify-between text-[11px] text-[#93CCFF]">
                   <span className="font-mono uppercase">TÉCNICO</span>
                   <button
                     type="button"
                     onClick={handleCerrarSesion}
-                    className="inline-flex items-center gap-1 text-[#CBD5E1] hover:text-white"
+                    className="inline-flex items-center gap-1 text-[#CBD5E1] hover:text-white whitespace-nowrap shrink-0"
                   >
                     <LogOut className="h-3 w-3" />
                     Salir
@@ -529,7 +535,7 @@ export default function App() {
               <button
                 type="button"
                 onClick={() => setIsReportarSelectorOpen(true)}
-                className="w-full flex items-center justify-center gap-2 rounded-sm bg-[#0284C7] px-3 py-2.5 text-xs font-semibold text-white hover:bg-[#006398] transition-colors"
+                className="w-full flex items-center justify-center gap-2 rounded-md bg-[#0284C7] px-4 py-2.5 text-xs font-semibold text-white hover:bg-[#006398] transition-colors whitespace-nowrap shrink-0 min-h-[44px]"
               >
                 <PlusCircle className="h-4 w-4" />
                 Reportar en Campo
@@ -539,13 +545,13 @@ export default function App() {
 
           {/* Main Viewport Técnico */}
           <div className="flex-1 flex flex-col min-w-0 pb-20 lg:pb-0">
-            <header className="sticky top-0 z-30 flex items-center justify-between gap-3 border-b border-[#CBD5E1] bg-white/95 backdrop-blur px-4 sm:px-6 h-14">
+            <header className="sticky top-0 z-30 flex items-center justify-between gap-3 border-b border-slate-200 bg-white/95 backdrop-blur px-4 sm:px-6 h-14">
               <div className="flex items-center gap-2.5 min-w-0">
-                <div className="lg:hidden flex h-8 w-8 items-center justify-center rounded-sm bg-[#0F2942] text-white shrink-0">
+                <div className="lg:hidden flex h-8 w-8 items-center justify-center rounded-md bg-[#0F2942] text-white shrink-0">
                   <Compass className="h-4 w-4" />
                 </div>
                 <div className="min-w-0">
-                  <h1 className="text-sm sm:text-base font-bold text-[#0D1C2F] truncate">
+                  <h1 className="text-sm sm:text-base font-bold tracking-tight text-[#0D1C2F] truncate">
                     {tecnicoTab === 'hoy' && 'Hoy en Campo'}
                     {tecnicoTab === 'rutas_tecnico' && 'Mis Rutas Asignadas'}
                     {tecnicoTab === 'ruta_detalle' && 'Detalle y Mapa de Ruta'}
@@ -570,7 +576,7 @@ export default function App() {
                 <button
                   type="button"
                   onClick={() => setIsTutorialOpen(true)}
-                  className="inline-flex items-center gap-1.5 rounded-sm border border-[#CBD5E1] bg-white px-2.5 py-2 text-xs font-semibold text-[#0F2942] hover:bg-[#F8FAFC] min-h-[38px]"
+                  className="inline-flex items-center gap-1.5 rounded-md border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-[#0F2942] hover:bg-slate-50 min-h-[40px] whitespace-nowrap shrink-0"
                   title="Ver guía visual del módulo técnico"
                 >
                   <HelpCircle className="h-4 w-4 text-[#0284C7]" />
@@ -580,7 +586,7 @@ export default function App() {
                 <button
                   type="button"
                   onClick={() => setIsReportarSelectorOpen(true)}
-                  className="inline-flex items-center gap-1.5 rounded-sm bg-[#0284C7] px-3 py-2 text-xs font-semibold text-white hover:bg-[#006398] min-h-[38px]"
+                  className="inline-flex items-center gap-1.5 rounded-md bg-[#0284C7] px-3.5 py-2 text-xs font-semibold text-white hover:bg-[#006398] min-h-[40px] whitespace-nowrap shrink-0"
                 >
                   <PlusCircle className="h-4 w-4" />
                   <span className="hidden sm:inline">Reportar</span>
@@ -588,9 +594,9 @@ export default function App() {
               </div>
             </header>
 
-            <main className="flex-1 p-3 sm:p-6 space-y-4 max-w-[1080px] w-full mx-auto pb-24 lg:pb-8">
+            <main className="flex-1 p-4 sm:p-6 space-y-6 max-w-[1080px] w-full mx-auto pb-24 lg:pb-8">
               {/* Mobile Session Strip */}
-              <div className="flex lg:hidden items-center justify-between gap-2 rounded-md border border-[#E2E8F0] bg-white px-3 py-2 text-xs">
+              <div className="flex lg:hidden items-center justify-between gap-2 rounded-lg border border-slate-200 bg-white px-3.5 py-2.5 text-xs">
                 <div className="min-w-0">
                   <div className="font-bold text-[#0F2942] truncate">{empresaNombre}</div>
                   <div className="font-mono text-[11px] text-[#43474D]">
@@ -603,7 +609,7 @@ export default function App() {
                       value={empresaId}
                       onChange={(e) => handleSeleccionarEmpresa(e.target.value)}
                       aria-label="Cambiar empresa activa"
-                      className="rounded-sm border border-[#CBD5E1] bg-white px-2 py-1 text-[11px] font-semibold text-[#0F2942] max-w-[140px]"
+                      className="rounded-md border border-slate-200 bg-white px-2.5 py-1.5 text-[11px] font-semibold text-[#0F2942] max-w-[140px] min-h-[36px]"
                     >
                       {empresasDisponibles.map((item) => (
                         <option key={item.empresa.id} value={item.empresa.id}>
@@ -615,7 +621,7 @@ export default function App() {
                   <button
                     type="button"
                     onClick={handleCerrarSesion}
-                    className="rounded-sm border border-[#CBD5E1] p-1.5 text-[#334155]"
+                    className="rounded-md border border-slate-200 p-2 text-[#334155] hover:bg-slate-50 min-h-[36px] min-w-[36px] flex items-center justify-center"
                     aria-label="Cerrar sesión"
                   >
                     <LogOut className="h-3.5 w-3.5" />
@@ -877,7 +883,7 @@ export default function App() {
         />
 
         {toastMessage && (
-          <div className="fixed bottom-20 lg:bottom-5 right-4 z-50 flex items-center gap-2 rounded-sm border border-[#0F2942] bg-[#0F2942] px-4 py-2.5 text-xs font-medium text-white shadow-lg max-w-sm">
+          <div className="fixed bottom-20 lg:bottom-5 right-4 z-50 flex items-center gap-2 rounded-lg border border-white/15 bg-[#091A2C]/95 backdrop-blur-md px-4 py-2.5 text-xs font-medium text-white shadow-xl max-w-sm">
             <CheckCircle2 className="h-4 w-4 text-[#86EFAC] shrink-0" />
             <span>{toastMessage}</span>
           </div>
@@ -1014,7 +1020,7 @@ export default function App() {
         <aside className="hidden lg:flex lg:w-64 lg:flex-col bg-[#0F2942] text-white shrink-0">
           <div className="px-5 py-5 border-b border-[#1E3A5F] space-y-3">
             <div className="flex items-center gap-2.5">
-              <div className="flex h-8 w-8 items-center justify-center rounded-sm bg-[#0284C7] text-white">
+              <div className="flex h-8 w-8 items-center justify-center rounded-md bg-[#0284C7] text-white">
                 <Compass className="h-4 w-4" />
               </div>
               <div className="min-w-0">
@@ -1024,7 +1030,7 @@ export default function App() {
                 >
                   SIRIUS
                 </div>
-                <div className="text-[10px] leading-tight text-[#CBD5E1] line-clamp-2">
+                <div className="text-[11px] leading-tight text-[#CBD5E1] line-clamp-2">
                   Sistema Integral de Recursos, Información, Operaciones y Análisis
                 </div>
                 <div className="mt-0.5 text-[11px] font-medium text-[#93CCFF] truncate">
@@ -1034,7 +1040,7 @@ export default function App() {
             </div>
 
             {empresasDisponibles.length > 1 && (
-              <div className="flex items-center gap-1.5 rounded-sm bg-[#091A2C] px-2.5 py-1.5">
+              <div className="flex items-center gap-1.5 rounded-md bg-[#091A2C] px-2.5 py-2 border border-white/10">
                 <Building2 className="h-3.5 w-3.5 text-[#93CCFF] shrink-0" />
                 <select
                   value={empresaId}
@@ -1061,9 +1067,9 @@ export default function App() {
                   key={item.id}
                   type="button"
                   onClick={() => setAdminTab(item.id)}
-                  className={`w-full flex items-center gap-3 rounded-sm px-3 py-2.5 text-xs font-semibold transition-colors whitespace-nowrap ${
+                  className={`w-full flex items-center gap-3 rounded-md px-3 py-2.5 text-xs font-semibold transition-colors whitespace-nowrap shrink-0 min-h-[40px] ${
                     active
-                      ? 'bg-[#0284C7] text-white'
+                      ? 'bg-[#0284C7] text-white shadow-sm'
                       : 'text-[#CBD5E1] hover:bg-[#1E3A5F] hover:text-white'
                   }`}
                 >
@@ -1076,14 +1082,14 @@ export default function App() {
 
           {/* Sesión Activa & Reporte Móvil */}
           <div className="p-4 border-t border-[#1E3A5F] space-y-3">
-            <div className="rounded-sm bg-[#091A2C] p-2.5 text-xs">
+            <div className="rounded-lg bg-[#091A2C] p-3 text-xs border border-white/10">
               <div className="font-bold text-white truncate">{sesion.usuario.nombre}</div>
-              <div className="mt-0.5 flex items-center justify-between text-[11px] text-[#93CCFF]">
+              <div className="mt-1 flex items-center justify-between text-[11px] text-[#93CCFF]">
                 <span className="font-mono uppercase">{rol}</span>
                 <button
                   type="button"
                   onClick={handleCerrarSesion}
-                  className="inline-flex items-center gap-1 text-[#CBD5E1] hover:text-white"
+                  className="inline-flex items-center gap-1 text-[#CBD5E1] hover:text-white whitespace-nowrap shrink-0"
                 >
                   <LogOut className="h-3 w-3" />
                   Salir
@@ -1094,7 +1100,7 @@ export default function App() {
             <button
               type="button"
               onClick={() => abrirModalViatico()}
-              className="w-full flex items-center justify-center gap-2 rounded-sm border border-[#5BB8FE]/40 bg-[#1E3A8A]/70 px-3 py-2.5 text-xs font-semibold text-white hover:bg-[#0284C7] transition-colors"
+              className="w-full flex items-center justify-center gap-2 rounded-md border border-white/20 bg-[#0284C7] px-3 py-2.5 text-xs font-semibold text-white hover:bg-[#006398] transition-colors whitespace-nowrap shrink-0 min-h-[40px]"
             >
               <Camera className="h-3.5 w-3.5" />
               Reportar Viático Móvil
@@ -1104,13 +1110,13 @@ export default function App() {
 
         {/* Main Viewport */}
         <div className="flex-1 flex flex-col min-w-0 pb-20 lg:pb-0">
-          <header className="sticky top-0 z-30 flex items-center justify-between gap-4 border-b border-[#CBD5E1] bg-white/95 backdrop-blur px-4 sm:px-6 h-14">
+          <header className="sticky top-0 z-30 flex items-center justify-between gap-4 border-b border-slate-200 bg-white/95 backdrop-blur px-4 sm:px-6 h-14">
             <div className="flex items-center gap-3 min-w-0">
-              <div className="lg:hidden flex h-8 w-8 items-center justify-center rounded-sm bg-[#0F2942] text-white shrink-0">
+              <div className="lg:hidden flex h-8 w-8 items-center justify-center rounded-md bg-[#0F2942] text-white shrink-0">
                 <Compass className="h-4 w-4" />
               </div>
               <div className="min-w-0">
-                <h1 className="text-sm sm:text-base font-bold text-[#0D1C2F] truncate">
+                <h1 className="text-sm sm:text-base font-bold tracking-tight text-[#0D1C2F] truncate">
                   {adminTab === 'hoy' && `${snapshot.empresa.nombre} · Hoy`}
                   {adminTab === 'proyectos' && `${snapshot.empresa.nombre} · Proyectos y Rutas`}
                   {adminTab === 'agenda' && 'Agenda de Cuadrillas y Conflictos'}
@@ -1143,7 +1149,7 @@ export default function App() {
                 <button
                   type="button"
                   onClick={() => setAdminTab('hoy')}
-                  className="lg:hidden inline-flex items-center gap-1 rounded-sm border border-[#CBD5E1] bg-white px-2.5 py-2 text-xs font-semibold text-[#0F2942] hover:bg-[#F8FAFC] min-h-[38px]"
+                  className="lg:hidden inline-flex items-center justify-center rounded-md border border-slate-200 bg-white px-2.5 py-2 text-xs font-semibold text-[#0F2942] hover:bg-slate-50 min-h-[40px] min-w-[40px]"
                   title="Hoy"
                   aria-label="Ir a Hoy"
                 >
@@ -1155,7 +1161,7 @@ export default function App() {
                 <button
                   type="button"
                   onClick={() => setAdminTab('configuracion')}
-                  className="lg:hidden inline-flex items-center gap-1 rounded-sm border border-[#CBD5E1] bg-white px-2.5 py-2 text-xs font-semibold text-[#0F2942] hover:bg-[#F8FAFC] min-h-[38px]"
+                  className="lg:hidden inline-flex items-center justify-center rounded-md border border-slate-200 bg-white px-2.5 py-2 text-xs font-semibold text-[#0F2942] hover:bg-slate-50 min-h-[40px] min-w-[40px]"
                   title="Configuración"
                   aria-label="Ir a Configuración"
                 >
@@ -1166,7 +1172,7 @@ export default function App() {
               <button
                 type="button"
                 onClick={() => setIsTutorialOpen(true)}
-                className="inline-flex items-center gap-1.5 rounded-sm border border-[#CBD5E1] bg-white px-2.5 py-2 text-xs font-semibold text-[#0F2942] hover:bg-[#F8FAFC] min-h-[38px]"
+                className="inline-flex items-center gap-1.5 rounded-md border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-[#0F2942] hover:bg-slate-50 min-h-[40px] whitespace-nowrap shrink-0"
                 title="Abrir tutorial visual del perfil"
               >
                 <HelpCircle className="h-4 w-4 text-[#0284C7]" />
@@ -1181,7 +1187,7 @@ export default function App() {
                     setDefaultProyectoModal(snapshot.proyectos[0]?.id);
                     setIsKmzModalOpen(true);
                   }}
-                  className="inline-flex items-center gap-1.5 rounded-sm bg-[#0F2942] px-3.5 py-2 text-xs font-semibold text-white hover:bg-[#0284C7] transition-colors whitespace-nowrap shrink-0 min-h-[38px]"
+                  className="inline-flex items-center gap-1.5 rounded-md bg-[#0F2942] px-4 py-2 text-xs font-semibold text-white hover:bg-[#0284C7] transition-colors whitespace-nowrap shrink-0 min-h-[40px]"
                 >
                   <Plus className="h-4 w-4" />
                   <span className="hidden sm:inline">Nueva Ruta KMZ</span>
@@ -1191,8 +1197,8 @@ export default function App() {
             </div>
           </header>
 
-          <main className="flex-1 p-3 sm:p-6 space-y-5 max-w-[1440px] w-full mx-auto pb-24 lg:pb-8">
-            <div className="flex lg:hidden items-center justify-between gap-2 rounded-md border border-[#E2E8F0] bg-white px-3 py-2 text-xs">
+          <main className="flex-1 p-4 sm:p-6 space-y-6 max-w-[1440px] w-full mx-auto pb-24 lg:pb-8">
+            <div className="flex lg:hidden items-center justify-between gap-2 rounded-lg border border-slate-200 bg-white px-3.5 py-2.5 text-xs">
               <div className="min-w-0">
                 <div className="font-bold text-[#0F2942] truncate">{snapshot.empresa.nombre}</div>
                 <div className="font-mono text-[11px] text-[#43474D]">
@@ -1205,7 +1211,7 @@ export default function App() {
                     value={empresaId}
                     onChange={(e) => handleSeleccionarEmpresa(e.target.value)}
                     aria-label="Cambiar empresa activa"
-                    className="rounded-sm border border-[#CBD5E1] bg-white px-2 py-1.5 text-[11px] font-semibold text-[#0F2942] max-w-[140px]"
+                    className="rounded-md border border-slate-200 bg-white px-2.5 py-1.5 text-[11px] font-semibold text-[#0F2942] max-w-[140px] min-h-[36px]"
                   >
                     {empresasDisponibles.map((item) => (
                       <option key={item.empresa.id} value={item.empresa.id}>
@@ -1217,7 +1223,7 @@ export default function App() {
                 <button
                   type="button"
                   onClick={handleCerrarSesion}
-                  className="rounded-sm border border-[#CBD5E1] p-1.5 text-[#334155]"
+                  className="rounded-md border border-slate-200 p-2 text-[#334155] hover:bg-slate-50 min-h-[36px] min-w-[36px] flex items-center justify-center"
                   aria-label="Cerrar sesión"
                 >
                   <LogOut className="h-3.5 w-3.5" />
@@ -1228,6 +1234,7 @@ export default function App() {
             {adminTab === 'hoy' && rol === 'admin' && onboarding && (
               <AdminHoyView
                 empresa={snapshot.empresa}
+                isLoading={isLoadingSnapshot}
                 personal={snapshot.personal}
                 proyectos={snapshot.proyectos}
                 serviciosConfig={configuracion?.servicios ?? []}
@@ -1258,6 +1265,7 @@ export default function App() {
             {adminTab === 'proyectos' && (
               <ProyectosView
                 rol={rol}
+                isLoading={isLoadingSnapshot}
                 usuarioActual={sesion.usuario}
                 clientes={snapshot.clientes}
                 proyectos={snapshot.proyectos}
@@ -1316,6 +1324,7 @@ export default function App() {
             {adminTab === 'agenda' && (
               <AgendaView
                 rol={rol}
+                isLoading={isLoadingSnapshot}
                 usuarioActual={sesion.usuario}
                 rutas={snapshot.rutas}
                 cuadrillas={snapshot.cuadrillas}
@@ -1347,6 +1356,7 @@ export default function App() {
                 proyectos={snapshot.proyectos}
                 vehiculos={snapshot.vehiculos}
                 selectedRuta={selectedRuta}
+                isLoading={isLoadingSnapshot}
                 canEdit={canEdit}
                 creadoPorUsuario={sesion.usuario}
                 baseLat={snapshot.empresa.baseLat}
@@ -1434,15 +1444,15 @@ export default function App() {
             )}
 
             {adminTab === 'map' && (
-              <section className="space-y-4">
-                <div className="flex flex-wrap items-center justify-between gap-3 rounded-md border border-[#CBD5E1] bg-white px-4 py-2.5">
-                  <div className="inline-flex rounded-sm bg-[#F1F5F9] p-1 border border-[#CBD5E1]">
+              <section className="space-y-5">
+                <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-slate-200 bg-white px-5 py-3">
+                  <div className="inline-flex rounded-md bg-slate-100 p-1 border border-slate-200">
                     <button
                       type="button"
                       onClick={() => setMapViewerMode('cartografia')}
-                      className={`inline-flex items-center gap-1.5 rounded-sm px-3 py-1.5 text-xs font-semibold transition-colors ${
+                      className={`inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-semibold transition-colors whitespace-nowrap shrink-0 ${
                         mapViewerMode === 'cartografia'
-                          ? 'bg-[#0F2942] text-white'
+                          ? 'bg-[#0F2942] text-white shadow-sm'
                           : 'text-[#334155] hover:text-[#0F2942]'
                       }`}
                     >
@@ -1452,9 +1462,9 @@ export default function App() {
                     <button
                       type="button"
                       onClick={() => setMapViewerMode('planos')}
-                      className={`inline-flex items-center gap-1.5 rounded-sm px-3 py-1.5 text-xs font-semibold transition-colors ${
+                      className={`inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-semibold transition-colors whitespace-nowrap shrink-0 ${
                         mapViewerMode === 'planos'
-                          ? 'bg-[#0F2942] text-white'
+                          ? 'bg-[#0F2942] text-white shadow-sm'
                           : 'text-[#334155] hover:text-[#0F2942]'
                       }`}
                     >
@@ -1463,7 +1473,7 @@ export default function App() {
                     </button>
                   </div>
 
-                  <span className="text-[11px] text-[#43474D]">
+                  <span className="text-xs text-[#43474D]">
                     {mapViewerMode === 'planos'
                       ? 'Lectura vectorial CAD local para arquitectura e ingeniería'
                       : 'Parcelas, polilíneas y coordenadas UTM Zona 19N sobre OSM'}
@@ -1472,7 +1482,7 @@ export default function App() {
 
                 {mapViewerMode === 'cartografia' ? (
                   <>
-                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 rounded-md border border-[#CBD5E1] bg-white p-4">
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 rounded-lg border border-slate-200 bg-white p-4">
                       <div className="flex flex-wrap items-center gap-2.5 flex-1 min-w-0">
                         <select
                           value={standaloneKmz ? '__standalone__' : selectedRuta?.id ?? ''}
@@ -1482,7 +1492,7 @@ export default function App() {
                               setSelectedRutaId(e.target.value);
                             }
                           }}
-                          className="rounded-sm border border-[#CBD5E1] bg-white px-3 py-2 text-xs font-medium text-[#0D1C2F] min-h-[40px] max-w-full"
+                          className="rounded-md border border-slate-200 bg-white px-3 py-2 text-xs font-medium text-[#0D1C2F] min-h-[40px] max-w-full"
                         >
                           {standaloneKmz && (
                             <option value="__standalone__">
@@ -1511,7 +1521,7 @@ export default function App() {
                         <button
                           type="button"
                           onClick={() => viewerFileInputRef.current?.click()}
-                          className="inline-flex items-center gap-1.5 rounded-sm border border-[#CBD5E1] bg-[#F8FAFC] px-3 py-2 text-xs font-semibold text-[#0F2942] hover:bg-[#EFF4FF] min-h-[40px]"
+                          className="inline-flex items-center gap-1.5 rounded-md border border-slate-200 bg-slate-50 px-3.5 py-2 text-xs font-semibold text-[#0F2942] hover:bg-sky-50 min-h-[40px] whitespace-nowrap shrink-0"
                         >
                           <FileUp className="h-4 w-4 text-[#0284C7]" />
                           Abrir Archivo KMZ / KML / GeoJSON
@@ -1524,7 +1534,7 @@ export default function App() {
                               setPreloadedKmzForModal(standaloneKmz);
                               setIsKmzModalOpen(true);
                             }}
-                            className="inline-flex items-center gap-1.5 rounded-sm bg-[#0F2942] px-3 py-2 text-xs font-semibold text-white hover:bg-[#0284C7] min-h-[40px]"
+                            className="inline-flex items-center gap-1.5 rounded-md bg-[#0F2942] px-3.5 py-2 text-xs font-semibold text-white hover:bg-[#0284C7] min-h-[40px] whitespace-nowrap shrink-0"
                           >
                             <Plus className="h-4 w-4" />
                             Guardar como Ruta de Proyecto
@@ -1536,7 +1546,7 @@ export default function App() {
                         type="button"
                         onClick={() => handleCaptureLiveGps()}
                         disabled={isCapturingGps}
-                        className="inline-flex items-center justify-center gap-1.5 rounded-sm bg-[#0284C7] px-3.5 py-2 text-xs font-semibold text-white hover:bg-[#006398] disabled:opacity-60 min-h-[40px] shrink-0"
+                        className="inline-flex items-center justify-center gap-1.5 rounded-md bg-[#0284C7] px-4 py-2 text-xs font-semibold text-white hover:bg-[#006398] disabled:opacity-60 min-h-[40px] whitespace-nowrap shrink-0"
                       >
                         <Compass className="h-4 w-4" />
                         {isCapturingGps ? 'Fijando GPS...' : 'Capturar GPS Actual'}
@@ -1573,6 +1583,7 @@ export default function App() {
             {adminTab === 'viaticos' && (
               <ViaticosView
                 rol={rol}
+                isLoading={isLoadingSnapshot}
                 viaticos={snapshot.viaticos}
                 proyectos={snapshot.proyectos}
                 misiones={snapshot.misiones}
@@ -1599,6 +1610,7 @@ export default function App() {
             {adminTab === 'catalogos' && (
               <CatalogosView
                 rol={rol}
+                isLoading={isLoadingSnapshot}
                 clientes={snapshot.clientes}
                 personal={snapshot.personal}
                 cargos={cargos}
@@ -1648,12 +1660,13 @@ export default function App() {
             )}
 
             {adminTab === 'auditoria' && canAudit && (
-              <AuditoriaView historial={snapshot.historial} />
+              <AuditoriaView historial={snapshot.historial} isLoading={isLoadingSnapshot} />
             )}
 
             {adminTab === 'configuracion' && canViewConfig && configuracion && (
               <ConfiguracionView
                 rol={rol}
+                isLoading={isLoadingSnapshot}
                 usuarioActualId={sesion.usuario.id}
                 empresa={snapshot.empresa}
                 configuracion={configuracion}
@@ -1968,7 +1981,7 @@ export default function App() {
       />
 
       {toastMessage && (
-        <div className="fixed bottom-20 lg:bottom-5 right-4 z-50 flex items-center gap-2 rounded-sm border border-[#0F2942] bg-[#0F2942] px-4 py-2.5 text-xs font-medium text-white shadow-lg max-w-sm">
+        <div className="fixed bottom-20 lg:bottom-5 right-4 z-50 flex items-center gap-2 rounded-lg border border-white/15 bg-[#091A2C]/95 backdrop-blur-md px-4 py-2.5 text-xs font-medium text-white shadow-xl max-w-sm">
           <CheckCircle2 className="h-4 w-4 text-[#86EFAC] shrink-0" />
           <span>{toastMessage}</span>
         </div>

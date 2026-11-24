@@ -18,9 +18,9 @@ export const DemoBanner: React.FC<{ visible: boolean }> = ({ visible }) => {
   return (
     <div
       role="status"
-      className="flex items-center justify-center gap-2 bg-[#FEF3C7] border-b border-[#FDE047] px-3 py-1.5 text-[11px] font-semibold text-[#92400E]"
+      className="flex items-center justify-center gap-2 bg-amber-100 border-b border-amber-300 px-3 py-1.5 text-xs font-semibold text-amber-950"
     >
-      <FlaskConical className="h-3.5 w-3.5 shrink-0" />
+      <FlaskConical className="h-3.5 w-3.5 shrink-0 text-[#B45309]" />
       <span>Datos de demostración, no son reales</span>
     </div>
   );
@@ -69,10 +69,10 @@ export const OfflineSyncBanner: React.FC<OfflineSyncBannerProps> = ({
       {avisosLww.length > 0 && (
         <div
           role="alert"
-          className="flex items-start justify-between gap-3 bg-[#FFFBEB] border-b border-[#F59E0B] px-4 py-2 text-xs text-[#92400E]"
+          className="flex items-start justify-between gap-3 bg-amber-50 border-b border-amber-300 px-4 py-2.5 text-xs text-amber-950"
         >
-          <div className="flex items-start gap-2 min-w-0">
-            <AlertTriangle className="h-4 w-4 shrink-0 mt-0.5 text-[#D97706]" />
+          <div className="flex items-start gap-2.5 min-w-0">
+            <AlertTriangle className="h-4 w-4 shrink-0 mt-0.5 text-[#B45309]" />
             <div className="space-y-0.5">
               <div className="font-bold">
                 Aviso de sincronización (gana el último): {avisosLww.length}{' '}
@@ -81,7 +81,7 @@ export const OfflineSyncBanner: React.FC<OfflineSyncBannerProps> = ({
                   : 'cambios locales fueron sobrescritos'}{' '}
                 por un registro más reciente del servidor.
               </div>
-              <ul className="list-disc pl-4 text-[11px] space-y-0.5">
+              <ul className="list-disc pl-4 text-[11px] space-y-0.5 text-amber-900">
                 {avisosLww.slice(0, 3).map((av) => (
                   <li key={`${av.entidadTipo}-${av.entidadId}-${av.fecha}`}>{av.descripcion}</li>
                 ))}
@@ -92,7 +92,7 @@ export const OfflineSyncBanner: React.FC<OfflineSyncBannerProps> = ({
             <button
               type="button"
               onClick={onDescartarAvisosLww}
-              className="rounded-sm p-1 text-[#92400E] hover:bg-[#FEF3C7] shrink-0"
+              className="rounded-md p-1.5 text-amber-900 hover:bg-amber-200/70 shrink-0"
               aria-label="Cerrar aviso de sincronización"
             >
               <X className="h-4 w-4" />
@@ -102,7 +102,7 @@ export const OfflineSyncBanner: React.FC<OfflineSyncBannerProps> = ({
       )}
 
       {isOnline && pendingCount === 0 && !hasConflict ? (
-        <div className="h-[3px] w-full bg-[#16A34A]" aria-label="Sincronizado en línea" />
+        <div className="h-[3px] w-full bg-[#15803D]" aria-label="Sincronizado en línea" />
       ) : hasConflict ? (
         <div className="sticky top-0 z-40 flex flex-wrap items-center justify-between gap-2 bg-[#DC2626] px-4 py-2 text-xs font-medium text-white">
           <div className="flex items-center gap-2">
@@ -115,16 +115,16 @@ export const OfflineSyncBanner: React.FC<OfflineSyncBannerProps> = ({
             type="button"
             onClick={onSyncNow}
             disabled={!isOnline || isSyncing}
-            className="inline-flex items-center gap-1.5 rounded-sm bg-white/15 px-3 py-1 text-xs font-semibold text-white hover:bg-white/25 disabled:opacity-50 whitespace-nowrap shrink-0"
+            className="inline-flex items-center gap-1.5 rounded-md bg-white/15 px-3 py-1.5 text-xs font-semibold text-white hover:bg-white/25 disabled:opacity-50 whitespace-nowrap shrink-0"
           >
             <RefreshCw className={`h-3.5 w-3.5 ${isSyncing ? 'animate-spin' : ''}`} />
             Reconciliar
           </button>
         </div>
       ) : (
-        <div className="sticky top-0 z-40 flex flex-wrap items-center justify-between gap-2 bg-[#0F2942] px-4 py-2 text-xs text-[#F8FAFC] border-b border-[#1E3A8A]">
+        <div className="sticky top-0 z-40 flex flex-wrap items-center justify-between gap-2 bg-[#0F2942] px-4 py-2 text-xs text-slate-50 border-b border-slate-700">
           <div className="flex items-center gap-2 min-w-0">
-            <WifiOff className="h-4 w-4 shrink-0 text-[#D97706]" />
+            <WifiOff className="h-4 w-4 shrink-0 text-amber-400" />
             <div className="min-w-0">
               <span>
                 {!isOnline
@@ -136,7 +136,7 @@ export const OfflineSyncBanner: React.FC<OfflineSyncBannerProps> = ({
                     } por sincronizar`}
               </span>
               {desglose && (
-                <span className="ml-2 font-mono text-[11px] text-[#93CCFF]">({desglose})</span>
+                <span className="ml-2 font-mono text-[11px] text-sky-300">({desglose})</span>
               )}
             </div>
           </div>
@@ -144,7 +144,7 @@ export const OfflineSyncBanner: React.FC<OfflineSyncBannerProps> = ({
             type="button"
             onClick={onSyncNow}
             disabled={!isOnline || isSyncing}
-            className="inline-flex items-center gap-1.5 rounded-sm border border-[#7991AF]/40 bg-[#1E3A8A]/60 px-3 py-1 text-xs font-semibold text-white hover:bg-[#0284C7] disabled:opacity-50 transition-colors whitespace-nowrap shrink-0"
+            className="inline-flex items-center gap-1.5 rounded-md border border-white/25 bg-white/10 px-3 py-1.5 text-xs font-semibold text-white hover:bg-[#0284C7] disabled:opacity-50 transition-colors whitespace-nowrap shrink-0"
           >
             <RefreshCw className={`h-3.5 w-3.5 ${isSyncing ? 'animate-spin' : ''}`} />
             {isSyncing ? 'Sincronizando...' : 'Sincronizar ahora'}

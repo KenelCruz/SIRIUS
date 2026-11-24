@@ -43,20 +43,20 @@ const CustomChartTooltip: React.FC<CustomTooltipProps> = ({ active, payload }) =
   const diff = item.presupuesto - item.gastoReal;
 
   return (
-    <div className="rounded-md border border-[#CBD5E1] bg-white p-3 shadow-lg text-xs min-w-[230px]">
+    <div className="rounded-lg border border-slate-200 bg-white p-3.5 shadow-xl text-xs min-w-[230px]">
       <div className="font-mono text-[11px] font-bold text-[#0284C7]">{item.codigoContrato}</div>
-      <div className="font-semibold text-[#0D1C2F] mt-0.5 truncate max-w-[250px]">
+      <div className="font-semibold text-slate-900 mt-0.5 truncate max-w-[250px]">
         {item.nombre}
       </div>
-      <div className="mt-2 space-y-1 border-t border-[#E2E8F0] pt-2">
+      <div className="mt-2 space-y-1.5 border-t border-slate-200 pt-2">
         <div className="flex items-center justify-between gap-4">
-          <span className="text-[#43474D]">Presupuesto Viáticos:</span>
+          <span className="text-slate-600">Presupuesto Viáticos:</span>
           <span className="font-mono font-bold text-[#0F2942] tabular-nums">
             {formatRD(item.presupuesto)}
           </span>
         </div>
         <div className="flex items-center justify-between gap-4">
-          <span className="text-[#43474D]">Gasto Real (Repartido):</span>
+          <span className="text-slate-600">Gasto Real (Repartido):</span>
           <span
             className={`font-mono font-bold tabular-nums ${
               item.overBudget ? 'text-[#DC2626]' : 'text-[#0284C7]'
@@ -65,11 +65,11 @@ const CustomChartTooltip: React.FC<CustomTooltipProps> = ({ active, payload }) =
             {formatRD(item.gastoReal)}
           </span>
         </div>
-        <div className="flex items-center justify-between gap-4 border-t border-[#F1F5F9] pt-1">
-          <span className="text-[#43474D]">{diff >= 0 ? 'Disponible:' : 'Excedido:'}</span>
+        <div className="flex items-center justify-between gap-4 border-t border-slate-100 pt-1.5">
+          <span className="text-slate-600">{diff >= 0 ? 'Disponible:' : 'Excedido:'}</span>
           <span
             className={`font-mono font-bold tabular-nums ${
-              diff >= 0 ? 'text-[#16A34A]' : 'text-[#DC2626]'
+              diff >= 0 ? 'text-[#15803D]' : 'text-[#DC2626]'
             }`}
           >
             {formatRD(Math.abs(diff))}
@@ -110,29 +110,29 @@ export const ViaticosComparisonChart: React.FC<ViaticosComparisonChartProps> = (
   }, [proyectos, viaticos]);
 
   return (
-    <div className="rounded-md border border-[#E2E8F0] bg-white p-4 flex flex-col justify-between h-full">
-      <div className="flex flex-wrap items-center justify-between gap-2 mb-2">
+    <div className="rounded-lg border border-slate-200 bg-white p-5 flex flex-col justify-between h-full">
+      <div className="flex flex-wrap items-center justify-between gap-2 mb-3">
         <div>
-          <h2 className="text-xs font-bold text-[#0F2942]">
+          <h2 className="text-sm font-bold text-slate-900">
             Presupuesto Viáticos vs. Gasto Real (Proyectos Activos)
           </h2>
-          <p className="text-[11px] text-[#43474D]">
+          <p className="text-xs text-slate-500">
             Comparativa según reparto exacto en RD$ (excluye rechazados)
           </p>
         </div>
         {sinAsignarRD > 0 && (
-          <div className="font-mono text-[11px] font-semibold text-[#D97706]">
+          <div className="font-mono text-xs font-semibold text-[#B45309] tabular-nums">
             Sin asignar: {formatRD(sinAsignarRD)}
           </div>
         )}
       </div>
 
       {data.length === 0 ? (
-        <div className="flex-1 flex items-center justify-center py-8 text-xs text-[#43474D]">
+        <div className="flex-1 flex items-center justify-center py-8 text-xs text-slate-500">
           No hay proyectos activos para comparar viáticos.
         </div>
       ) : (
-        <div className="w-full h-[185px] min-w-0">
+        <div className="w-full h-[195px] min-w-0">
           <ResponsiveContainer width="100%" height="100%">
             <BarChart
               data={data}
@@ -148,7 +148,7 @@ export const ViaticosComparisonChart: React.FC<ViaticosComparisonChartProps> = (
               <CartesianGrid strokeDasharray="3 3" stroke="#E2E8F0" vertical={false} />
               <XAxis
                 dataKey="shortCode"
-                tick={{ fontSize: 11, fill: '#43474D', fontFamily: 'JetBrains Mono, monospace' }}
+                tick={{ fontSize: 11, fill: '#475569', fontFamily: 'JetBrains Mono, monospace' }}
                 axisLine={{ stroke: '#CBD5E1' }}
                 tickLine={false}
               />
@@ -156,14 +156,14 @@ export const ViaticosComparisonChart: React.FC<ViaticosComparisonChartProps> = (
                 tickFormatter={(val: number) =>
                   val >= 1000 ? `${Math.round(val / 1000)}k` : String(val)
                 }
-                tick={{ fontSize: 11, fill: '#43474D', fontFamily: 'JetBrains Mono, monospace' }}
+                tick={{ fontSize: 11, fill: '#475569', fontFamily: 'JetBrains Mono, monospace' }}
                 axisLine={false}
                 tickLine={false}
                 width={42}
               />
               <Tooltip content={<CustomChartTooltip />} cursor={{ fill: '#F1F5F9' }} />
               <Legend
-                wrapperStyle={{ fontSize: '11px', paddingTop: '4px' }}
+                wrapperStyle={{ fontSize: '11px', paddingTop: '6px' }}
                 iconType="square"
                 iconSize={9}
               />
@@ -171,14 +171,14 @@ export const ViaticosComparisonChart: React.FC<ViaticosComparisonChartProps> = (
                 dataKey="presupuesto"
                 name="Presupuesto Viáticos"
                 fill="#0F2942"
-                radius={[3, 3, 0, 0]}
+                radius={[4, 4, 0, 0]}
                 maxBarSize={26}
               />
               <Bar
                 dataKey="gastoReal"
                 name="Gasto Real"
                 fill="#0284C7"
-                radius={[3, 3, 0, 0]}
+                radius={[4, 4, 0, 0]}
                 maxBarSize={26}
               >
                 {data.map((entry) => (

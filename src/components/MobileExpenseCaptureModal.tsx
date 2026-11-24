@@ -43,6 +43,7 @@ import {
   haversineMeters,
   latLonToUtm19N,
 } from '../utils/geodesy';
+import { MediaThumb } from './MediaThumb';
 
 export type ProyectoSelectorItem = Pick<Proyecto, 'id' | 'nombre' | 'codigoContrato'>;
 export type RutaSelectorItem = Pick<
@@ -584,25 +585,30 @@ export const MobileExpenseCaptureModal: React.FC<MobileExpenseCaptureModalProps>
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-[#0F2942]/65 sm:p-4">
-      <div className="w-full sm:max-w-xl rounded-t-2xl sm:rounded-md border border-[#CBD5E1] bg-white shadow-2xl max-h-[92vh] flex flex-col">
+    <div
+      className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-[#0F2942]/65 backdrop-blur-[2px] sm:p-4"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="titulo-captura-viatico"
+    >
+      <div className="w-full sm:max-w-xl rounded-t-2xl sm:rounded-xl border border-slate-200 bg-white shadow-2xl max-h-[92vh] flex flex-col">
         <div className="sm:hidden pt-2.5 pb-1 flex justify-center">
-          <div className="h-1.5 w-10 rounded-full bg-[#CBD5E1]" />
+          <div className="h-1.5 w-10 rounded-full bg-slate-300" />
         </div>
 
-        <div className="flex items-center justify-between border-b border-[#E2E8F0] px-5 py-3.5">
+        <div className="flex items-center justify-between border-b border-slate-200 px-5 py-3.5">
           <div>
-            <h2 className="text-base font-bold text-[#0D1C2F]">
+            <h2 id="titulo-captura-viatico" className="text-base font-bold text-slate-900">
               {editingViatico ? 'Editar Viático Pendiente' : 'Reportar Viático en Campo'}
             </h2>
-            <p className="text-xs text-[#43474D]">
+            <p className="text-xs text-slate-500">
               Captura opcional por foto OCR (editable), ruta GPS o tarifa rápida. Se registra en estado Pendiente.
             </p>
           </div>
           <button
             type="button"
             onClick={onClose}
-            className="min-h-[40px] min-w-[40px] flex items-center justify-center rounded-sm text-[#43474D] hover:bg-[#F1F5F9]"
+            className="min-h-[40px] min-w-[40px] flex items-center justify-center rounded-md text-slate-500 hover:bg-slate-100 shrink-0"
             aria-label="Cerrar"
           >
             <X className="h-4 w-4" />
@@ -611,14 +617,14 @@ export const MobileExpenseCaptureModal: React.FC<MobileExpenseCaptureModalProps>
 
         <form onSubmit={handleSubmit} className="overflow-y-auto p-5 space-y-4">
           {/* Capture Mode Tabs */}
-          <div className="grid grid-cols-3 gap-1.5 rounded-sm bg-[#F1F5F9] p-1">
+          <div className="grid grid-cols-3 gap-1.5 rounded-lg bg-slate-100 p-1">
             <button
               type="button"
               onClick={() => setCaptureMode('ocr')}
-              className={`flex items-center justify-center gap-1.5 rounded-sm py-2.5 text-xs font-semibold transition-colors min-h-[44px] ${
+              className={`flex items-center justify-center gap-1.5 rounded-md py-2.5 text-xs font-semibold transition-colors min-h-[44px] whitespace-nowrap ${
                 captureMode === 'ocr'
                   ? 'bg-[#0F2942] text-white'
-                  : 'text-[#334155] hover:bg-white'
+                  : 'text-slate-700 hover:bg-white'
               }`}
             >
               <Camera className="h-3.5 w-3.5" />
@@ -627,10 +633,10 @@ export const MobileExpenseCaptureModal: React.FC<MobileExpenseCaptureModalProps>
             <button
               type="button"
               onClick={() => setCaptureMode('gps')}
-              className={`flex items-center justify-center gap-1.5 rounded-sm py-2.5 text-xs font-semibold transition-colors min-h-[44px] ${
+              className={`flex items-center justify-center gap-1.5 rounded-md py-2.5 text-xs font-semibold transition-colors min-h-[44px] whitespace-nowrap ${
                 captureMode === 'gps'
                   ? 'bg-[#0F2942] text-white'
-                  : 'text-[#334155] hover:bg-white'
+                  : 'text-slate-700 hover:bg-white'
               }`}
             >
               <Navigation className="h-3.5 w-3.5" />
@@ -639,10 +645,10 @@ export const MobileExpenseCaptureModal: React.FC<MobileExpenseCaptureModalProps>
             <button
               type="button"
               onClick={() => setCaptureMode('quick')}
-              className={`flex items-center justify-center gap-1.5 rounded-sm py-2.5 text-xs font-semibold transition-colors min-h-[44px] ${
+              className={`flex items-center justify-center gap-1.5 rounded-md py-2.5 text-xs font-semibold transition-colors min-h-[44px] whitespace-nowrap ${
                 captureMode === 'quick'
                   ? 'bg-[#0F2942] text-white'
-                  : 'text-[#334155] hover:bg-white'
+                  : 'text-slate-700 hover:bg-white'
               }`}
             >
               <Utensils className="h-3.5 w-3.5" />
@@ -651,8 +657,8 @@ export const MobileExpenseCaptureModal: React.FC<MobileExpenseCaptureModalProps>
           </div>
 
           {rolActivo === 'tecnico' && !personalIdUsuario && (
-            <div className="flex items-start gap-2 rounded-sm border border-[#FCA5A5] bg-[#FEE2E2] px-3 py-2 text-xs text-[#93000A]">
-              <AlertTriangle className="h-4 w-4 shrink-0 mt-0.5" />
+            <div className="flex items-start gap-2 rounded-lg border border-rose-200 bg-rose-50 px-3.5 py-2.5 text-xs text-rose-800">
+              <AlertTriangle className="h-4 w-4 shrink-0 mt-0.5 text-[#DC2626]" />
               <span>{ERROR_TECNICO_SIN_PERSONAL}</span>
             </div>
           )}
@@ -666,7 +672,7 @@ export const MobileExpenseCaptureModal: React.FC<MobileExpenseCaptureModalProps>
               <select
                 value={misionId}
                 onChange={(e) => setMisionId(e.target.value)}
-                className="w-full rounded-sm border border-[#CBD5E1] bg-white px-3 py-2.5 text-xs text-[#0D1C2F] min-h-[44px]"
+                className="w-full rounded-md border border-slate-300 bg-white px-3 py-2.5 text-xs text-slate-900 min-h-[44px] focus:border-[#0284C7] focus:outline-none"
               >
                 <option value="">Sin misión (gasto suelto / administrativo)</option>
                 {misiones.map((m) => (
@@ -678,7 +684,7 @@ export const MobileExpenseCaptureModal: React.FC<MobileExpenseCaptureModalProps>
             </div>
 
             <div>
-              <label className="block text-xs font-semibold text-[#334155] mb-1">
+              <label className="block text-xs font-semibold text-slate-700 mb-1.5">
                 Ruta de Campo de Referencia
               </label>
               <select
@@ -695,7 +701,7 @@ export const MobileExpenseCaptureModal: React.FC<MobileExpenseCaptureModalProps>
                     if (matchMision) setMisionId(matchMision.id);
                   }
                 }}
-                className="w-full rounded-sm border border-[#CBD5E1] bg-white px-3 py-2.5 text-xs text-[#0D1C2F] min-h-[44px]"
+                className="w-full rounded-md border border-slate-300 bg-white px-3 py-2.5 text-xs text-slate-900 min-h-[44px] focus:border-[#0284C7] focus:outline-none"
               >
                 <option value="">Sin ruta específica (gasto general)</option>
                 {rutas.map((r) => (
@@ -708,7 +714,7 @@ export const MobileExpenseCaptureModal: React.FC<MobileExpenseCaptureModalProps>
           </div>
 
           {captureMode === 'ocr' && (
-            <div className="rounded-md border border-[#CBD5E1] bg-[#F8FAFC] p-4">
+            <div className="rounded-lg border border-slate-200 bg-slate-50 p-4">
               <input
                 ref={cameraInputRef}
                 type="file"
@@ -725,7 +731,7 @@ export const MobileExpenseCaptureModal: React.FC<MobileExpenseCaptureModalProps>
                   type="button"
                   onClick={() => cameraInputRef.current?.click()}
                   disabled={isAnalyzing}
-                  className="w-full sm:w-auto flex-1 inline-flex items-center justify-center gap-2 rounded-sm bg-[#0284C7] px-4 py-3 text-xs font-semibold text-white hover:bg-[#006398] disabled:opacity-60 transition-colors min-h-[48px]"
+                  className="w-full sm:w-auto flex-1 inline-flex items-center justify-center gap-2 rounded-md bg-[#0284C7] px-4 py-3 text-xs font-semibold text-white hover:bg-[#0369A1] disabled:opacity-60 transition-colors min-h-[48px]"
                 >
                   {isAnalyzing ? (
                     <>
@@ -740,14 +746,21 @@ export const MobileExpenseCaptureModal: React.FC<MobileExpenseCaptureModalProps>
                   )}
                 </button>
                 {receiptPreview && (
-                  <img
+                  <MediaThumb
                     src={receiptPreview}
                     alt="Vista previa del comprobante"
-                    className="h-14 w-14 rounded-sm border border-[#CBD5E1] object-cover shrink-0"
+                    caption="Recibo"
+                    sizeClass="h-16 w-16 shrink-0"
+                    onRemove={() => {
+                      setReceiptPreview(null);
+                      setPendingReceiptMime(undefined);
+                      setNeedsOfflineOcr(false);
+                    }}
+                    removeLabel="Quitar comprobante"
                   />
                 )}
               </div>
-              <p className="mt-2 flex items-center gap-1.5 text-[11px] text-[#43474D]">
+              <p className="mt-2.5 flex items-center gap-1.5 text-[11px] text-slate-600">
                 <Sparkles className="h-3.5 w-3.5 text-[#0284C7] shrink-0" />
                 {isOnline
                   ? 'La foto prellena los campos como sugerencia editable; revisa monto, NCF e ITBIS antes de guardar.'
@@ -757,12 +770,12 @@ export const MobileExpenseCaptureModal: React.FC<MobileExpenseCaptureModalProps>
           )}
 
           {captureMode === 'gps' && (
-            <div className="rounded-md border border-[#CBD5E1] bg-[#F8FAFC] p-4 space-y-2.5">
+            <div className="rounded-lg border border-slate-200 bg-slate-50 p-4 space-y-2.5">
               <button
                 type="button"
                 onClick={handleAutoGpsMileage}
                 disabled={isLocating}
-                className="w-full inline-flex items-center justify-center gap-2 rounded-sm bg-[#0284C7] px-4 py-3 text-xs font-semibold text-white hover:bg-[#006398] disabled:opacity-60 transition-colors min-h-[48px]"
+                className="w-full inline-flex items-center justify-center gap-2 rounded-md bg-[#0284C7] px-4 py-3 text-xs font-semibold text-white hover:bg-[#0369A1] disabled:opacity-60 transition-colors min-h-[48px]"
               >
                 {isLocating ? (
                   <>
@@ -776,25 +789,25 @@ export const MobileExpenseCaptureModal: React.FC<MobileExpenseCaptureModalProps>
                   </>
                 )}
               </button>
-              <p className="text-[11px] text-[#43474D]">
+              <p className="text-[11px] text-slate-600">
                 Calcula la distancia geodésica desde base hasta la parcela (
                 {reglasCaptura.gpsRuta.conceptoDistancia === 'ida_vuelta'
                   ? 'ida y vuelta'
                   : 'solo ida'}
                 , mínimo {reglasCaptura.gpsRuta.minimoKm} km) a razón de{' '}
-                {formatRD(reglasCaptura.gpsRuta.tarifaPorKmRD, moneda)}/km.
+                <span className="font-mono tabular-nums">{formatRD(reglasCaptura.gpsRuta.tarifaPorKmRD, moneda)}/km</span>.
               </p>
             </div>
           )}
 
           {captureMode === 'quick' && (
-            <div className="grid grid-cols-2 gap-2">
+            <div className="grid grid-cols-2 gap-2.5">
               {reglasCaptura.presetsRapidos.map((preset) => (
                 <button
                   key={preset.id}
                   type="button"
                   onClick={() => handleApplyPreset(preset)}
-                  className="rounded-sm border border-[#CBD5E1] bg-[#F8FAFC] p-3 text-left hover:border-[#0284C7] hover:bg-[#EFF4FF] transition-colors min-h-[54px]"
+                  className="rounded-lg border border-slate-200 bg-slate-50 p-3.5 text-left hover:border-[#0284C7] hover:bg-sky-50/70 transition-colors min-h-[56px]"
                 >
                   <div className="text-xs font-semibold text-[#0F2942]">{preset.etiqueta}</div>
                   <div className="mt-0.5 font-mono text-xs font-bold text-[#0284C7] tabular-nums">
@@ -806,14 +819,14 @@ export const MobileExpenseCaptureModal: React.FC<MobileExpenseCaptureModalProps>
           )}
 
           {ocrStatusMsg && (
-            <div className="flex items-start gap-2 rounded-sm border border-[#86EFAC] bg-[#F0FDF4] px-3 py-2 text-xs text-[#15803D]">
+            <div className="flex items-start gap-2 rounded-md border border-emerald-200 bg-emerald-50 px-3.5 py-2.5 text-xs text-[#15803D]">
               <CheckCircle2 className="h-4 w-4 shrink-0 mt-0.5" />
               <span>{ocrStatusMsg}</span>
             </div>
           )}
 
           {errorMsg && (
-            <div className="rounded-sm border border-[#FCA5A5] bg-[#FEE2E2] px-3 py-2 text-xs text-[#93000A]">
+            <div className="rounded-md border border-rose-200 bg-rose-50 px-3.5 py-2.5 text-xs text-rose-800">
               {errorMsg}
             </div>
           )}
@@ -821,11 +834,11 @@ export const MobileExpenseCaptureModal: React.FC<MobileExpenseCaptureModalProps>
           {/* Expense Fields */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
             <div>
-              <label className="block font-semibold text-[#334155] mb-1">Categoría</label>
+              <label className="block font-semibold text-slate-700 mb-1.5">Categoría</label>
               <select
                 value={category}
                 onChange={(e) => setCategory(e.target.value as CategoriaViatico)}
-                className="w-full rounded-sm border border-[#CBD5E1] bg-white px-3 py-2 text-xs text-[#0D1C2F] min-h-[42px]"
+                className="w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-xs text-slate-900 min-h-[42px] focus:border-[#0284C7] focus:outline-none"
               >
                 {categoriasDisponibles.map((c) => (
                   <option key={c} value={c}>
@@ -835,7 +848,7 @@ export const MobileExpenseCaptureModal: React.FC<MobileExpenseCaptureModalProps>
               </select>
             </div>
             <div>
-              <label className="block font-semibold text-[#334155] mb-1">Monto Total (RD$)</label>
+              <label className="block font-semibold text-slate-700 mb-1.5">Monto Total (RD$)</label>
               <input
                 type="number"
                 step="0.01"
@@ -847,11 +860,11 @@ export const MobileExpenseCaptureModal: React.FC<MobileExpenseCaptureModalProps>
                   syncAmountIntoUniqueSplit(Number(e.target.value) || 0);
                 }}
                 placeholder="0.00"
-                className="w-full rounded-sm border border-[#CBD5E1] px-3 py-2 font-mono text-xs text-[#0D1C2F] min-h-[42px]"
+                className="w-full rounded-md border border-slate-300 px-3 py-2 font-mono text-xs text-slate-900 min-h-[42px] tabular-nums focus:border-[#0284C7] focus:outline-none"
               />
             </div>
             <div className="sm:col-span-2">
-              <label className="block font-semibold text-[#334155] mb-1">
+              <label className="block font-semibold text-slate-700 mb-1.5">
                 Comercio / Estación / Concepto
               </label>
               <input
@@ -860,61 +873,61 @@ export const MobileExpenseCaptureModal: React.FC<MobileExpenseCaptureModalProps>
                 value={merchant}
                 onChange={(e) => setMerchant(e.target.value)}
                 placeholder="Ej. Estación Texaco Autovía del Este"
-                className="w-full rounded-sm border border-[#CBD5E1] px-3 py-2 text-xs text-[#0D1C2F] min-h-[42px]"
+                className="w-full rounded-md border border-slate-300 px-3 py-2 text-xs text-slate-900 min-h-[42px] focus:border-[#0284C7] focus:outline-none"
               />
             </div>
             <div>
-              <label className="block font-semibold text-[#334155] mb-1">NCF (Opcional)</label>
+              <label className="block font-semibold text-slate-700 mb-1.5">NCF (Opcional)</label>
               <input
                 type="text"
                 value={ncf}
                 onChange={(e) => setNcf(e.target.value)}
                 placeholder="B010000..."
-                className="w-full rounded-sm border border-[#CBD5E1] px-3 py-2 font-mono text-xs text-[#0D1C2F] min-h-[42px]"
+                className="w-full rounded-md border border-slate-300 px-3 py-2 font-mono text-xs text-slate-900 min-h-[42px] focus:border-[#0284C7] focus:outline-none"
               />
             </div>
             <div>
-              <label className="block font-semibold text-[#334155] mb-1">ITBIS (RD$)</label>
+              <label className="block font-semibold text-slate-700 mb-1.5">ITBIS (RD$)</label>
               <input
                 type="number"
                 step="0.01"
                 min={0}
                 value={itbisRD}
                 onChange={(e) => setItbisRD(e.target.value)}
-                className="w-full rounded-sm border border-[#CBD5E1] px-3 py-2 font-mono text-xs text-[#0D1C2F] min-h-[42px]"
+                className="w-full rounded-md border border-slate-300 px-3 py-2 font-mono text-xs text-slate-900 min-h-[42px] tabular-nums focus:border-[#0284C7] focus:outline-none"
               />
             </div>
             <div>
-              <label className="block font-semibold text-[#334155] mb-1">Fecha</label>
+              <label className="block font-semibold text-slate-700 mb-1.5">Fecha</label>
               <input
                 type="date"
                 required
                 value={dateIso}
                 onChange={(e) => setDateIso(e.target.value)}
-                className="w-full rounded-sm border border-[#CBD5E1] px-3 py-2 font-mono text-xs text-[#0D1C2F] min-h-[42px]"
+                className="w-full rounded-md border border-slate-300 px-3 py-2 font-mono text-xs text-slate-900 min-h-[42px] focus:border-[#0284C7] focus:outline-none"
               />
             </div>
             <div>
-              <label className="block font-semibold text-[#334155] mb-1">Observación</label>
+              <label className="block font-semibold text-slate-700 mb-1.5">Observación</label>
               <input
                 type="text"
                 value={notes}
                 onChange={(e) => setNotes(e.target.value)}
                 placeholder="Detalle de artículos o km"
-                className="w-full rounded-sm border border-[#CBD5E1] px-3 py-2 text-xs text-[#0D1C2F] min-h-[42px]"
+                className="w-full rounded-md border border-slate-300 px-3 py-2 text-xs text-slate-900 min-h-[42px] focus:border-[#0284C7] focus:outline-none"
               />
             </div>
 
             {category === 'Combustible' && (
               <>
                 <div>
-                  <label className="block font-semibold text-[#334155] mb-1">
+                  <label className="block font-semibold text-slate-700 mb-1.5">
                     Vehículo abastecido (para rendimiento)
                   </label>
                   <select
                     value={vehiculoId}
                     onChange={(e) => setVehiculoId(e.target.value)}
-                    className="w-full rounded-sm border border-[#CBD5E1] bg-white px-3 py-2 text-xs text-[#0D1C2F] min-h-[42px]"
+                    className="w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-xs text-slate-900 min-h-[42px] focus:border-[#0284C7] focus:outline-none"
                   >
                     <option value="">Sin vehículo específico</option>
                     {vehiculos.map((v) => (
@@ -925,7 +938,7 @@ export const MobileExpenseCaptureModal: React.FC<MobileExpenseCaptureModalProps>
                   </select>
                 </div>
                 <div>
-                  <label className="block font-semibold text-[#334155] mb-1">
+                  <label className="block font-semibold text-slate-700 mb-1.5">
                     Galones cargados (opcional)
                   </label>
                   <input
@@ -935,7 +948,7 @@ export const MobileExpenseCaptureModal: React.FC<MobileExpenseCaptureModalProps>
                     value={galonesCargados}
                     onChange={(e) => setGalonesCargados(e.target.value)}
                     placeholder="Ej. 11.2"
-                    className="w-full rounded-sm border border-[#CBD5E1] px-3 py-2 font-mono text-xs text-[#0D1C2F] min-h-[42px]"
+                    className="w-full rounded-md border border-slate-300 px-3 py-2 font-mono text-xs text-slate-900 min-h-[42px] tabular-nums focus:border-[#0284C7] focus:outline-none"
                   />
                 </div>
               </>
@@ -945,10 +958,10 @@ export const MobileExpenseCaptureModal: React.FC<MobileExpenseCaptureModalProps>
           {/* Evaluación de Tope en Misión (B2) */}
           {evalTope.aplicaTope && (
             <div
-              className={`rounded-md border p-3 text-xs space-y-2 ${
+              className={`rounded-lg border p-3.5 text-xs space-y-2 ${
                 evalTope.categoriaNoPermitida || evalTope.superaTope
-                  ? 'border-[#FCA5A5] bg-[#FEF2F2] text-[#93000A]'
-                  : 'border-[#CBD5E1] bg-[#F8FAFC] text-[#334155]'
+                  ? 'border-rose-200 bg-rose-50 text-rose-900'
+                  : 'border-slate-200 bg-slate-50 text-slate-700'
               }`}
             >
               <div className="flex flex-wrap items-center justify-between gap-2">
@@ -956,7 +969,7 @@ export const MobileExpenseCaptureModal: React.FC<MobileExpenseCaptureModalProps>
                   Tope de misión ({evalTope.cargoCodigo} · {category}):{' '}
                   {formatRD(evalTope.topeAplicadoRD ?? 0, moneda)}
                 </span>
-                <span className="font-mono text-[11px]">
+                <span className="font-mono text-[11px] tabular-nums">
                   Acumulado: {formatRD(evalTope.acumuladoPrevioRD, moneda)} &rarr; Nuevo total:{' '}
                   {formatRD(evalTope.totalConNuevoRD, moneda)}
                 </span>
@@ -964,7 +977,7 @@ export const MobileExpenseCaptureModal: React.FC<MobileExpenseCaptureModalProps>
 
               {evalTope.mensajeAviso && (
                 <div className="flex items-start gap-2 font-semibold">
-                  <AlertTriangle className="h-4 w-4 shrink-0 mt-0.5" />
+                  <AlertTriangle className="h-4 w-4 shrink-0 mt-0.5 text-[#DC2626]" />
                   <span>{evalTope.mensajeAviso}</span>
                 </div>
               )}
@@ -972,7 +985,7 @@ export const MobileExpenseCaptureModal: React.FC<MobileExpenseCaptureModalProps>
               {(evalTope.motivoExcedenteRequerido ||
                 (evalTope.categoriaNoPermitida && montoNumerico > 0)) && (
                 <div>
-                  <label className="block font-semibold text-[#93000A] mb-1">
+                  <label className="block font-semibold text-rose-900 mb-1.5">
                     Motivo obligatorio del excedente (no bloquea el registro)
                   </label>
                   <textarea
@@ -981,7 +994,7 @@ export const MobileExpenseCaptureModal: React.FC<MobileExpenseCaptureModalProps>
                     value={motivoExcedente}
                     onChange={(e) => setMotivoExcedente(e.target.value)}
                     placeholder="Ej. Extensión de jornada por lluvia o zona remota..."
-                    className="w-full rounded-sm border border-[#FCA5A5] bg-white px-3 py-2 text-xs text-[#0D1C2F]"
+                    className="w-full rounded-md border border-rose-300 bg-white px-3 py-2 text-xs text-slate-900 focus:border-[#0284C7] focus:outline-none"
                   />
                 </div>
               )}
@@ -989,12 +1002,12 @@ export const MobileExpenseCaptureModal: React.FC<MobileExpenseCaptureModalProps>
           )}
 
           {/* Exact Project Split Editor (F10) */}
-          <div className="rounded-md border border-[#CBD5E1] bg-[#F8FAFC] p-3.5 space-y-2.5 text-xs">
+          <div className="rounded-lg border border-slate-200 bg-slate-50 p-4 space-y-3 text-xs">
             <div className="flex flex-wrap items-center justify-between gap-2">
               <span className="font-bold text-[#0F2942]">
                 Imputación Exacta a Proyectos (RD$)
               </span>
-              <div className="inline-flex rounded-sm border border-[#CBD5E1] bg-white p-0.5">
+              <div className="inline-flex rounded-md border border-slate-300 bg-white p-0.5">
                 {(
                   [
                     { id: 'unico', label: '1 Proyecto' },
@@ -1013,8 +1026,8 @@ export const MobileExpenseCaptureModal: React.FC<MobileExpenseCaptureModalProps>
                         ]);
                       }
                     }}
-                    className={`rounded-sm px-2 py-1 text-[11px] font-semibold ${
-                      repartoModo === m.id ? 'bg-[#0F2942] text-white' : 'text-[#43474D]'
+                    className={`rounded-md px-2.5 py-1 text-[11px] font-semibold whitespace-nowrap ${
+                      repartoModo === m.id ? 'bg-[#0F2942] text-white' : 'text-slate-600'
                     }`}
                   >
                     {m.label}
@@ -1027,7 +1040,7 @@ export const MobileExpenseCaptureModal: React.FC<MobileExpenseCaptureModalProps>
               <select
                 value={proyectoUnicoId}
                 onChange={(e) => setProyectoUnicoId(e.target.value)}
-                className="w-full rounded-sm border border-[#CBD5E1] bg-white px-3 py-2 text-xs text-[#0D1C2F]"
+                className="w-full min-h-[40px] rounded-md border border-slate-300 bg-white px-3 py-2 text-xs text-slate-900"
               >
                 {proyectos.map((p) => (
                   <option key={p.id} value={p.id}>
@@ -1039,7 +1052,7 @@ export const MobileExpenseCaptureModal: React.FC<MobileExpenseCaptureModalProps>
             )}
 
             {repartoModo === 'sin_asignar' && (
-              <p className="text-[11px] text-[#A16207]">
+              <p className="text-[11px] text-[#B45309]">
                 El gasto completo ({formatRD(montoNumerico)}) quedará en{' '}
                 <strong>Sin asignar</strong> para que Coordinación lo distribuya luego.
               </p>
@@ -1057,7 +1070,7 @@ export const MobileExpenseCaptureModal: React.FC<MobileExpenseCaptureModalProps>
                           prev.map((item, i) => (i === idx ? { ...item, proyectoId: val } : item))
                         );
                       }}
-                      className="flex-1 rounded-sm border border-[#CBD5E1] bg-white px-2.5 py-1.5 text-xs"
+                      className="flex-1 min-h-[40px] rounded-md border border-slate-300 bg-white px-2.5 py-1.5 text-xs"
                     >
                       {proyectos.map((p) => (
                         <option key={p.id} value={p.id}>
@@ -1077,7 +1090,7 @@ export const MobileExpenseCaptureModal: React.FC<MobileExpenseCaptureModalProps>
                           prev.map((item, i) => (i === idx ? { ...item, montoRD: val } : item))
                         );
                       }}
-                      className="w-28 rounded-sm border border-[#CBD5E1] bg-white px-2 py-1.5 font-mono text-xs"
+                      className="w-28 min-h-[40px] rounded-md border border-slate-300 bg-white px-2.5 py-1.5 font-mono text-xs tabular-nums"
                     />
                     {repartosMultiples.length > 1 && (
                       <button
@@ -1085,9 +1098,10 @@ export const MobileExpenseCaptureModal: React.FC<MobileExpenseCaptureModalProps>
                         onClick={() =>
                           setRepartosMultiples((prev) => prev.filter((_, i) => i !== idx))
                         }
-                        className="rounded-sm p-1.5 text-[#DC2626] hover:bg-[#FEE2E2]"
+                        className="min-h-[40px] min-w-[40px] flex items-center justify-center rounded-md text-[#DC2626] hover:bg-rose-50"
+                        aria-label="Eliminar línea"
                       >
-                        <Trash2 className="h-3.5 w-3.5" />
+                        <Trash2 className="h-4 w-4" />
                       </button>
                     )}
                   </div>
@@ -1105,14 +1119,14 @@ export const MobileExpenseCaptureModal: React.FC<MobileExpenseCaptureModalProps>
                         { proyectoId: libre, montoRD: saldo },
                       ]);
                     }}
-                    className="inline-flex items-center gap-1 rounded-sm border border-[#CBD5E1] bg-white px-2.5 py-1 text-[11px] font-semibold text-[#0F2942] hover:bg-[#F1F5F9]"
+                    className="min-h-[36px] inline-flex items-center gap-1 rounded-md border border-slate-300 bg-white px-2.5 py-1 text-xs font-semibold text-[#0F2942] hover:bg-slate-100 whitespace-nowrap"
                   >
-                    <Plus className="h-3 w-3" />
+                    <Plus className="h-3.5 w-3.5" />
                     Añadir proyecto
                   </button>
 
-                  <div className="flex items-center gap-2 text-[11px]">
-                    <span className="font-mono">
+                  <div className="flex items-center gap-2 text-xs">
+                    <span className="font-mono tabular-nums">
                       Suma: <strong>{formatRD(sumaMultipleRD)}</strong> /{' '}
                       {formatRD(montoNumerico)}
                     </span>
@@ -1121,7 +1135,7 @@ export const MobileExpenseCaptureModal: React.FC<MobileExpenseCaptureModalProps>
                         <button
                           type="button"
                           onClick={handleCompletarConSinAsignar}
-                          className="rounded-sm bg-[#FEF3C7] px-2 py-1 font-semibold text-[#A16207] hover:bg-[#FDE68A]"
+                          className="rounded-md bg-amber-100 px-2.5 py-1 font-semibold text-amber-900 hover:bg-amber-200 whitespace-nowrap"
                         >
                           Saldo a Sin asignar
                         </button>
@@ -1132,18 +1146,18 @@ export const MobileExpenseCaptureModal: React.FC<MobileExpenseCaptureModalProps>
             )}
           </div>
 
-          <div className="flex flex-col-reverse sm:flex-row sm:justify-end gap-2.5 border-t border-[#E2E8F0] pt-4">
+          <div className="flex flex-col-reverse sm:flex-row sm:justify-end gap-2.5 border-t border-slate-200 pt-4">
             <button
               type="button"
               onClick={onClose}
-              className="rounded-sm border border-[#CBD5E1] bg-white px-4 py-2.5 text-xs font-semibold text-[#334155] hover:bg-[#F1F5F9] min-h-[44px]"
+              className="rounded-md border border-slate-300 bg-white px-4 py-2.5 text-xs font-semibold text-slate-700 hover:bg-slate-50 min-h-[44px] whitespace-nowrap"
             >
               Cancelar
             </button>
             <button
               type="submit"
               disabled={isSaving}
-              className="inline-flex items-center justify-center gap-2 rounded-sm bg-[#0F2942] px-5 py-2.5 text-xs font-semibold text-white hover:bg-[#0284C7] disabled:opacity-50 transition-colors min-h-[44px]"
+              className="inline-flex items-center justify-center gap-2 rounded-md bg-[#0F2942] px-5 py-2.5 text-xs font-semibold text-white hover:bg-[#0284C7] disabled:opacity-50 transition-colors min-h-[44px] whitespace-nowrap"
             >
               <Receipt className="h-4 w-4" />
               {isSaving

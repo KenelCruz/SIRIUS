@@ -1,12 +1,14 @@
 import React, { useMemo, useState } from 'react';
 import { AlertTriangle, History, Search } from 'lucide-react';
 import type { HistorialEvento } from '../types/domain';
+import { AuditoriaViewSkeleton } from './Skeletons';
 
 interface AuditoriaViewProps {
   historial: HistorialEvento[];
+  isLoading?: boolean;
 }
 
-export const AuditoriaView: React.FC<AuditoriaViewProps> = ({ historial }) => {
+export const AuditoriaView: React.FC<AuditoriaViewProps> = ({ historial, isLoading = false }) => {
   const [tipoFiltro, setTipoFiltro] = useState<HistorialEvento['entidadTipo'] | 'ALL'>('ALL');
   const [busqueda, setBusqueda] = useState('');
 
@@ -29,30 +31,36 @@ export const AuditoriaView: React.FC<AuditoriaViewProps> = ({ historial }) => {
     });
   }, [historial, tipoFiltro, busqueda]);
 
+  if (isLoading) {
+    return <AuditoriaViewSkeleton />;
+  }
+
   return (
-    <section className="space-y-4">
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 rounded-md border border-[#CBD5E1] bg-white p-4">
-        <div className="flex items-center gap-2">
-          <History className="h-4 w-4 text-[#0284C7]" />
+    <section className="space-y-6">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 rounded-lg border border-slate-200 bg-white p-5">
+        <div className="flex items-start gap-3">
+          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-sky-50 text-[#0284C7]">
+            <History className="h-4 w-4" />
+          </div>
           <div>
-            <h2 className="text-sm font-bold text-[#0F2942]">
+            <h2 className="text-base font-bold text-slate-900">
               Bitácora de Auditoría y Excepciones (F16)
             </h2>
-            <p className="text-xs text-[#43474D]">
+            <p className="text-xs text-slate-500 mt-0.5">
               Registro cronológico con usuario, fecha, valor anterior, valor nuevo y overrides autorizados.
             </p>
           </div>
         </div>
 
-        <div className="flex flex-wrap items-center gap-2 text-xs">
+        <div className="flex flex-wrap items-center gap-2.5 text-xs">
           <div className="relative">
-            <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-[#74777E]" />
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-slate-400" />
             <input
               type="text"
               value={busqueda}
               onChange={(e) => setBusqueda(e.target.value)}
               placeholder="Buscar usuario, motivo, valor..."
-              className="rounded-sm border border-[#CBD5E1] bg-[#F8FAFC] pl-8 pr-3 py-1.5"
+              className="rounded-md border border-slate-300 bg-slate-50 pl-8 pr-3 py-2 text-xs text-slate-900 focus:bg-white min-h-[40px]"
             />
           </div>
           <select
@@ -60,7 +68,8 @@ export const AuditoriaView: React.FC<AuditoriaViewProps> = ({ historial }) => {
             onChange={(e) =>
               setTipoFiltro(e.target.value as HistorialEvento['entidadTipo'] | 'ALL')
             }
-            className="rounded-sm border border-[#CBD5E1] bg-white px-2.5 py-1.5"
+            className="rounded-md border border-slate-300 bg-white px-3 py-2 text-xs text-slate-700 min-h-[40px]"
+            aria-label="Filtrar por tipo de entidad"
           >
             <option value="ALL">Todas las entidades</option>
             <option value="asignacion">Asignaciones</option>
@@ -74,9 +83,9 @@ export const AuditoriaView: React.FC<AuditoriaViewProps> = ({ historial }) => {
         </div>
       </div>
 
-      <div className="rounded-md border border-[#E2E8F0] bg-white divide-y divide-[#E2E8F0]">
+      <div className="rounded-lg border border-slate-200 bg-white divide-y divide-slate-200 overflow-hidden">
         {eventosFiltrados.length === 0 ? (
-          <div className="p-8 text-center text-xs text-[#43474D]">
+          <div className="p-8 text-center text-xs text-slate-500">
             No hay eventos de auditoría que coincidan con el filtro.
           </div>
         ) : (
@@ -96,29 +105,30 @@ export const AuditoriaView: React.FC<AuditoriaViewProps> = ({ historial }) => {
             return (
               <div
                 key={ev.id}
-                className={`p-4 flex flex-col sm:flex-row sm:items-start justify-between gap-2 text-xs ${
-                  esOverride ? 'bg-[#FEE2E2]/35' : ''
+                className={`p-4 sm:p-5 flex flex-col sm:flex-row sm:items-start justify-between gap-3 text-xs ${
+                  esOverride ? 'bg-rose-50/40' : ''
                 }`}
               >
-                <div className="space-y-1 min-w-0">
-                  <div className="flex flex-wrap items-center gap-2">
-                    <span className="font-mono text-[11px] uppercase font-bold text-[#0284C7]">
+                <div className="space-y-1.5 min-w-0">
+                  <div className="flex flex-wrap items-center gap-2 text-xs">
+                    <span className="font-mono text-[11px] font-bold text-[#0284C7] uppercase">
                       {ev.entidadTipo}
                     </span>
-                    <span className="font-bold text-[#0D1C2F]">{ev.accion}</span>
+                    <span aria-hidden="true" className="text-slate-300">·</span>
+                    <span className="font-bold text-slate-900">{ev.accion}</span>
                     {esOverride && (
-                      <span className="inline-flex items-center gap-1 rounded-sm border border-[#FCA5A5] bg-[#FEE2E2] px-1.5 py-0.5 text-[10px] font-bold text-[#93000A]">
+                      <span className="inline-flex items-center gap-1 rounded-md border border-rose-200 bg-rose-50 px-2 py-0.5 text-[11px] font-semibold text-[#DC2626]">
                         <AlertTriangle className="h-3 w-3" />
                         Override Autorizado
                       </span>
                     )}
                   </div>
-                  <p className="text-[#334155]">{ev.detalle}</p>
+                  <p className="text-slate-700 leading-relaxed">{ev.detalle}</p>
                   {(valorAnterior || valorNuevo) && (
-                    <div className="mt-1 flex flex-wrap items-center gap-2 rounded-sm border border-[#E2E8F0] bg-[#F8FAFC] px-2.5 py-1.5 font-mono text-[11px]">
+                    <div className="mt-1 flex flex-wrap items-center gap-2 rounded-md bg-slate-50 px-3 py-1.5 font-mono text-[11px]">
                       {valorAnterior && (
-                        <span className="text-[#64748B]">
-                          Anterior: <span className="text-[#334155]">{valorAnterior}</span>
+                        <span className="text-slate-500">
+                          Anterior: <span className="text-slate-700">{valorAnterior}</span>
                         </span>
                       )}
                       {valorAnterior && valorNuevo && <span className="text-[#0284C7]">→</span>}
@@ -130,16 +140,16 @@ export const AuditoriaView: React.FC<AuditoriaViewProps> = ({ historial }) => {
                     </div>
                   )}
                   {esOverride && (
-                    <div className="font-mono text-[11px] text-[#93000A]">
+                    <div className="font-mono text-[11px] text-[#DC2626]">
                       Motivo: "{String(ev.metadata?.overrideMotivo)}" · Autorizó: {ev.usuarioNombre}{' '}
                       ({String(ev.metadata?.overrideFecha || ev.fechaAST)})
                     </div>
                   )}
                 </div>
 
-                <div className="text-right shrink-0">
-                  <div className="font-semibold text-[#0F2942]">{ev.usuarioNombre}</div>
-                  <div className="font-mono text-[11px] text-[#43474D]">{ev.fechaAST}</div>
+                <div className="sm:text-right shrink-0">
+                  <div className="font-semibold text-slate-900">{ev.usuarioNombre}</div>
+                  <div className="font-mono text-[11px] text-slate-500 mt-0.5">{ev.fechaAST}</div>
                 </div>
               </div>
             );

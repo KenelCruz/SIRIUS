@@ -53,6 +53,7 @@ import type {
   Vehiculo,
 } from '../types/domain';
 import { formatRD } from '../utils/geodesy';
+import { ConfiguracionViewSkeleton } from './Skeletons';
 
 interface ConfiguracionViewProps {
   rol: RolEmpresa;
@@ -64,6 +65,7 @@ interface ConfiguracionViewProps {
   personal: Personal[];
   vehiculos: Vehiculo[];
   isDemo: boolean;
+  isLoading?: boolean;
   seccionInicial?: SeccionConfiguracion;
   onActualizarEmpresa: (empresa: Empresa) => Promise<void>;
   onGuardarMembresiaUsuario: (params: {
@@ -145,6 +147,7 @@ export const ConfiguracionView: React.FC<ConfiguracionViewProps> = ({
   personal,
   vehiculos,
   isDemo,
+  isLoading = false,
   seccionInicial,
   onActualizarEmpresa,
   onGuardarMembresiaUsuario,
@@ -365,6 +368,10 @@ export const ConfiguracionView: React.FC<ConfiguracionViewProps> = ({
   }, [fuelVigId, configuracion.combustibles]);
 
   const moneda = empresa.moneda || 'RD$';
+
+  if (isLoading && configuracion.servicios.length === 0) {
+    return <ConfiguracionViewSkeleton />;
+  }
 
   return (
     <div className="space-y-6">

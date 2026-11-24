@@ -18,6 +18,7 @@ import {
   sumarDiasIso,
 } from '../../domain';
 import type { SnapshotTecnico } from '../../types/domain';
+import { TecnicoAgendaSkeleton } from '../Skeletons';
 import { WorkflowBadge } from '../WorkflowBadge';
 
 interface TecnicoAgendaViewProps {
@@ -69,25 +70,25 @@ export const TecnicoAgendaView: React.FC<TecnicoAgendaViewProps> = ({
   );
 
   return (
-    <section className="space-y-4">
-      <div className="flex flex-wrap items-center justify-between gap-3 rounded-md border border-[#CBD5E1] bg-white p-4">
-        <div className="space-y-0.5">
-          <div className="flex items-center gap-2">
+    <section className="space-y-5">
+      <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-slate-200 bg-white p-5">
+        <div className="space-y-1">
+          <div className="flex items-center gap-2.5">
             <button
               type="button"
               onClick={onVolverHoy}
-              className="inline-flex items-center gap-1 rounded-sm border border-[#CBD5E1] bg-[#F8FAFC] px-2.5 py-1.5 text-xs font-semibold text-[#0F2942] hover:bg-[#EFF4FF] min-h-[36px]"
+              className="inline-flex items-center gap-1 rounded-md border border-slate-300 bg-white px-3 py-1.5 text-xs font-semibold text-[#0F2942] hover:bg-slate-50 min-h-[38px] whitespace-nowrap"
             >
               <ArrowLeft className="h-3.5 w-3.5" />
               Hoy
             </button>
-            <h2 className="text-sm sm:text-base font-bold text-[#0D1C2F]">
+            <h2 className="text-base font-bold text-slate-900">
               Mi Agenda Semanal (Solo lectura)
             </h2>
           </div>
-          <p className="text-xs text-[#43474D]">
-            Semana del <span className="font-mono font-semibold">{diasSemana[0]}</span> al{' '}
-            <span className="font-mono font-semibold">{diasSemana[6]}</span> · Asignaciones de tu cuadrilla.
+          <p className="text-xs text-slate-500">
+            Semana del <span className="font-mono font-semibold text-slate-700">{diasSemana[0]}</span> al{' '}
+            <span className="font-mono font-semibold text-slate-700">{diasSemana[6]}</span> · Asignaciones de tu cuadrilla
           </p>
         </div>
 
@@ -95,7 +96,7 @@ export const TecnicoAgendaView: React.FC<TecnicoAgendaViewProps> = ({
           <button
             type="button"
             onClick={() => setInicioSemana((prev) => sumarDiasIso(prev, -7))}
-            className="inline-flex items-center justify-center rounded-sm border border-[#CBD5E1] bg-white p-2 text-[#0F2942] hover:bg-[#F8FAFC] min-h-[40px] min-w-[40px]"
+            className="inline-flex items-center justify-center rounded-md border border-slate-300 bg-white p-2 text-[#0F2942] hover:bg-slate-50 min-h-[42px] min-w-[42px]"
             aria-label="Semana anterior"
           >
             <ChevronLeft className="h-4 w-4" />
@@ -103,14 +104,14 @@ export const TecnicoAgendaView: React.FC<TecnicoAgendaViewProps> = ({
           <button
             type="button"
             onClick={() => setInicioSemana(obtenerInicioSemanaLunes(hoyAst))}
-            className="rounded-sm border border-[#CBD5E1] bg-white px-3 py-2 text-xs font-semibold text-[#0F2942] hover:bg-[#F8FAFC] min-h-[40px]"
+            className="rounded-md border border-slate-300 bg-white px-3.5 py-2 text-xs font-semibold text-[#0F2942] hover:bg-slate-50 min-h-[42px] whitespace-nowrap"
           >
             Esta semana
           </button>
           <button
             type="button"
             onClick={() => setInicioSemana((prev) => sumarDiasIso(prev, 7))}
-            className="inline-flex items-center justify-center rounded-sm border border-[#CBD5E1] bg-white p-2 text-[#0F2942] hover:bg-[#F8FAFC] min-h-[40px] min-w-[40px]"
+            className="inline-flex items-center justify-center rounded-md border border-slate-300 bg-white p-2 text-[#0F2942] hover:bg-slate-50 min-h-[42px] min-w-[42px]"
             aria-label="Semana siguiente"
           >
             <ChevronRight className="h-4 w-4" />
@@ -119,14 +120,14 @@ export const TecnicoAgendaView: React.FC<TecnicoAgendaViewProps> = ({
       </div>
 
       {!isOnline && (
-        <div className="flex items-center gap-2 rounded-sm border border-[#FDE047] bg-[#FEF9C3]/60 px-3 py-2 text-xs text-[#92400E]">
-          <WifiOff className="h-4 w-4 shrink-0" />
+        <div className="flex items-center gap-2.5 rounded-lg border border-amber-300 bg-amber-50 px-4 py-2.5 text-xs text-amber-900">
+          <WifiOff className="h-4 w-4 shrink-0 text-[#B45309]" />
           <span>Mostrando programación guardada en caché offline.</span>
         </div>
       )}
 
       {error && (
-        <div className="flex flex-wrap items-center justify-between gap-2 rounded-sm border border-[#FCA5A5] bg-[#FEE2E2] px-4 py-3 text-xs text-[#93000A]">
+        <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-rose-200 bg-rose-50 px-4 py-3 text-xs text-rose-800">
           <div className="flex items-center gap-2">
             <AlertTriangle className="h-4 w-4 shrink-0" />
             <span>{error}</span>
@@ -134,7 +135,7 @@ export const TecnicoAgendaView: React.FC<TecnicoAgendaViewProps> = ({
           <button
             type="button"
             onClick={onRetry}
-            className="inline-flex items-center gap-1 rounded-sm bg-white px-2.5 py-1 text-xs font-semibold text-[#93000A] border border-[#FCA5A5]"
+            className="inline-flex items-center gap-1.5 rounded-md bg-white px-3 py-1.5 text-xs font-semibold text-rose-800 border border-rose-200 min-h-[38px]"
           >
             <RefreshCw className="h-3.5 w-3.5" />
             Reintentar
@@ -143,74 +144,70 @@ export const TecnicoAgendaView: React.FC<TecnicoAgendaViewProps> = ({
       )}
 
       {isLoading ? (
-        <div className="space-y-3">
-          {[1, 2, 3].map((i) => (
-            <div key={i} className="h-24 animate-pulse rounded-md bg-white border border-[#E2E8F0]" />
-          ))}
-        </div>
+        <TecnicoAgendaSkeleton />
       ) : totalAsignacionesSemana === 0 ? (
-        <div className="rounded-md border border-[#CBD5E1] bg-white p-6 text-center space-y-2">
-          <CalendarDays className="h-8 w-8 text-[#94A3B8] mx-auto" />
-          <div className="text-sm font-bold text-[#0F2942]">
+        <div className="rounded-lg border border-slate-200 bg-white p-8 text-center space-y-2">
+          <CalendarDays className="h-8 w-8 text-slate-400 mx-auto" />
+          <div className="text-sm font-bold text-slate-900">
             Sin rutas programadas esta semana
           </div>
-          <p className="text-xs text-[#43474D]">
+          <p className="text-xs text-slate-500">
             No tienes asignaciones activas entre {diasSemana[0]} y {diasSemana[6]}. Prueba avanzar a la siguiente semana.
           </p>
         </div>
       ) : (
-        <div className="space-y-3">
+        <div className="space-y-3.5">
           {agendaPorDia.map((dia) => {
             const esHoy = dia.fechaIso === hoyAst;
             return (
               <div
                 key={dia.fechaIso}
-                className={`rounded-md border bg-white overflow-hidden ${
-                  esHoy ? 'border-[#0284C7] ring-1 ring-[#0284C7]/25' : 'border-[#CBD5E1]'
+                className={`rounded-lg border bg-white overflow-hidden ${
+                  esHoy ? 'border-[#0284C7] ring-1 ring-[#0284C7]/20' : 'border-slate-200'
                 }`}
               >
                 <div
-                  className={`flex items-center justify-between px-4 py-2 border-b text-xs font-bold ${
+                  className={`flex items-center justify-between px-4 py-2.5 border-b text-xs font-bold ${
                     esHoy
-                      ? 'bg-[#EFF6FF] border-[#BFDBFE] text-[#0F2942]'
-                      : 'bg-[#F8FAFC] border-[#E2E8F0] text-[#334155]'
+                      ? 'bg-sky-50 border-sky-200 text-[#0F2942]'
+                      : 'bg-slate-50 border-slate-200 text-slate-700'
                   }`}
                 >
                   <span>
                     {formatearDiaCorto(dia.fechaIso)}
                     {esHoy && (
-                      <span className="ml-2 font-mono text-[10px] uppercase text-[#0284C7]">
+                      <span className="ml-2 font-mono text-[11px] uppercase text-[#0284C7]">
                         · HOY
                       </span>
                     )}
                   </span>
-                  <span className="font-mono text-[11px] font-normal text-[#43474D]">
+                  <span className="font-mono text-[11px] font-normal text-slate-500 tabular-nums">
                     {dia.items.length} {dia.items.length === 1 ? 'asignación' : 'asignaciones'}
                   </span>
                 </div>
 
                 {dia.items.length === 0 ? (
-                  <div className="px-4 py-3 text-xs text-[#64748B]">Libre sin ruta asignada.</div>
+                  <div className="px-4 py-3 text-xs text-slate-500">Libre sin ruta asignada.</div>
                 ) : (
-                  <div className="divide-y divide-[#E2E8F0]">
+                  <div className="divide-y divide-slate-200">
                     {dia.items.map((item) => (
                       <div
                         key={`${dia.fechaIso}-${item.asignacion.id}`}
                         className="p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3"
                       >
-                        <div className="space-y-1 min-w-0">
+                        <div className="space-y-1.5 min-w-0">
                           <div className="flex flex-wrap items-center gap-2">
                             <span className="font-mono text-xs font-bold text-[#0284C7]">
                               {item.ruta.codigoParcela}
                             </span>
-                            <span className="text-sm font-bold text-[#0D1C2F] truncate">
+                            <span className="text-sm font-bold text-slate-900 truncate">
                               {item.ruta.nombre}
                             </span>
                           </div>
-                          <div className="text-xs text-[#43474D]">
+                          <div className="text-xs text-slate-500">
                             {item.cliente?.nombre || 'Cliente'} · {item.proyecto?.nombre || 'Proyecto'}
                           </div>
-                          <div className="flex flex-wrap items-center gap-3 text-[11px] text-[#334155]">
+                          <div className="flex flex-wrap items-center gap-3 text-xs text-slate-700">
                             <span className="inline-flex items-center gap-1">
                               <MapPin className="h-3.5 w-3.5 text-[#0284C7]" />
                               {item.ruta.ubicacion}
@@ -223,17 +220,17 @@ export const TecnicoAgendaView: React.FC<TecnicoAgendaViewProps> = ({
                             )}
                             {item.vehiculos[0] && (
                               <span className="inline-flex items-center gap-1">
-                                <Truck className="h-3.5 w-3.5 text-[#43474D]" />
+                                <Truck className="h-3.5 w-3.5 text-slate-500" />
                                 {item.vehiculos[0].etiqueta} ({item.vehiculos[0].placa})
                               </span>
                             )}
                           </div>
                           {item.serviciosResumen.length > 0 && (
-                            <div className="flex flex-wrap items-center gap-1.5 pt-1">
+                            <div className="flex flex-wrap items-center gap-2 pt-1">
                               {item.serviciosResumen.map((s) => (
                                 <span
                                   key={s.id}
-                                  className="inline-flex items-center gap-1 text-[11px] text-[#334155]"
+                                  className="inline-flex items-center gap-1.5 text-xs text-slate-700"
                                 >
                                   <span>{s.nombre}:</span>
                                   <WorkflowBadge status={s.estado} />
@@ -246,7 +243,7 @@ export const TecnicoAgendaView: React.FC<TecnicoAgendaViewProps> = ({
                         <button
                           type="button"
                           onClick={() => onAbrirDetalleRuta(item.ruta.id)}
-                          className="shrink-0 rounded-sm bg-[#0F2942] px-3.5 py-2 text-xs font-semibold text-white hover:bg-[#0284C7] min-h-[42px]"
+                          className="shrink-0 rounded-md bg-[#0F2942] px-4 py-2 text-xs font-semibold text-white hover:bg-[#0284C7] min-h-[44px] whitespace-nowrap transition-colors"
                         >
                           Abrir ruta
                         </button>

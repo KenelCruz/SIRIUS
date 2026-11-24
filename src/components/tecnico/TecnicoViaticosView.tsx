@@ -22,6 +22,8 @@ import type {
   Viatico,
 } from '../../types/domain';
 import { formatRD } from '../../utils/geodesy';
+import { MediaThumb } from '../MediaThumb';
+import { TecnicoViaticosSkeleton } from '../Skeletons';
 
 interface TecnicoViaticosViewProps {
   snapshot: SnapshotTecnico;
@@ -39,15 +41,15 @@ interface TecnicoViaticosViewProps {
 const BADGE_APROBACION: Record<EstadoAprobacionViatico, { label: string; cls: string }> = {
   pendiente: {
     label: 'Pendiente',
-    cls: 'bg-[#FEF3C7] text-[#92400E] border-[#FDE047]',
+    cls: 'bg-amber-50 text-[#B45309] border-amber-300',
   },
   aprobado: {
     label: 'Aprobado',
-    cls: 'bg-[#DCFCE7] text-[#15803D] border-[#86EFAC]',
+    cls: 'bg-emerald-50 text-[#15803D] border-emerald-200',
   },
   rechazado: {
     label: 'Rechazado',
-    cls: 'bg-[#FEE2E2] text-[#93000A] border-[#FCA5A5]',
+    cls: 'bg-rose-50 text-[#DC2626] border-rose-200',
   },
 };
 
@@ -100,50 +102,52 @@ export const TecnicoViaticosView: React.FC<TecnicoViaticosViewProps> = ({
   };
 
   return (
-    <section className="space-y-4">
-      <div className="rounded-md border border-[#CBD5E1] bg-white p-4 space-y-3">
+    <section className="space-y-5">
+      <div className="rounded-lg border border-slate-200 bg-white p-5 space-y-4">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
-            <h2 className="text-base font-bold text-[#0D1C2F]">Mis Viáticos y Comprobantes</h2>
-            <p className="text-xs text-[#43474D]">
-              Puedes editar o eliminar solo tus gastos en estado Pendiente.
+            <h2 className="text-base sm:text-lg font-bold tracking-tight text-slate-900">
+              Mis Viáticos y Comprobantes
+            </h2>
+            <p className="text-xs text-slate-500 mt-0.5">
+              Puedes editar o eliminar únicamente tus gastos en estado Pendiente.
             </p>
           </div>
 
           <button
             type="button"
             onClick={onNuevoViatico}
-            className="inline-flex items-center gap-1.5 rounded-sm bg-[#0284C7] px-3.5 py-2 text-xs font-semibold text-white hover:bg-[#006398] min-h-[42px]"
+            className="inline-flex items-center gap-1.5 rounded-md bg-[#0284C7] px-4 py-2 text-xs font-semibold text-white hover:bg-[#0369A1] min-h-[44px] whitespace-nowrap shrink-0 transition-colors"
           >
             <Camera className="h-4 w-4" />
             Reportar Viático
           </button>
         </div>
 
-        {/* Resumen propio (sin presupuestos de proyectos) */}
-        <div className="grid grid-cols-3 gap-2 pt-1">
-          <div className="rounded-sm border border-[#E2E8F0] bg-[#F8FAFC] p-2.5">
-            <div className="text-[11px] text-[#43474D]">Pendiente</div>
-            <div className="mt-0.5 font-mono text-xs sm:text-sm font-bold text-[#92400E] tabular-nums">
+        {/* Resumen propio */}
+        <div className="grid grid-cols-3 gap-3 pt-1">
+          <div className="rounded-md bg-slate-50 p-3">
+            <div className="text-xs text-slate-500">Pendiente</div>
+            <div className="mt-1 font-mono text-xs sm:text-sm font-bold text-[#B45309] tabular-nums">
               {formatRD(resumen.pendientesRD)}
             </div>
           </div>
-          <div className="rounded-sm border border-[#E2E8F0] bg-[#F8FAFC] p-2.5">
-            <div className="text-[11px] text-[#43474D]">Aprobado</div>
-            <div className="mt-0.5 font-mono text-xs sm:text-sm font-bold text-[#15803D] tabular-nums">
+          <div className="rounded-md bg-slate-50 p-3">
+            <div className="text-xs text-slate-500">Aprobado</div>
+            <div className="mt-1 font-mono text-xs sm:text-sm font-bold text-[#15803D] tabular-nums">
               {formatRD(resumen.aprobadosRD)}
             </div>
           </div>
-          <div className="rounded-sm border border-[#E2E8F0] bg-[#F8FAFC] p-2.5">
-            <div className="text-[11px] text-[#43474D]">Rechazados</div>
-            <div className="mt-0.5 font-mono text-xs sm:text-sm font-bold text-[#93000A] tabular-nums">
+          <div className="rounded-md bg-slate-50 p-3">
+            <div className="text-xs text-slate-500">Rechazados</div>
+            <div className="mt-1 font-mono text-xs sm:text-sm font-bold text-[#DC2626] tabular-nums">
               {resumen.rechazadosCount}
             </div>
           </div>
         </div>
 
-        {/* Filtros por estado de aprobación */}
-        <div className="flex flex-wrap gap-1.5">
+        {/* Filtros interactivos por estado */}
+        <div className="inline-flex flex-wrap gap-1.5 rounded-lg bg-slate-100 p-1">
           {(
             [
               { id: 'todos', label: `Todos (${snapshot.viaticos.length})` },
@@ -156,10 +160,10 @@ export const TecnicoViaticosView: React.FC<TecnicoViaticosViewProps> = ({
               key={f.id}
               type="button"
               onClick={() => setFiltroEstado(f.id)}
-              className={`rounded-sm px-3 py-1.5 text-xs font-semibold border min-h-[36px] ${
+              className={`rounded-md px-3 py-1.5 text-xs font-semibold transition-colors min-h-[38px] whitespace-nowrap ${
                 filtroEstado === f.id
-                  ? 'border-[#0F2942] bg-[#0F2942] text-white'
-                  : 'border-[#CBD5E1] bg-white text-[#334155] hover:bg-[#F8FAFC]'
+                  ? 'bg-white text-[#0F2942] shadow-sm'
+                  : 'text-slate-600 hover:text-slate-900'
               }`}
             >
               {f.label}
@@ -169,15 +173,15 @@ export const TecnicoViaticosView: React.FC<TecnicoViaticosViewProps> = ({
       </div>
 
       {!snapshot.personalIdUsuario && (
-        <div className="flex items-start gap-2 rounded-sm border border-[#FCA5A5] bg-[#FEF2F2] px-3.5 py-2.5 text-xs text-[#93000A]">
-          <AlertTriangle className="h-4 w-4 shrink-0 mt-0.5" />
+        <div className="flex items-start gap-2.5 rounded-lg border border-rose-200 bg-rose-50 px-4 py-3 text-xs text-rose-800">
+          <AlertTriangle className="h-4 w-4 shrink-0 mt-0.5 text-[#DC2626]" />
           <span>{ERROR_TECNICO_SIN_PERSONAL}</span>
         </div>
       )}
 
       {!isOnline && (
-        <div className="flex items-center gap-2 rounded-sm border border-[#FDE047] bg-[#FEF9C3]/60 px-3 py-2 text-xs text-[#92400E]">
-          <WifiOff className="h-4 w-4 shrink-0" />
+        <div className="flex items-center gap-2.5 rounded-lg border border-amber-300 bg-amber-50 px-4 py-2.5 text-xs text-amber-900">
+          <WifiOff className="h-4 w-4 shrink-0 text-[#B45309]" />
           <span>
             Sin señal: los viáticos nuevos o editados quedan en cola local y se sincronizan automáticamente al reconectar.
           </span>
@@ -185,14 +189,14 @@ export const TecnicoViaticosView: React.FC<TecnicoViaticosViewProps> = ({
       )}
 
       {successBanner && (
-        <div className="flex items-center gap-2 rounded-sm border border-[#86EFAC] bg-[#F0FDF4] px-3.5 py-2.5 text-xs font-medium text-[#15803D]">
+        <div className="flex items-center gap-2.5 rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-xs font-medium text-[#15803D]">
           <CheckCircle2 className="h-4 w-4 shrink-0" />
           <span>{successBanner}</span>
         </div>
       )}
 
       {(error || actionError) && (
-        <div className="flex flex-wrap items-center justify-between gap-2 rounded-sm border border-[#FCA5A5] bg-[#FEE2E2] px-4 py-3 text-xs text-[#93000A]">
+        <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-rose-200 bg-rose-50 px-4 py-3 text-xs text-rose-800">
           <div className="flex items-center gap-2">
             <AlertTriangle className="h-4 w-4 shrink-0" />
             <span>{actionError || error}</span>
@@ -201,7 +205,7 @@ export const TecnicoViaticosView: React.FC<TecnicoViaticosViewProps> = ({
             <button
               type="button"
               onClick={onRetry}
-              className="inline-flex items-center gap-1 rounded-sm bg-white px-2.5 py-1 text-xs font-semibold text-[#93000A] border border-[#FCA5A5]"
+              className="inline-flex items-center gap-1.5 rounded-md bg-white px-3 py-1.5 text-xs font-semibold text-rose-800 border border-rose-200 min-h-[38px]"
             >
               <RefreshCw className="h-3.5 w-3.5" />
               Reintentar
@@ -211,33 +215,29 @@ export const TecnicoViaticosView: React.FC<TecnicoViaticosViewProps> = ({
       )}
 
       {isLoading ? (
-        <div className="space-y-3">
-          {[1, 2].map((n) => (
-            <div key={n} className="h-32 animate-pulse rounded-md bg-white border border-[#E2E8F0]" />
-          ))}
-        </div>
+        <TecnicoViaticosSkeleton />
       ) : viaticosFiltrados.length === 0 ? (
-        <div className="rounded-md border border-[#CBD5E1] bg-white p-6 text-center space-y-3">
-          <Receipt className="h-9 w-9 text-[#94A3B8] mx-auto" />
+        <div className="rounded-lg border border-slate-200 bg-white p-8 text-center space-y-3">
+          <Receipt className="h-9 w-9 text-slate-400 mx-auto" />
           <div className="space-y-1">
-            <h3 className="text-sm font-bold text-[#0F2942]">
+            <h3 className="text-sm font-bold text-slate-900">
               No hay viáticos en esta vista
             </h3>
-            <p className="text-xs text-[#43474D]">
+            <p className="text-xs text-slate-500">
               Registra combustible, dietas, peajes o recibos con foto desde campo.
             </p>
           </div>
           <button
             type="button"
             onClick={onNuevoViatico}
-            className="inline-flex items-center gap-1.5 rounded-sm bg-[#0F2942] px-4 py-2 text-xs font-semibold text-white hover:bg-[#0284C7] min-h-[42px]"
+            className="inline-flex items-center gap-1.5 rounded-md bg-[#0F2942] px-4 py-2.5 text-xs font-semibold text-white hover:bg-[#0284C7] min-h-[44px]"
           >
             <Camera className="h-4 w-4" />
             Registrar primer viático
           </button>
         </div>
       ) : (
-        <div className="space-y-3">
+        <div className="space-y-4">
           {viaticosFiltrados.map((v) => {
             const ruta = v.rutaId
               ? snapshot.rutas.find((r) => r.id === v.rutaId)
@@ -255,29 +255,30 @@ export const TecnicoViaticosView: React.FC<TecnicoViaticosViewProps> = ({
             return (
               <article
                 key={v.id}
-                className="rounded-md border border-[#CBD5E1] bg-white p-4 space-y-3"
+                className="rounded-lg border border-slate-200 bg-white p-5 space-y-3.5"
               >
                 <div className="flex items-start justify-between gap-3">
                   <div className="min-w-0 space-y-1">
-                    <div className="flex flex-wrap items-center gap-2">
+                    <div className="flex flex-wrap items-center gap-2 text-xs">
                       <span
-                        className={`inline-flex items-center rounded-sm border px-2 py-0.5 text-[11px] font-semibold ${badge.cls}`}
+                        className={`inline-flex items-center rounded-md border px-2 py-0.5 text-[11px] font-semibold ${badge.cls}`}
                       >
                         {badge.label}
                       </span>
-                      <span className="font-mono text-[11px] font-semibold text-[#0284C7]">
+                      <span className="font-mono text-xs font-semibold text-[#0284C7]">
                         {v.categoria}
                       </span>
                       {v.syncStatus !== 'synced' && (
-                        <span className="rounded-sm bg-[#FEF3C7] px-1.5 py-0.5 font-mono text-[10px] font-semibold text-[#92400E]">
+                        <span className="text-[11px] font-medium text-[#B45309]">
+                          ·{' '}
                           {v.syncStatus === 'needs_ocr'
                             ? 'OCR pendiente al reconectar'
                             : 'Pendiente de subir'}
                         </span>
                       )}
                     </div>
-                    <h3 className="text-sm font-bold text-[#0D1C2F]">{v.comercio}</h3>
-                    <div className="text-xs text-[#43474D]">
+                    <h3 className="text-sm sm:text-base font-bold text-slate-900">{v.comercio}</h3>
+                    <div className="text-xs text-slate-500">
                       <span className="font-mono">{v.fechaIso}</span> · {v.metodo}
                       {ruta && (
                         <span className="ml-2 text-[#0F2942] font-medium">
@@ -293,43 +294,42 @@ export const TecnicoViaticosView: React.FC<TecnicoViaticosViewProps> = ({
                   </div>
 
                   <div className="text-right shrink-0">
-                    <div className="font-mono text-sm font-bold text-[#0D1C2F] tabular-nums">
+                    <div className="font-mono text-base font-bold text-slate-900 tabular-nums">
                       {formatRD(v.montoRD)}
                     </div>
                     {v.itbisRD > 0 && (
-                      <div className="font-mono text-[11px] text-[#43474D]">
+                      <div className="font-mono text-[11px] text-slate-500 tabular-nums">
                         ITBIS {formatRD(v.itbisRD)}
                       </div>
                     )}
                     {v.ncf && (
-                      <div className="font-mono text-[10px] text-[#64748B]">{v.ncf}</div>
+                      <div className="font-mono text-[11px] text-slate-400">{v.ncf}</div>
                     )}
                   </div>
                 </div>
 
-                {v.receiptThumbnail && (
-                  <div className="flex items-center gap-2.5">
-                    <img
-                      src={v.receiptThumbnail}
-                      alt={`Comprobante ${v.comercio}`}
-                      className="h-14 w-14 rounded-sm border border-[#CBD5E1] object-cover"
-                    />
-                    {v.notas && <p className="text-xs text-[#43474D]">{v.notas}</p>}
+                {(v.receiptThumbnail || v.notas) && (
+                  <div className="flex items-center gap-3">
+                    {v.receiptThumbnail && (
+                      <MediaThumb
+                        src={v.receiptThumbnail}
+                        alt={`Comprobante ${v.comercio}`}
+                        caption="Recibo"
+                        sizeClass="h-16 w-16"
+                      />
+                    )}
+                    {v.notas && <p className="text-xs text-slate-600 leading-relaxed">{v.notas}</p>}
                   </div>
                 )}
 
-                {!v.receiptThumbnail && v.notas && (
-                  <p className="text-xs text-[#43474D]">{v.notas}</p>
-                )}
-
                 {v.estadoAprobacion === 'rechazado' && v.motivoRechazo && (
-                  <div className="rounded-sm border border-[#FCA5A5] bg-[#FEE2E2] px-3 py-2 text-xs text-[#93000A]">
+                  <div className="rounded-md border border-rose-200 bg-rose-50 px-3.5 py-2.5 text-xs text-rose-800">
                     <strong>Motivo de rechazo:</strong> {v.motivoRechazo}
                   </div>
                 )}
 
                 {typeof v.excedenteRD === 'number' && v.excedenteRD > 0 && (
-                  <div className="rounded-sm border border-[#FDE047] bg-[#FEF9C3]/70 px-3 py-2 text-xs text-[#92400E] space-y-0.5">
+                  <div className="rounded-md border border-amber-300 bg-amber-50 px-3.5 py-2.5 text-xs text-amber-900 space-y-0.5">
                     <div>
                       <strong>Excedente sobre tope de misión:</strong> {formatRD(v.excedenteRD)}
                       {v.decisionExcedente === 'cargo_colaborador' && ' (A cargo del colaborador)'}
@@ -343,15 +343,15 @@ export const TecnicoViaticosView: React.FC<TecnicoViaticosViewProps> = ({
 
                 {puedeEditar || puedeEliminar ? (
                   confirmandoBorrado ? (
-                    <div className="flex flex-wrap items-center justify-between gap-2 rounded-sm border border-[#FCA5A5] bg-[#FEF2F2] p-2.5 text-xs">
-                      <span className="font-semibold text-[#93000A]">
+                    <div className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-rose-200 bg-rose-50 p-3 text-xs">
+                      <span className="font-semibold text-rose-800">
                         ¿Eliminar este viático pendiente?
                       </span>
                       <div className="flex items-center gap-2">
                         <button
                           type="button"
                           onClick={() => setConfirmDeleteId(null)}
-                          className="rounded-sm border border-[#CBD5E1] bg-white px-3 py-1.5 font-semibold text-[#334155]"
+                          className="rounded-md border border-slate-300 bg-white px-3.5 py-1.5 font-semibold text-slate-700 min-h-[38px]"
                         >
                           Cancelar
                         </button>
@@ -359,19 +359,19 @@ export const TecnicoViaticosView: React.FC<TecnicoViaticosViewProps> = ({
                           type="button"
                           disabled={deletingId === v.id}
                           onClick={() => handleConfirmDelete(v.id)}
-                          className="rounded-sm bg-[#DC2626] px-3 py-1.5 font-semibold text-white disabled:opacity-50"
+                          className="rounded-md bg-[#DC2626] px-3.5 py-1.5 font-semibold text-white disabled:opacity-50 min-h-[38px]"
                         >
                           {deletingId === v.id ? 'Eliminando...' : 'Sí, eliminar'}
                         </button>
                       </div>
                     </div>
                   ) : (
-                    <div className="grid grid-cols-2 gap-2 pt-1 border-t border-[#E2E8F0]">
+                    <div className="grid grid-cols-2 gap-2.5 pt-2 border-t border-slate-100">
                       {puedeEditar && (
                         <button
                           type="button"
                           onClick={() => onEditarViatico(v)}
-                          className="inline-flex items-center justify-center gap-1.5 rounded-sm border border-[#CBD5E1] bg-[#F8FAFC] px-3 py-2 text-xs font-semibold text-[#0F2942] hover:bg-[#EFF4FF] min-h-[42px]"
+                          className="inline-flex items-center justify-center gap-1.5 rounded-md border border-slate-300 bg-white px-3 py-2 text-xs font-semibold text-[#0F2942] hover:bg-slate-50 min-h-[44px]"
                         >
                           <Pencil className="h-3.5 w-3.5 text-[#0284C7]" />
                           Editar
@@ -381,7 +381,7 @@ export const TecnicoViaticosView: React.FC<TecnicoViaticosViewProps> = ({
                         <button
                           type="button"
                           onClick={() => setConfirmDeleteId(v.id)}
-                          className="inline-flex items-center justify-center gap-1.5 rounded-sm border border-[#FCA5A5] bg-white px-3 py-2 text-xs font-semibold text-[#DC2626] hover:bg-[#FEF2F2] min-h-[42px]"
+                          className="inline-flex items-center justify-center gap-1.5 rounded-md border border-rose-200 bg-white px-3 py-2 text-xs font-semibold text-[#DC2626] hover:bg-rose-50 min-h-[44px]"
                         >
                           <Trash2 className="h-3.5 w-3.5" />
                           Eliminar
@@ -390,7 +390,7 @@ export const TecnicoViaticosView: React.FC<TecnicoViaticosViewProps> = ({
                     </div>
                   )
                 ) : (
-                  <div className="flex items-center gap-2 border-t border-[#E2E8F0] pt-2.5 text-[11px] text-[#64748B]">
+                  <div className="flex items-center gap-2 border-t border-slate-100 pt-2.5 text-xs text-slate-500">
                     <Lock className="h-3.5 w-3.5 shrink-0" />
                     <span>
                       Solo lectura: los viáticos {v.estadoAprobacion === 'aprobado' ? 'aprobados' : 'rechazados'} no pueden modificarse ni eliminarse.
