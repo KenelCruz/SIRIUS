@@ -1628,10 +1628,10 @@ export const RouteServicesCalculator: React.FC<RouteServicesCalculatorProps> = (
               >
                 <Send className="h-4 w-4" />
                 {uploadedKmz
-                  ? 'Crear Ruta desde este KMZ'
+                  ? 'Crear ruta KMZ'
                   : isApplying
-                  ? 'Aplicando al proyecto...'
-                  : 'Aplicar Presupuesto y Servicios a Ruta'}
+                  ? 'Aplicando...'
+                  : 'Actualizar ruta y servicios'}
               </button>
             )}
 
@@ -1642,7 +1642,7 @@ export const RouteServicesCalculator: React.FC<RouteServicesCalculatorProps> = (
                 className="inline-flex items-center justify-center gap-2 rounded-md bg-[#0284C7] px-4 py-2.5 text-xs font-semibold text-white hover:bg-[#006398] transition-colors min-h-[44px] whitespace-nowrap shrink-0"
               >
                 <Receipt className="h-4 w-4" />
-                Registrar Viáticos de Ruta
+                Registrar viáticos
               </button>
             )}
 
@@ -1653,7 +1653,7 @@ export const RouteServicesCalculator: React.FC<RouteServicesCalculatorProps> = (
                 className="inline-flex items-center justify-center gap-2 rounded-md bg-[#0F2942] px-4 py-2.5 text-xs font-semibold text-white hover:bg-[#1E3A8A] transition-colors min-h-[44px] whitespace-nowrap shrink-0"
               >
                 <Camera className="h-4 w-4" />
-                Adjuntar Recibo Móvil
+                Adjuntar recibo
               </button>
             )}
 
@@ -1663,7 +1663,7 @@ export const RouteServicesCalculator: React.FC<RouteServicesCalculatorProps> = (
               className="inline-flex items-center justify-center gap-1.5 rounded-md border border-slate-300 bg-white px-4 py-2.5 text-xs font-semibold text-[#334155] hover:bg-slate-100 min-h-[44px] whitespace-nowrap shrink-0"
             >
               <Download className="h-4 w-4" />
-              CSV
+              Exportar CSV
             </button>
           </div>
         </div>

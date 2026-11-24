@@ -128,7 +128,18 @@ interface ProyectosViewProps {
   onVerRutaEnMapa: (rutaId: string) => void;
   onCalcularRuta: (rutaId: string) => void;
   onReportarViaticoEnRuta: (rutaId: string, proyectoId: string) => void;
+  onAbrirPanelPresupuestos?: () => void;
 }
+
+const ACCION_ESTADO_SERVICIO: Record<EstadoServicio, string> = {
+  cotizado: 'Cotizar',
+  aprobado: 'Aprobar',
+  programado: 'Programar',
+  en_campo: 'Iniciar campo',
+  procesando: 'Enviar a proceso',
+  entregado: 'Entregar',
+  cobrado: 'Registrar cobro',
+};
 
 const DEFAULT_CFG_PROY = crearConfiguracionInicialEmpresa('default');
 const DEFAULT_SERVICIOS_PROY = obtenerServiciosVigentes(DEFAULT_CFG_PROY);
@@ -202,6 +213,7 @@ export const ProyectosView: React.FC<ProyectosViewProps> = ({
   onVerRutaEnMapa,
   onCalcularRuta,
   onReportarViaticoEnRuta,
+  onAbrirPanelPresupuestos,
 }) => {
   const canEdit = puedeCrearOEditarOperacion(rol);
   const canViewFinances = rol === 'admin' || rol === 'coordinador';
@@ -624,6 +636,17 @@ export const ProyectosView: React.FC<ProyectosViewProps> = ({
             ))}
           </div>
 
+          {canViewFinances && onAbrirPanelPresupuestos && (
+            <button
+              type="button"
+              onClick={onAbrirPanelPresupuestos}
+              className="inline-flex items-center gap-1.5 rounded-md border border-slate-200 bg-white px-3.5 py-2 text-xs font-semibold text-[#0F2942] hover:bg-slate-50 whitespace-nowrap shrink-0 min-h-[40px]"
+            >
+              <Calculator className="h-3.5 w-3.5 text-[#0284C7]" />
+              Panel de presupuestos
+            </button>
+          )}
+
           {canEdit && (
             <>
               <button
@@ -635,7 +658,7 @@ export const ProyectosView: React.FC<ProyectosViewProps> = ({
                 className="inline-flex items-center gap-1.5 rounded-md border border-slate-200 bg-white px-3.5 py-2 text-xs font-semibold text-[#0F2942] hover:bg-slate-50 whitespace-nowrap shrink-0 min-h-[40px]"
               >
                 <UserPlus className="h-3.5 w-3.5" />
-                Nuevo Cliente
+                Nuevo cliente
               </button>
               <button
                 type="button"
@@ -647,7 +670,7 @@ export const ProyectosView: React.FC<ProyectosViewProps> = ({
                 className="inline-flex items-center gap-1.5 rounded-md bg-[#0F2942] px-4 py-2 text-xs font-semibold text-white hover:bg-[#0284C7] whitespace-nowrap shrink-0 min-h-[40px]"
               >
                 <FolderPlus className="h-3.5 w-3.5" />
-                Nuevo Proyecto
+                Nuevo proyecto
               </button>
             </>
           )}
@@ -682,107 +705,108 @@ export const ProyectosView: React.FC<ProyectosViewProps> = ({
                 className="rounded-lg border border-slate-200 bg-white overflow-hidden"
               >
                 {/* Project Header */}
-                <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-slate-200 bg-[#F8FAFC] px-5 py-4">
-                  <div className="min-w-0 space-y-1">
-                    <div className="flex flex-wrap items-center gap-2 text-xs">
-                      <span className="font-mono font-bold text-[#0284C7]">
-                        {proyecto.codigoContrato}
-                      </span>
-                      <span aria-hidden="true" className="text-slate-300">·</span>
-                      <WorkflowBadge status={estadoActual} />
-                      <span aria-hidden="true" className="text-slate-300">·</span>
-                      <span className="text-[#43474D]">
-                        {cliente ? `${cliente.nombre} (RNC ${cliente.rnc})` : 'Cliente sin asignar'}
-                      </span>
+                <div className="border-b border-slate-200 bg-[#F8FAFC] px-5 py-4 space-y-3">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                    <div className="min-w-0 space-y-1">
+                      <div className="flex flex-wrap items-center gap-2 text-xs">
+                        <span className="font-mono font-bold text-[#0284C7]">
+                          {proyecto.codigoContrato}
+                        </span>
+                        <span aria-hidden="true" className="text-slate-300">·</span>
+                        <WorkflowBadge status={estadoActual} />
+                        <span aria-hidden="true" className="text-slate-300">·</span>
+                        <span className="text-[#43474D]">
+                          {cliente ? `${cliente.nombre} (RNC ${cliente.rnc})` : 'Cliente sin asignar'}
+                        </span>
+                      </div>
+                      <h3 className="text-base font-bold tracking-tight text-[#0D1C2F] text-balance">
+                        {proyecto.nombre}
+                      </h3>
                     </div>
-                    <h3 className="text-base font-bold tracking-tight text-[#0D1C2F] text-balance">
-                      {proyecto.nombre}
-                    </h3>
+
+                    <div className="flex flex-wrap items-center gap-2 shrink-0">
+                      {canViewFinances && (
+                        <button
+                          type="button"
+                          onClick={() => setPresupuestoModalProyectoId(proyecto.id)}
+                          className="inline-flex items-center gap-1.5 rounded-md border border-slate-300 bg-white px-3.5 py-2 text-xs font-semibold text-[#0F2942] hover:bg-slate-50 whitespace-nowrap shrink-0 min-h-[40px]"
+                        >
+                          <Calculator className="h-3.5 w-3.5 text-[#0284C7]" />
+                          Ver presupuesto
+                        </button>
+                      )}
+                      {canEdit && (
+                        <button
+                          type="button"
+                          onClick={() => onAbrirNuevaRutaKmz(proyecto.id)}
+                          className="inline-flex items-center gap-1.5 rounded-md border border-[#0284C7] bg-white px-3.5 py-2 text-xs font-semibold text-[#0284C7] hover:bg-sky-50 whitespace-nowrap shrink-0 min-h-[40px]"
+                        >
+                          <Plus className="h-3.5 w-3.5" />
+                          Agregar ruta KMZ
+                        </button>
+                      )}
+                    </div>
                   </div>
 
-                  <div className="flex flex-wrap items-center gap-4 text-xs shrink-0">
-                    {canViewFinances && comparacionPresupuesto && (
-                      <>
-                        <div className="text-right">
-                          <div className="text-[11px] text-[#43474D]">Valor Contrato</div>
-                          <div className="font-mono font-bold text-[#0D1C2F] tabular-nums">
-                            {formatRD(proyecto.valorContratoRD, moneda)}
-                          </div>
+                  {canViewFinances && comparacionPresupuesto && (
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 pt-3 border-t border-slate-200/80 text-xs">
+                      <div>
+                        <div className="text-[11px] text-[#43474D]">Valor de contrato</div>
+                        <div className="font-mono font-bold text-[#0D1C2F] tabular-nums">
+                          {formatRD(proyecto.valorContratoRD, moneda)}
                         </div>
-                        <div className="text-right">
-                          <div className="text-[11px] text-[#43474D]">Costo (Real / Pres.)</div>
-                          <div
-                            className={`font-mono font-bold tabular-nums ${
-                              overBudget ? 'text-[#DC2626]' : 'text-[#0F2942]'
-                            }`}
-                          >
-                            {formatRD(comparacionPresupuesto.totalEjecutadoRD, moneda)}{' '}
-                            <span className="font-normal text-[#43474D]">
-                              / {formatRD(comparacionPresupuesto.totalPlanificadoRD, moneda)}
-                            </span>
-                          </div>
+                      </div>
+                      <div>
+                        <div className="text-[11px] text-[#43474D]">Costo ejecutado / planificado</div>
+                        <div
+                          className={`font-mono font-bold tabular-nums ${
+                            overBudget ? 'text-[#DC2626]' : 'text-[#0F2942]'
+                          }`}
+                        >
+                          {formatRD(comparacionPresupuesto.totalEjecutadoRD, moneda)}{' '}
+                          <span className="font-normal text-[#43474D]">
+                            / {formatRD(comparacionPresupuesto.totalPlanificadoRD, moneda)}
+                          </span>
                         </div>
-                        <div className="text-right">
-                          <div className="text-[11px] text-[#43474D]">Margen Real</div>
-                          <div
-                            className={`font-mono font-bold tabular-nums ${
-                              comparacionPresupuesto.margenRealRD < 0
-                                ? 'text-[#DC2626]'
-                                : 'text-[#15803D]'
-                            }`}
-                          >
-                            {formatRD(comparacionPresupuesto.margenRealRD, moneda)}
-                            {comparacionPresupuesto.margenRealPct !== null
-                              ? ` (${comparacionPresupuesto.margenRealPct}%)`
-                              : ''}
-                          </div>
+                      </div>
+                      <div>
+                        <div className="text-[11px] text-[#43474D]">Margen real</div>
+                        <div
+                          className={`font-mono font-bold tabular-nums ${
+                            comparacionPresupuesto.margenRealRD < 0
+                              ? 'text-[#DC2626]'
+                              : 'text-[#15803D]'
+                          }`}
+                        >
+                          {formatRD(comparacionPresupuesto.margenRealRD, moneda)}
+                          {comparacionPresupuesto.margenRealPct !== null
+                            ? ` (${comparacionPresupuesto.margenRealPct}%)`
+                            : ''}
                         </div>
-                        {srvsProy.some((s) => s.estado === 'cobrado' && typeof s.montoCobradoRD === 'number') && (
-                          <div className="text-right">
-                            <div className="text-[11px] text-[#15803D]">Total Cobrado</div>
-                            <div className="font-mono font-bold text-[#15803D] tabular-nums">
-                              {formatRD(
-                                srvsProy.reduce(
-                                  (acc, s) =>
-                                    acc +
-                                    (s.estado === 'cobrado' && typeof s.montoCobradoRD === 'number'
-                                      ? s.montoCobradoRD
-                                      : 0),
-                                  0
-                                ),
-                                moneda
-                              )}
-                            </div>
-                          </div>
-                        )}
-                      </>
-                    )}
-                    {canViewFinances && (
-                      <button
-                        type="button"
-                        onClick={() => setPresupuestoModalProyectoId(proyecto.id)}
-                        className="inline-flex items-center gap-1.5 rounded-md border border-slate-300 bg-white px-3.5 py-2 text-xs font-semibold text-[#0F2942] hover:bg-slate-50 whitespace-nowrap shrink-0 min-h-[40px]"
-                      >
-                        <Calculator className="h-3.5 w-3.5 text-[#0284C7]" />
-                        Presupuesto
-                      </button>
-                    )}
-                    {canEdit && (
-                      <button
-                        type="button"
-                        onClick={() => onAbrirNuevaRutaKmz(proyecto.id)}
-                        className="inline-flex items-center gap-1.5 rounded-md border border-[#0284C7] bg-white px-3.5 py-2 text-xs font-semibold text-[#0284C7] hover:bg-sky-50 whitespace-nowrap shrink-0 min-h-[40px]"
-                      >
-                        <Plus className="h-3.5 w-3.5" />
-                        Ruta KMZ
-                      </button>
-                    )}
-                  </div>
+                      </div>
+                      <div>
+                        <div className="text-[11px] text-[#43474D]">Total cobrado</div>
+                        <div className="font-mono font-bold text-[#15803D] tabular-nums">
+                          {formatRD(
+                            srvsProy.reduce(
+                              (acc, s) =>
+                                acc +
+                                (s.estado === 'cobrado' && typeof s.montoCobradoRD === 'number'
+                                  ? s.montoCobradoRD
+                                  : 0),
+                              0
+                            ),
+                            moneda
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  )}
                 </div>
 
                 {/* Rutas inside Proyecto */}
                 {rutasProy.length === 0 ? (
-                  <div className="px-5 py-5 text-xs text-[#43474D] flex items-center justify-between">
+                  <div className="px-5 py-5 text-xs text-[#43474D] flex items-center justify-between gap-3">
                     <span>Este proyecto aún no tiene rutas KMZ/GeoJSON cargadas.</span>
                     {canEdit && (
                       <button
@@ -790,7 +814,7 @@ export const ProyectosView: React.FC<ProyectosViewProps> = ({
                         onClick={() => onAbrirNuevaRutaKmz(proyecto.id)}
                         className="font-semibold text-[#0284C7] hover:underline whitespace-nowrap shrink-0"
                       >
-                        Cargar primer archivo KMZ →
+                        Cargar archivo KMZ
                       </button>
                     )}
                   </div>
@@ -830,7 +854,7 @@ export const ProyectosView: React.FC<ProyectosViewProps> = ({
                                 className="inline-flex items-center gap-1.5 rounded-md border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-[#0F2942] hover:bg-slate-50 whitespace-nowrap shrink-0 min-h-[36px]"
                               >
                                 <Layers className="h-3.5 w-3.5" />
-                                Mapa OSM
+                                Ver mapa
                               </button>
                               <button
                                 type="button"
@@ -838,7 +862,7 @@ export const ProyectosView: React.FC<ProyectosViewProps> = ({
                                 className="inline-flex items-center gap-1.5 rounded-md border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-[#334155] hover:bg-slate-50 whitespace-nowrap shrink-0 min-h-[36px]"
                               >
                                 <RouteIcon className="h-3.5 w-3.5" />
-                                Calc. Ruta
+                                Cotizar ruta
                               </button>
                               <button
                                 type="button"
@@ -846,7 +870,7 @@ export const ProyectosView: React.FC<ProyectosViewProps> = ({
                                 className="inline-flex items-center gap-1.5 rounded-md bg-[#0284C7] px-3 py-1.5 text-xs font-semibold text-white hover:bg-[#006398] whitespace-nowrap shrink-0 min-h-[36px]"
                               >
                                 <Camera className="h-3.5 w-3.5" />
-                                + Viático
+                                Registrar viático
                               </button>
                               {canEdit && (
                                 <button
@@ -858,7 +882,7 @@ export const ProyectosView: React.FC<ProyectosViewProps> = ({
                                   className="inline-flex items-center gap-1 rounded-md border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-[#0F2942] hover:bg-slate-50 whitespace-nowrap shrink-0 min-h-[36px]"
                                 >
                                   <Plus className="h-3.5 w-3.5" />
-                                  Servicio
+                                  Agregar servicio
                                 </button>
                               )}
                             </div>
@@ -933,7 +957,7 @@ export const ProyectosView: React.FC<ProyectosViewProps> = ({
                                                     : 'border border-slate-200 bg-white text-[#0F2942] hover:bg-sky-50'
                                                 }`}
                                               >
-                                                → {ETIQUETA_ESTADO[nextSt]}
+                                                {ACCION_ESTADO_SERVICIO[nextSt]}
                                               </button>
                                             ))}
 
@@ -975,7 +999,7 @@ export const ProyectosView: React.FC<ProyectosViewProps> = ({
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-[#0F2942]/65 backdrop-blur-[2px] p-4">
           <div className="w-full max-w-md rounded-xl border border-slate-200 bg-white p-5 space-y-4 shadow-xl">
             <div className="flex items-center justify-between border-b border-slate-200 pb-3">
-              <h3 className="text-sm font-bold text-[#0D1C2F]">Registrar Nuevo Cliente (F2)</h3>
+              <h3 className="text-sm font-bold text-[#0D1C2F]">Registrar nuevo cliente</h3>
               <button
                 type="button"
                 onClick={() => setShowClienteModal(false)}
@@ -1045,7 +1069,7 @@ export const ProyectosView: React.FC<ProyectosViewProps> = ({
                   type="submit"
                   className="rounded-md bg-[#0F2942] px-4 py-2 font-semibold text-white hover:bg-[#0284C7] min-h-[40px]"
                 >
-                  Guardar Cliente
+                  Registrar cliente
                 </button>
               </div>
             </form>
@@ -1053,12 +1077,12 @@ export const ProyectosView: React.FC<ProyectosViewProps> = ({
         </div>
       )}
 
-      {/* MODAL F2: NUEVO PROYECTO (INICIA EN COTIZADO) */}
+      {/* MODAL NUEVO PROYECTO (INICIA EN COTIZADO) */}
       {showProyectoModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-[#0F2942]/65 backdrop-blur-[2px] p-4">
           <div className="w-full max-w-md rounded-xl border border-slate-200 bg-white p-5 space-y-4 shadow-xl">
             <div className="flex items-center justify-between border-b border-slate-200 pb-3">
-              <h3 className="text-sm font-bold text-[#0D1C2F]">Crear Proyecto (Estado: Cotizado)</h3>
+              <h3 className="text-sm font-bold text-[#0D1C2F]">Nuevo proyecto</h3>
               <button
                 type="button"
                 onClick={() => setShowProyectoModal(false)}
@@ -1157,7 +1181,7 @@ export const ProyectosView: React.FC<ProyectosViewProps> = ({
                   type="submit"
                   className="rounded-md bg-[#0F2942] px-4 py-2 font-semibold text-white hover:bg-[#0284C7] min-h-[40px]"
                 >
-                  Crear Proyecto
+                  Crear proyecto
                 </button>
               </div>
             </form>
@@ -1250,7 +1274,7 @@ export const ProyectosView: React.FC<ProyectosViewProps> = ({
                   type="submit"
                   className="rounded-md bg-[#0F2942] px-4 py-2 font-semibold text-white hover:bg-[#0284C7] min-h-[40px]"
                 >
-                  Agregar como Cotizado
+                  Agregar servicio
                 </button>
               </div>
             </form>
@@ -1334,7 +1358,7 @@ export const ProyectosView: React.FC<ProyectosViewProps> = ({
                   type="submit"
                   className="rounded-md bg-[#0F2942] px-4 py-2 font-semibold text-white hover:bg-[#0284C7] min-h-[40px]"
                 >
-                  Confirmar Cambio
+                  Confirmar transición
                 </button>
               </div>
             </form>
@@ -1342,7 +1366,7 @@ export const ProyectosView: React.FC<ProyectosViewProps> = ({
         </div>
       )}
 
-      {/* MODAL BITÁCORA F8 (NOTAS Y FOTOS) */}
+      {/* MODAL BITÁCORA (NOTAS Y FOTOS) */}
       {bitacoraServicio && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-[#0F2942]/65 backdrop-blur-[2px] p-4">
           <div className="w-full max-w-lg rounded-xl border border-slate-200 bg-white shadow-2xl max-h-[90vh] flex flex-col">
@@ -1389,7 +1413,7 @@ export const ProyectosView: React.FC<ProyectosViewProps> = ({
                 <div className="flex flex-wrap items-center justify-between gap-2">
                   <label className="inline-flex items-center gap-1.5 cursor-pointer rounded-md border border-slate-200 bg-[#F8FAFC] px-3 py-2 font-semibold text-[#0F2942] hover:bg-sky-50 min-h-[40px]">
                     <Camera className="h-3.5 w-3.5 text-[#0284C7]" />
-                    Adjuntar Foto ({fotosBitacora.length}/3)
+                    Adjuntar foto ({fotosBitacora.length}/3)
                     <input
                       type="file"
                       accept="image/*"
@@ -1413,7 +1437,7 @@ export const ProyectosView: React.FC<ProyectosViewProps> = ({
                     className="inline-flex items-center gap-1.5 rounded-md bg-[#0F2942] px-4 py-2 font-semibold text-white hover:bg-[#0284C7] min-h-[40px] whitespace-nowrap shrink-0"
                   >
                     <MessageSquarePlus className="h-3.5 w-3.5" />
-                    Agregar Entrada
+                    Registrar nota
                   </button>
                 </div>
 

@@ -44,7 +44,7 @@ export const AuditoriaView: React.FC<AuditoriaViewProps> = ({ historial, isLoadi
           </div>
           <div>
             <h2 className="text-base font-bold text-slate-900">
-              Bitácora de Auditoría y Excepciones (F16)
+              Bitácora de auditoría y excepciones
             </h2>
             <p className="text-xs text-slate-500 mt-0.5">
               Registro cronológico con usuario, fecha, valor anterior, valor nuevo y overrides autorizados.

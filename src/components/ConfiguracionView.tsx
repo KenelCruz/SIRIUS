@@ -552,7 +552,7 @@ export const ConfiguracionView: React.FC<ConfiguracionViewProps> = ({
                   className="inline-flex items-center gap-2 px-4 py-2 bg-slate-900 hover:bg-slate-800 text-white text-sm font-semibold rounded-lg whitespace-nowrap"
                 >
                   <Save className="w-4 h-4" />
-                  Guardar datos de empresa
+                  Actualizar empresa
                 </button>
               </div>
             </div>
@@ -711,7 +711,7 @@ export const ConfiguracionView: React.FC<ConfiguracionViewProps> = ({
                     className="inline-flex items-center gap-1.5 px-4 py-2 bg-slate-900 hover:bg-slate-800 text-white text-xs font-semibold rounded-lg whitespace-nowrap"
                   >
                     <Plus className="w-3.5 h-3.5" />
-                    Guardar acceso
+                    Asignar acceso
                   </button>
                 </div>
               </div>
@@ -791,7 +791,7 @@ export const ConfiguracionView: React.FC<ConfiguracionViewProps> = ({
                                     }
                                     className="px-2.5 py-1 text-xs font-semibold bg-slate-900 text-white rounded hover:bg-slate-800 whitespace-nowrap"
                                   >
-                                    Guardar
+                                    Actualizar cargo
                                   </button>
                                 ) : (
                                   <button
@@ -802,7 +802,7 @@ export const ConfiguracionView: React.FC<ConfiguracionViewProps> = ({
                                     }}
                                     className="px-2.5 py-1 text-xs font-semibold border border-slate-300 rounded hover:bg-slate-50 whitespace-nowrap"
                                   >
-                                    Editar
+                                    Renombrar
                                   </button>
                                 )}
                                 <button
@@ -985,7 +985,7 @@ export const ConfiguracionView: React.FC<ConfiguracionViewProps> = ({
                         }
                         className="w-full px-3 py-2 bg-slate-900 hover:bg-slate-800 text-white text-xs font-semibold rounded-lg"
                       >
-                        Registrar vigencia
+                        Aplicar vigencia de precio
                       </button>
                     </div>
 
@@ -1186,7 +1186,7 @@ export const ConfiguracionView: React.FC<ConfiguracionViewProps> = ({
                       className="inline-flex items-center gap-1.5 px-4 py-2 bg-slate-900 hover:bg-slate-800 text-white text-xs font-semibold rounded-lg"
                     >
                       <Save className="w-3.5 h-3.5" />
-                      Guardar nueva vigencia
+                      Aplicar vigencia de rendimiento
                     </button>
                   </div>
                 )}
@@ -1325,7 +1325,7 @@ export const ConfiguracionView: React.FC<ConfiguracionViewProps> = ({
                         }
                         className="w-full px-3 py-2 bg-slate-900 hover:bg-slate-800 text-white text-xs font-semibold rounded-lg"
                       >
-                        Guardar nueva vigencia
+                        Aplicar vigencia de tarifa
                       </button>
                     </div>
 
@@ -1486,7 +1486,7 @@ export const ConfiguracionView: React.FC<ConfiguracionViewProps> = ({
                       }
                       className="px-4 py-2 bg-slate-900 hover:bg-slate-800 text-white text-xs font-semibold rounded-lg"
                     >
-                      Registrar vigencia de terreno
+                      Aplicar vigencia de terreno
                     </button>
                   </div>
                 )}
@@ -1704,7 +1704,7 @@ export const ConfiguracionView: React.FC<ConfiguracionViewProps> = ({
                     className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-semibold border border-slate-300 rounded-lg hover:bg-slate-50"
                   >
                     <Plus className="w-3.5 h-3.5" />
-                    Añadir preset
+                    Agregar preset
                   </button>
                 </div>
 
@@ -1809,7 +1809,7 @@ export const ConfiguracionView: React.FC<ConfiguracionViewProps> = ({
                   className="inline-flex items-center gap-2 px-4 py-2 bg-slate-900 hover:bg-slate-800 text-white text-sm font-semibold rounded-lg whitespace-nowrap"
                 >
                   <Save className="w-4 h-4" />
-                  Registrar nueva vigencia de reglas
+                  Aplicar vigencia de reglas
                 </button>
               </div>
             </div>
@@ -1978,7 +1978,7 @@ export const ConfiguracionView: React.FC<ConfiguracionViewProps> = ({
                       className="inline-flex items-center gap-1.5 px-4 py-2 bg-slate-900 hover:bg-slate-800 text-white text-xs font-semibold rounded-lg"
                     >
                       <Save className="w-3.5 h-3.5" />
-                      Guardar nueva vigencia de tope
+                      Aplicar vigencia de tope
                     </button>
                   </div>
                 </div>

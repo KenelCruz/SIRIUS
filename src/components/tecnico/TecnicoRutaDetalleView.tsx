@@ -114,7 +114,7 @@ export const TecnicoRutaDetalleView: React.FC<TecnicoRutaDetalleViewProps> = ({
           className="inline-flex items-center gap-1.5 rounded-md bg-[#0F2942] px-4 py-2 text-xs font-semibold text-white min-h-[42px]"
         >
           <ArrowLeft className="h-4 w-4" />
-          Volver a Mis Rutas
+          Volver a mis rutas
         </button>
       </div>
     );
@@ -131,7 +131,7 @@ export const TecnicoRutaDetalleView: React.FC<TecnicoRutaDetalleViewProps> = ({
             className="inline-flex items-center gap-1.5 rounded-md border border-slate-300 bg-white px-3.5 py-2 text-xs font-semibold text-[#0F2942] hover:bg-slate-50 min-h-[40px] whitespace-nowrap"
           >
             <ArrowLeft className="h-3.5 w-3.5" />
-            Volver
+            Volver a rutas
           </button>
 
           <button
@@ -140,7 +140,7 @@ export const TecnicoRutaDetalleView: React.FC<TecnicoRutaDetalleViewProps> = ({
             className="inline-flex items-center gap-1.5 rounded-md bg-[#0284C7] px-4 py-2 text-xs font-semibold text-white hover:bg-[#0369A1] min-h-[40px] whitespace-nowrap transition-colors"
           >
             <Camera className="h-4 w-4" />
-            Reportar Viático en Ruta
+            Registrar viático
           </button>
         </div>
 
@@ -369,7 +369,7 @@ export const TecnicoRutaDetalleView: React.FC<TecnicoRutaDetalleViewProps> = ({
                       className="inline-flex items-center gap-1.5 rounded-md border border-slate-300 bg-white px-3.5 py-2 text-xs font-semibold text-[#0F2942] hover:bg-slate-50 min-h-[42px] whitespace-nowrap"
                     >
                       <ClipboardList className="h-3.5 w-3.5 text-[#0284C7]" />
-                      Agregar Bitácora
+                      Agregar bitácora
                     </button>
                   </div>
                 </div>
@@ -392,7 +392,7 @@ export const TecnicoRutaDetalleView: React.FC<TecnicoRutaDetalleViewProps> = ({
               className="inline-flex items-center gap-1.5 rounded-md bg-[#0F2942] px-3.5 py-2 text-xs font-semibold text-white hover:bg-[#0284C7] min-h-[40px] whitespace-nowrap"
             >
               <ClipboardList className="h-3.5 w-3.5" />
-              Nueva entrada bitácora
+              Agregar nota de bitácora
             </button>
           )}
         </div>

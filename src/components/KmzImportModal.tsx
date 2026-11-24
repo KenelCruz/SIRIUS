@@ -1437,7 +1437,7 @@ export const KmzImportModal: React.FC<KmzImportModalProps> = ({
                     onChange={(e) => setProgramarAhora(e.target.checked)}
                     className="h-4 w-4 rounded accent-[#0F2942]"
                   />
-                  Programar asignación de cuadrilla ahora (F5 con validación de rango y conflictos)
+                  Programar asignación de cuadrilla ahora (con validación de rango y conflictos)
                 </label>
 
                 {programarAhora && (
@@ -1570,7 +1570,7 @@ export const KmzImportModal: React.FC<KmzImportModalProps> = ({
                 className="inline-flex items-center gap-1.5 rounded-md border border-slate-300 bg-white px-4 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-100 min-h-[40px] whitespace-nowrap transition-colors"
               >
                 <ArrowLeft className="h-3.5 w-3.5" />
-                Anterior
+                Paso anterior
               </button>
             )}
           </div>
@@ -1598,7 +1598,7 @@ export const KmzImportModal: React.FC<KmzImportModalProps> = ({
                 className="inline-flex items-center gap-1.5 rounded-md bg-[#0F2942] px-4 py-2 text-xs font-semibold text-white hover:bg-[#0284C7] disabled:opacity-40 transition-colors min-h-[40px] whitespace-nowrap"
               >
                 <span>
-                  {step === 1 ? 'Continuar a Servicios y Ruta' : 'Continuar a Cuadrilla y Viáticos'}
+                  {step === 1 ? 'Continuar a servicios y ruta' : 'Continuar a cuadrilla y viáticos'}
                 </span>
                 <ArrowRight className="h-3.5 w-3.5" />
               </button>
@@ -1611,7 +1611,7 @@ export const KmzImportModal: React.FC<KmzImportModalProps> = ({
                   className="inline-flex items-center gap-1.5 rounded-md bg-[#0F2942] px-4 py-2 text-xs font-semibold text-white hover:bg-[#0284C7] disabled:opacity-50 transition-colors min-h-[40px] whitespace-nowrap"
                 >
                   <Receipt className="h-3.5 w-3.5" />
-                  {isSaving ? 'Guardando...' : 'Guardar Ruta KMZ'}
+                  {isSaving ? 'Creando...' : 'Crear ruta KMZ'}
                 </button>
                 <button
                   type="button"
@@ -1620,7 +1620,7 @@ export const KmzImportModal: React.FC<KmzImportModalProps> = ({
                   className="inline-flex items-center gap-1.5 rounded-md bg-[#0284C7] px-4 py-2 text-xs font-semibold text-white hover:bg-[#006398] disabled:opacity-50 transition-colors min-h-[40px] whitespace-nowrap"
                 >
                   <Camera className="h-3.5 w-3.5" />
-                  Guardar y Adjuntar Recibo
+                  Crear ruta y adjuntar recibo
                 </button>
               </>
             )}

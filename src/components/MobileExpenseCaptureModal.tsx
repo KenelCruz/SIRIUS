@@ -741,7 +741,7 @@ export const MobileExpenseCaptureModal: React.FC<MobileExpenseCaptureModalProps>
                   ) : (
                     <>
                       <Camera className="h-4 w-4" />
-                      Tomar Foto / Subir Recibo (Opcional)
+                      Subir o capturar recibo
                     </>
                   )}
                 </button>
@@ -785,7 +785,7 @@ export const MobileExpenseCaptureModal: React.FC<MobileExpenseCaptureModalProps>
                 ) : (
                   <>
                     <MapPin className="h-4 w-4" />
-                    Capturar GPS y Calcular Combustible Automático
+                    Calcular combustible por GPS
                   </>
                 )}
               </button>
@@ -1122,7 +1122,7 @@ export const MobileExpenseCaptureModal: React.FC<MobileExpenseCaptureModalProps>
                     className="min-h-[36px] inline-flex items-center gap-1 rounded-md border border-slate-300 bg-white px-2.5 py-1 text-xs font-semibold text-[#0F2942] hover:bg-slate-100 whitespace-nowrap"
                   >
                     <Plus className="h-3.5 w-3.5" />
-                    Añadir proyecto
+                    Agregar proyecto
                   </button>
 
                   <div className="flex items-center gap-2 text-xs">
@@ -1161,12 +1161,12 @@ export const MobileExpenseCaptureModal: React.FC<MobileExpenseCaptureModalProps>
             >
               <Receipt className="h-4 w-4" />
               {isSaving
-                ? 'Guardando...'
+                ? 'Registrando...'
                 : editingViatico
-                ? 'Guardar Cambios'
+                ? 'Actualizar viático'
                 : isOnline
-                ? 'Guardar y Reportar Viático'
-                : 'Encolar Viático Offline'}
+                ? 'Registrar viático'
+                : 'Encolar viático offline'}
             </button>
           </div>
         </form>

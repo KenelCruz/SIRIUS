@@ -211,7 +211,7 @@ export const TecnicoRutasView: React.FC<TecnicoRutasViewProps> = ({
                   onClick={() => onAbrirDetalleRuta(ruta.id)}
                   className="w-full inline-flex items-center justify-center gap-1.5 rounded-md bg-[#0F2942] px-4 py-2.5 text-xs font-semibold text-white hover:bg-[#0284C7] min-h-[44px] transition-colors whitespace-nowrap"
                 >
-                  <span>Ver Detalle y Mapa de Ruta</span>
+                  <span>Ver detalle y mapa</span>
                   <ChevronRight className="h-4 w-4" />
                 </button>
               </div>

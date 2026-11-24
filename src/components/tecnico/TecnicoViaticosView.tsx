@@ -120,7 +120,7 @@ export const TecnicoViaticosView: React.FC<TecnicoViaticosViewProps> = ({
             className="inline-flex items-center gap-1.5 rounded-md bg-[#0284C7] px-4 py-2 text-xs font-semibold text-white hover:bg-[#0369A1] min-h-[44px] whitespace-nowrap shrink-0 transition-colors"
           >
             <Camera className="h-4 w-4" />
-            Reportar Viático
+            Registrar viático
           </button>
         </div>
 
@@ -361,7 +361,7 @@ export const TecnicoViaticosView: React.FC<TecnicoViaticosViewProps> = ({
                           onClick={() => handleConfirmDelete(v.id)}
                           className="rounded-md bg-[#DC2626] px-3.5 py-1.5 font-semibold text-white disabled:opacity-50 min-h-[38px]"
                         >
-                          {deletingId === v.id ? 'Eliminando...' : 'Sí, eliminar'}
+                          {deletingId === v.id ? 'Eliminando...' : 'Confirmar eliminación'}
                         </button>
                       </div>
                     </div>
@@ -374,7 +374,7 @@ export const TecnicoViaticosView: React.FC<TecnicoViaticosViewProps> = ({
                           className="inline-flex items-center justify-center gap-1.5 rounded-md border border-slate-300 bg-white px-3 py-2 text-xs font-semibold text-[#0F2942] hover:bg-slate-50 min-h-[44px]"
                         >
                           <Pencil className="h-3.5 w-3.5 text-[#0284C7]" />
-                          Editar
+                          Editar viático
                         </button>
                       )}
                       {puedeEliminar && (
@@ -384,7 +384,7 @@ export const TecnicoViaticosView: React.FC<TecnicoViaticosViewProps> = ({
                           className="inline-flex items-center justify-center gap-1.5 rounded-md border border-rose-200 bg-white px-3 py-2 text-xs font-semibold text-[#DC2626] hover:bg-rose-50 min-h-[44px]"
                         >
                           <Trash2 className="h-3.5 w-3.5" />
-                          Eliminar
+                          Eliminar viático
                         </button>
                       )}
                     </div>

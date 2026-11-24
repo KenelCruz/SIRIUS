@@ -19,9 +19,10 @@
 8. [Módulo 6: Control de Flota y Rendimiento de Combustible](#8-módulo-6-control-de-flota-y-rendimiento-de-combustible)
 9. [Módulo 7: Configuración Versionada con Vigencias y Onboarding Guiado](#9-módulo-7-configuración-versionada-con-vigencias-y-onboarding-guiado)
 10. [Módulo 8: Módulo Móvil del Técnico en Campo](#10-módulo-8-módulo-móvil-del-técnico-en-campo)
-11. [Módulo 9: Bitácora de Auditoría (F16), Tutoriales y Backend Express](#11-módulo-9-bitácora-de-auditoría-f16-tutoriales-y-backend-express)
-12. [Resumen Ejecutivo de Reglas Críticas e Invariantes](#12-resumen-ejecutivo-de-reglas-críticas-e-invariantes)
-13. [Guía Rápida para Exportar este Documento a PDF](#13-guía-rápida-para-exportar-este-documento-a-pdf)
+11. [Módulo 9: Bitácora de Auditoría, Tutoriales y Backend Express](#11-módulo-9-bitácora-de-auditoría-tutoriales-y-backend-express)
+12. [Módulo 10: Presupuestos por Proyecto, Ejecutado en Vivo, Márgenes y Gráficos](#12-módulo-10-presupuestos-por-proyecto-ejecutado-en-vivo-márgenes-y-gráficos)
+13. [Resumen Ejecutivo de Reglas Críticas e Invariantes](#13-resumen-ejecutivo-de-reglas-críticas-e-invariantes)
+14. [Guía Rápida para Exportar este Documento a PDF](#14-guía-rápida-para-exportar-este-documento-a-pdf)
 
 ---
 
@@ -34,8 +35,8 @@ El sistema separa estrictamente la **lógica de negocio pura** (100% determinist
 ```text
 +-------------------------------------------------------------------------+
 |                    CAPA DE PRESENTACIÓN (src/components/)               |
-|  - Vistas Admin / Coordinador (Hoy, Proyectos, Agenda, Rutas, Mapa/CAD, |
-|    Viáticos, Catálogos/Flota, Auditoría, Configuración, Onboarding)     |
+|  - Vistas Admin / Coordinador (Hoy, Proyectos, Presupuestos, Agenda,       |
+|    Cotizador, Mapa/CAD, Viáticos, Catálogos/Flota, Auditoría, Config.)    |
 |  - Vistas Móviles Técnico (Hoy, Mis Rutas, Detalle, Agenda, Viáticos)   |
 +------------------------------------+------------------------------------+
                                      |
@@ -50,7 +51,7 @@ El sistema separa estrictamente la **lógica de negocio pura** (100% determinist
 +-------------------------------------------------------------------------+
 |          REPOSITORIO DE DATOS (src/data/LocalRepositorioOperacion.ts)   |
 |  - Aislamiento multiempresa (empresa_id) y persistencia localStorage    |
-|  - Validación transaccional, auditoría F16 y cola de sincronización     |
+|  - Validación transaccional, auditoría y cola de sincronización         |
 +--------------------+-----------------------------------+----------------+
                      |                                   |
                      v                                   v
@@ -60,7 +61,8 @@ El sistema separa estrictamente la **lógica de negocio pura** (100% determinist
 | - estados.ts      - onboarding.ts  |  | - routingEngine - osmGeocode.ts |
 | - conflictos.ts   - rendimiento.ts |  | - dwgParser.ts (WASM LibreDWG)  |
 | - viaticos.ts     - rentas.ts      |  +----------------+----------------+
-| - tecnico.ts      - sync.ts        |                   |
+| - presupuesto.ts  - tecnico.ts     |                   |
+| - sync.ts                          |                   v
 +------------------------------------+                   v
                                         +---------------------------------+
                                         | SERVIDOR EXPRESS (server.ts)    |
@@ -81,12 +83,13 @@ El control de acceso se rige por `src/domain/permisos.ts` y `src/domain/configur
 | Gestión de empresa, RNC, usuarios, cargos y vigencias | Sí (Edición completa) | No (Solo lectura en secciones permitidas) | Sin acceso |
 | Catálogos operativos (Clientes, Personal, Flota, GNSS, Cuadrillas) | Sí | Sí | Sin acceso a catálogos globales |
 | Proyectos, Rutas KMZ, Cotizaciones y Cobros | Sí | Sí | Solo lectura operativa de rutas asignadas (sin montos) |
+| Presupuestos por proyecto, márgenes y gráficos (`PresupuestosView`) | Sí (crear versiones, editar borradores, aprobar, cerrar y exportar) | Sí (crear versiones, editar borradores, aprobar, cerrar y exportar) | Sin acceso |
 | Agenda, Asignaciones, Misiones y Rentas | Sí | Sí | Solo consulta de su agenda y misiones vinculadas |
 | Transiciones de estado de servicio | Todas (`cotizado` → `cobrado`) | Todas (`cotizado` → `cobrado`) | Solo `programado → en_campo → procesando` |
 | Registro de bitácoras de campo | Sí | Sí | Sí, solo en rutas de sus cuadrillas |
 | Registro de viáticos | Sí (usa cargo `administrativo` si no tiene ficha de personal) | Sí (usa cargo `administrativo` si no tiene ficha de personal) | Sí, **exige vinculación a `personalId`** |
 | Aprobación, rechazo y redistribución de viáticos | Sí (solo si están `pendiente`) | Sí (solo si están `pendiente`) | No |
-| Bitácora de Auditoría (F16) | Sí | Sí | Sin acceso |
+| Bitácora de Auditoría | Sí | Sí | Sin acceso |
 | Asistente de Onboarding inicial | Sí | No | Sin acceso |
 
 ### Aislamiento Estricto del Rol Técnico (`proyectarSnapshotParaRol`)
@@ -94,7 +97,7 @@ El control de acceso se rige por `src/domain/permisos.ts` y `src/domain/configur
 Cuando un usuario con rol `tecnico` carga la aplicación, el repositorio invoca `proyectarSnapshotParaRol` para generar un tipo separado llamado `SnapshotTecnico`:
 
 1. **Filtrado de alcance:** Solo incluye las cuadrillas donde el usuario es jefe o miembro (`obtenerCuadrillasDeUsuario`), las asignaciones de esas cuadrillas y las rutas, proyectos, clientes, vehículos, equipos y misiones vinculados a dichas rutas. En viáticos, únicamente recibe los creados por él mismo (`creadoPorUsuarioId === usuarioId`).
-2. **Sanitización financiera:** Mediante `sanitizarEmpresaParaTecnico`, `sanitizarProyectoParaTecnico`, `sanitizarServicioParaTecnico`, `sanitizarVehiculoParaTecnico`, `sanitizarMisionParaTecnico` y `sanitizarRutaParaTecnico`, se eliminan `presupuestoViaticosRD`, `valorContratoRD`, `cotizacionRD`, `montoCobradoRD`, `fechaPago`, `precioGalonRD`, `kmPorGal`, `mantenimientoPorKmRD`, `tollsRD`, `fuelRD`, datos de suscripción, listas de usuarios/membresías, rentas y eventos de auditoría.
+2. **Sanitización financiera:** Mediante `sanitizarEmpresaParaTecnico`, `sanitizarProyectoParaTecnico`, `sanitizarServicioParaTecnico`, `sanitizarVehiculoParaTecnico`, `sanitizarMisionParaTecnico` y `sanitizarRutaParaTecnico`, se eliminan `presupuestoViaticosRD`, `valorContratoRD`, `cotizacionRD`, `montoCobradoRD`, `fechaPago`, `precioGalonRD`, `kmPorGal`, `mantenimientoPorKmRD`, `tollsRD`, `fuelRD`, datos de suscripción, listas de usuarios/membresías, rentas, **presupuestos por proyecto (`presupuestos`)** y eventos de auditoría.
 3. **Reglas de captura seguras:** El técnico recibe únicamente `reglasCapturaViaticos` (versión vigente de GPS Ruta, tarifas rápidas/presets, categorías activas y los topes correspondientes exclusivamente a su cargo).
 
 ### Matriz de Visibilidad en Configuración (`puedeVerSeccionConfiguracion`)
@@ -417,7 +420,7 @@ Si un administrador marca manualmente un paso como completado sin cumplir los da
 
 ---
 
-## 11. Módulo 9: Bitácora de Auditoría (F16), Tutoriales y Backend Express
+## 11. Módulo 9: Bitácora de Auditoría, Tutoriales y Backend Express
 
 ### Archivos Principales
 - **UI y Datos:** `src/components/AuditoriaView.tsx`, `src/components/TutorialVisualModal.tsx`, `src/data/tutoriales.ts`, `src/data/LocalRepositorioOperacion.ts`
@@ -427,8 +430,8 @@ Si un administrador marca manualmente un paso como completado sin cumplir los da
 
 | Elemento | Ubicación | Propósito |
 | :--- | :--- | :--- |
-| `registrarEvento` (Auditoría F16) | `LocalRepositorioOperacion.ts` | Registra de forma cronológica usuario, fecha AST, entidad afectada, acción, `valorAnterior`, `valorNuevo` y metadatos (como `overrideMotivo` o `decisionExcedente`) en cada operación crítica. |
-| `AuditoriaView` | `src/components/AuditoriaView.tsx` | Permite filtrar eventos por entidad (`asignacion`, `servicio`, `viatico`, `ruta`, `proyecto`, `catalogo`, `empresa`) y buscar por usuario, motivo o valor. |
+| `registrarEvento` (Auditoría) | `LocalRepositorioOperacion.ts` | Registra de forma cronológica usuario, fecha AST, entidad afectada, acción, `valorAnterior`, `valorNuevo` y metadatos (como `overrideMotivo`, `decisionExcedente` o versiones de presupuesto) en cada operación crítica. |
+| `AuditoriaView` | `src/components/AuditoriaView.tsx` | Permite filtrar eventos por entidad (`asignacion`, `servicio`, `viatico`, `ruta`, `proyecto`, `presupuesto`, `catalogo`, `empresa`) y buscar por usuario, motivo o valor. |
 | `TUTORIALES_POR_PERFIL` | `src/data/tutoriales.ts` | Tarjetas guiadas por rol (`admin`, `coordinador`, `tecnico`) que se muestran automáticamente en el primer ingreso del perfil y pueden reabrirse desde Configuración/Ayuda. |
 | `GET /api/health` | `server.ts` | Verificación de estado del servidor Express (puerto 3000). |
 | `GET /api/state` & `POST /api/sync` | `server.ts` | Persistencia JSON por empresa en `.data/geomatrix-saas-store.json` con autenticación Bearer de sesión (`aia-session-*`) y fusión LWW (`mergeLww`). |
@@ -436,7 +439,75 @@ Si un administrador marca manualmente un paso como completado sin cumplir los da
 
 ---
 
-## 12. Resumen Ejecutivo de Reglas Críticas e Invariantes
+## 12. Módulo 10: Presupuestos por Proyecto, Ejecutado en Vivo, Márgenes y Gráficos
+
+### Archivos Principales
+- **Dominio:** `src/domain/presupuesto.ts`, `src/domain/permisos.ts` (`puedeGestionarPresupuesto`)
+- **UI:** `src/components/PresupuestosView.tsx`, `src/components/PresupuestoProyectoModal.tsx`, `src/components/ProyectosView.tsx`
+- **Repositorio:** `src/data/LocalRepositorioOperacion.ts` (`guardarPresupuestoProyecto`, `cambiarEstadoPresupuestoProyecto`)
+
+### Funciones Clave
+
+| Función / Componente | Ubicación | Propósito |
+| :--- | :--- | :--- |
+| `migrarProyectoAPresupuestoInicial` / `asegurarPresupuestosProyectos` | `src/domain/presupuesto.ts` | Generan automáticamente la versión `v1` aprobada para proyectos existentes (`viaticos = presupuestoViaticosRD`, `esMigracionInicial: true`) sin alterar proyectos ni duplicar datos. |
+| `obtenerPresupuestoVigenteProyecto` / `obtenerHistorialPresupuestosProyecto` | `src/domain/presupuesto.ts` | Resuelven la versión vigente para `fechaCalculoIso` (`vigenciaDesde <= fechaCalculoIso`, priorizando versiones aprobadas/cerradas salvo `incluirBorrador`). |
+| `validarNuevoPresupuestoVersion` / `validarEdicionPresupuesto` / `validarTransicionPresupuesto` | `src/domain/presupuesto.ts` | Validan permisos (`admin` / `coordinador`), impiden fechas `vigenciaDesde` repetidas, bloquean borradores simultáneos y protegen la inmutabilidad de versiones `aprobado` o `cerrado`. |
+| `calcularEstimadoViaticosPorPuesto` | `src/domain/presupuesto.ts` | Estima un monto planificado de viáticos por puesto, días, personas y alojamiento usando las tarifas provisionales por puesto (`TARIFAS_VIATICOS_PROVISIONALES_PUESTO`). |
+| `calcularEjecutadoProyectoDesdeFuentes` / `calcularEjecutadoProyectoDesdeSnapshot` | `src/domain/presupuesto.ts` | Calculan el costo real ejecutado en las 6 categorías directamente desde viáticos aprobados, rentas no canceladas y asignaciones del snapshot. |
+| `compararPresupuestoProyecto` / `compararVersionPresupuestoConSnapshot` / `compararPresupuestoProyectoConSnapshot` | `src/domain/presupuesto.ts` | Comparan una versión de presupuesto contra el gasto ejecutado en vivo por categoría y calculan desviaciones, ejecución `%`, margen planificado y margen real. |
+| `calcularReportePresupuestosEmpresa` / `calcularReportePresupuestosDesdeSnapshot` | `src/domain/presupuesto.ts` | Consolidan comparaciones, totales de contrato, costo planificado, costo ejecutado y márgenes para toda la empresa a una fecha de cálculo. |
+| `PresupuestosView` y `PresupuestoProyectoModal` | `src/components/` | Vista analítica dedicada con KPIs, gráficos Recharts (`BarChart` y `PieChart`), filtros, exportación CSV y gestión completa de versiones por proyecto. |
+
+### Lógica Aplicada
+
+#### A. Entidad Versionada `PresupuestoProyecto` e Inmutabilidad
+- **Separación del modelo:** `PresupuestoProyecto` vive como entidad independiente vinculada por `proyectoId`, siguiendo el mismo patrón histórico con `vigenciaDesde` que la configuración de tarifas.
+- **Ciclo de estados:** `borrador → aprobado → cerrado`.
+  - Solo un **`borrador`** admite edición directa de montos y fecha de vigencia.
+  - Una versión **`aprobado`** es **inmutable**; cualquier ajuste posterior requiere crear una nueva versión con nueva `vigenciaDesde` (un solo borrador abierto a la vez por proyecto).
+  - Una versión **`cerrado`** bloquea ediciones y nuevas versiones (`cerrado` requiere haber pasado previamente por `aprobado`).
+  - No está permitido devolver un presupuesto a `borrador`.
+
+#### B. Las 6 Categorías y Cálculo de Ejecutado en Vivo (Sin Doble Captura)
+El sistema nunca guarda copias estáticas del gasto ejecutado; siempre lo calcula al vuelo desde las fuentes reales del snapshot:
+
+| Categoría | Fuente de Cálculo en Vivo (`calcularEjecutadoProyectoDesdeFuentes`) | Regla de Negocio Clave |
+| :--- | :--- | :--- |
+| **`viaticos`** | `viaticos` con `estadoAprobacion === 'aprobado'` repartidos al `proyectoId` | Si `decisionExcedente === 'cargo_colaborador'`, aplica `escalarRepartosAMontoEmpresa` para que el excedente pagado por el colaborador **no entre** en el gasto del proyecto ni de la empresa. Los viáticos `pendiente` se muestran aparte como referencia informativa (`viaticosPendientesRD`). |
+| **`rentas`** | `rentas` con `estado !== 'cancelada'` repartidas al `proyectoId` | Usa los `repartos` exactos de la renta (o `costoTotalRD` si apunta a una ruta del proyecto sin repartos explícitos). |
+| **`personal`** | `asignaciones` en rutas del proyecto × miembros únicos de la cuadrilla | Suma $\text{días inclusivos} \times \text{tarifa diaria provisional por cargo}$ (`jefe_brigada: 4,200`, `ingeniero: 4,500`, `tecnico: 3,000`, `chofer: 2,200`, `administrativo: 3,500 RD$/día`). |
+| **`vehiculos`** | `asignaciones` en rutas del proyecto × vehículos únicos asignados | Usa la regla `conceptoDistancia` vigente en `asig.fechaInicio` (`ida_vuelta` ×2 / `solo_ida` ×1) para calcular combustible teórico ($\frac{\text{kmViaje}}{\text{kmPorGal}} \times \text{precioGalón}$) + mantenimiento ($\text{kmViaje} \times \text{mantenimientoPorKmRD}$). |
+| **`equipos_gnss`** | `asignaciones` en rutas del proyecto × equipos GNSS únicos | Suma $\text{días inclusivos} \times \text{equipos únicos} \times 1{,}800\text{ RD\$/día}$. |
+| **`otros`** | Parámetro opcional `otrosEjecutadosRD` (por defecto `0`) | Reservado para imprevistos o cargos misceláneos planificados. |
+
+#### C. Tarifas Provisionales por Puesto (`EJEMPLO – PENDIENTE DE CONFIRMAR`)
+El estimador integrado en `PresupuestoProyectoModal` calcula un borrador sugerido para la línea `viaticos` utilizando tarifas provisionales por puesto (independientes de `topesViatico` por misión):
+
+| Puesto | Desayuno | Almuerzo | Cena | Dieta Total / Día | Alojamiento / Noche | Total Viáticos / Día |
+| :--- | :---: | :---: | :---: | :---: | :---: | :---: |
+| Director Ejecutivo | RD$ 800 | RD$ 1,200 | RD$ 1,000 | RD$ 3,000 | RD$ 6,000 | **RD$ 9,000** |
+| Encargado de Departamento | RD$ 600 | RD$ 900 | RD$ 800 | RD$ 2,300 | RD$ 4,500 | **RD$ 6,800** |
+| Analista | RD$ 450 | RD$ 700 | RD$ 600 | RD$ 1,750 | RD$ 3,500 | **RD$ 5,250** |
+| Técnico | RD$ 400 | RD$ 600 | RD$ 500 | RD$ 1,500 | RD$ 3,000 | **RD$ 4,500** |
+| Asistente | RD$ 350 | RD$ 500 | RD$ 450 | RD$ 1,300 | RD$ 2,500 | **RD$ 3,800** |
+| Chofer | RD$ 350 | RD$ 500 | RD$ 450 | RD$ 1,300 | RD$ 2,500 | **RD$ 3,800** |
+| Consultor Externo | RD$ 500 | RD$ 800 | RD$ 700 | RD$ 2,000 | RD$ 4,000 | **RD$ 6,000** |
+
+#### D. Márgenes, Vista Dedicada (`PresupuestosView`) y Visualizaciones Gráficas
+$$\text{Margen Planificado} = \text{Valor de Contrato} - \text{Total Planificado} \qquad \text{Margen Real} = \text{Valor de Contrato} - \text{Total Ejecutado}$$
+
+- **Vista dedicada `PresupuestosView` (exclusiva para `admin` y `coordinador`):**
+  1. **Tarjetas KPI consolidadas:** `Valor contratado`, `Costo planificado`, `Costo ejecutado en vivo` (con porcentaje de ejecución) y `Margen real consolidado` (RD$ y `%`).
+  2. **Barra de filtros y exportación:** Búsqueda por código o nombre, filtro por estado (`borrador`, `aprobado`, `cerrado`), selector de `fechaCalculoIso` para evaluar vigencias históricas, filtro `Solo excedidos` y botón `Exportar CSV`.
+  3. **Gráficos interactivos (Recharts):**
+     - *Comparativo por proyecto:* Selector entre **Costos** (Planificado vs. Ejecutado, resaltando en rojo los proyectos excedidos) y **Márgenes** (Margen planificado vs. Margen real). Hacer clic sobre la barra de un proyecto filtra el panel de categorías hacia ese proyecto.
+     - *Desglose por las 6 categorías:* Selector entre **Plan vs. real** (`BarChart`) y **Distribución** (`PieChart` tipo dona del gasto real ejecutado).
+  4. **Tabla operativa y modal (`PresupuestoProyectoModal`):** Muestra contrato, planificado, ejecutado, avance `%`, margen real y estado, abriendo el modal con su propio gráfico comparativo de 6 categorías en la pestaña `Plan vs. ejecutado` y el gestor completo de versiones.
+
+---
+
+## 13. Resumen Ejecutivo de Reglas Críticas e Invariantes
 
 | Área | Regla / Parámetro Exacto | Comportamiento del Sistema |
 | :--- | :--- | :--- |
@@ -446,12 +517,13 @@ Si un administrador marca manualmente un paso como completado sin cumplir los da
 | **Rentas** | Umbral cercanía `< 30 km` · ITBIS `18%` | Bloquea `renta_solapada` siempre; `renta_cercana` (<30 km) admite motivo; `renta_lejana` bloquea; `finalizada`/`cancelada` son inmutables. |
 | **Agenda** | Proximidad `< 120 m` · Override $\ge 5$ chars | Mantenimiento o cuadrilla inactiva bloquean sin override; solapes permiten override auditado; `< 120 m` solo advierte. |
 | **Viáticos** | Reparto exacto al centavo · Tope por persona/cargo/misión | Sin `misionId` no aplica tope; técnico sin `personalId` bloqueado; `aprobado`/`rechazado` inmutables; no se puede volver a `pendiente`. |
+| **Presupuestos** | Versionado con `vigenciaDesde` · 6 categorías · Ejecutado en vivo | `aprobado` y `cerrado` inmutables; excedente `cargo_colaborador` excluido del gasto; tarifas provisionales marcadas `EJEMPLO – PENDIENTE DE CONFIRMAR`; invisible para `tecnico`. |
 | **Rendimiento Flota** | Ventana `90 días` · Mín. `3 cargas` · Alerta `< -15%` | Exige `km > 0`; cuenta 1 vez cada `(vehiculo, ruta)` en `ruta_asignada` usando `conceptoDistancia`; alerta solo si rinde menos de lo esperado. |
-| **Seguridad Técnico** | `SnapshotTecnico` + `ESTADOS_VENTANA_HOY = 3 días` | Cero visibilidad de precios, contratos, rentas globales o viáticos ajenos; solo transiciona `programado → en_campo → procesando` con asignación y bitácora. |
+| **Seguridad Técnico** | `SnapshotTecnico` + `ESTADOS_VENTANA_HOY = 3 días` | Cero visibilidad de precios, contratos, presupuestos, rentas globales o viáticos ajenos; solo transiciona `programado → en_campo → procesando` con asignación y bitácora. |
 
 ---
 
-## 13. Guía Rápida para Exportar este Documento a PDF
+## 14. Guía Rápida para Exportar este Documento a PDF
 
 Para entregar este documento en formato PDF profesional a clientes, dirección o equipo técnico:
 

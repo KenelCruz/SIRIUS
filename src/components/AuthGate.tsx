@@ -252,7 +252,7 @@ export const AuthGate: React.FC<AuthGateProps> = ({
                 disabled={loading}
                 className="w-full rounded-md bg-[#0F2942] py-2.5 px-4 text-xs font-semibold text-white hover:bg-[#0284C7] disabled:opacity-60 transition-colors min-h-[44px]"
               >
-                {loading ? 'Verificando acceso...' : 'Continuar'}
+                {loading ? 'Verificando acceso...' : 'Iniciar sesión'}
               </button>
             </form>
 

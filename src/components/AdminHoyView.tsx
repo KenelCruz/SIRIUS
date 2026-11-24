@@ -52,7 +52,9 @@ interface AdminHoyViewProps {
   onIrAPasoOnboarding: (pasoId: OnboardingPasoId) => void;
   onAbrirOnboarding: () => void;
   onCerrarTarjetaOnboarding: () => Promise<void>;
-  onIrATab: (tab: 'proyectos' | 'agenda' | 'viaticos' | 'catalogos' | 'configuracion') => void;
+  onIrATab: (
+    tab: 'proyectos' | 'presupuestos' | 'agenda' | 'viaticos' | 'catalogos' | 'configuracion'
+  ) => void;
 }
 
 export const AdminHoyView: React.FC<AdminHoyViewProps> = ({
@@ -119,14 +121,21 @@ export const AdminHoyView: React.FC<AdminHoyViewProps> = ({
             onClick={() => onIrATab('agenda')}
             className="min-h-[40px] px-4 py-2 text-xs font-semibold border border-slate-300 bg-white hover:bg-slate-50 text-slate-700 rounded-md whitespace-nowrap shrink-0 transition-colors"
           >
-            Ver Agenda
+            Ver agenda
+          </button>
+          <button
+            type="button"
+            onClick={() => onIrATab('presupuestos')}
+            className="min-h-[40px] px-4 py-2 text-xs font-semibold border border-slate-300 bg-white hover:bg-slate-50 text-slate-700 rounded-md whitespace-nowrap shrink-0 transition-colors"
+          >
+            Ver presupuestos
           </button>
           <button
             type="button"
             onClick={() => onIrATab('configuracion')}
             className="min-h-[40px] px-4 py-2 text-xs font-semibold bg-[#0F2942] hover:bg-[#0284C7] text-white rounded-md whitespace-nowrap shrink-0 transition-colors"
           >
-            Configuración
+            Ir a configuración
           </button>
         </div>
       </div>
@@ -372,7 +381,7 @@ export const AdminHoyView: React.FC<AdminHoyViewProps> = ({
               onClick={() => onIrATab('viaticos')}
               className="text-xs font-semibold text-[#0284C7] hover:text-[#0F2942] whitespace-nowrap"
             >
-              Ir a viáticos &rarr;
+              Ver viáticos &rarr;
             </button>
           </div>
           {viaticosPendientes.length === 0 ? (

@@ -293,7 +293,7 @@ export const TutorialVisualModal: React.FC<TutorialVisualModalProps> = ({
                 className="min-h-[40px] inline-flex items-center gap-1 px-3 py-1.5 border border-slate-300 bg-white hover:bg-slate-100 text-xs font-semibold text-slate-800 rounded-md whitespace-nowrap"
               >
                 <ChevronLeft className="w-3.5 h-3.5" />
-                Anterior
+                Paso anterior
               </button>
             )}
             {!esUltima ? (
@@ -302,7 +302,7 @@ export const TutorialVisualModal: React.FC<TutorialVisualModalProps> = ({
                 onClick={() => setIndice((prev) => Math.min(tarjetas.length - 1, prev + 1))}
                 className="min-h-[40px] inline-flex items-center gap-1 px-4 py-1.5 bg-[#0F2942] hover:bg-[#0284C7] text-white text-xs font-semibold rounded-md whitespace-nowrap transition-colors"
               >
-                Siguiente
+                Siguiente paso
                 <ChevronRight className="w-3.5 h-3.5" />
               </button>
             ) : (
@@ -311,7 +311,7 @@ export const TutorialVisualModal: React.FC<TutorialVisualModalProps> = ({
                 onClick={onCompletar}
                 className="min-h-[40px] px-4 py-1.5 bg-[#0284C7] hover:bg-[#0369A1] text-white text-xs font-semibold rounded-md whitespace-nowrap transition-colors"
               >
-                Entendido
+                Finalizar guía
               </button>
             )}
           </div>

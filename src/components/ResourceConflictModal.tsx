@@ -154,7 +154,7 @@ export const ResourceConflictModal: React.FC<ResourceConflictModalProps> = ({
           {!tieneBloqueoDuro && tieneBloqueoConExcepcion && (
             <div className="space-y-1.5 text-xs">
               <label className="block font-semibold text-slate-800">
-                Motivo de la excepción (requerido para auditoría F16)
+                Motivo de la excepción (requerido para auditoría)
               </label>
               <textarea
                 rows={2}
@@ -173,7 +173,7 @@ export const ResourceConflictModal: React.FC<ResourceConflictModalProps> = ({
               onClick={onCancel}
               className="rounded-md border border-slate-300 bg-white px-4 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50 transition-colors min-h-[40px]"
             >
-              {tieneBloqueoDuro ? 'Corregir Recursos' : 'Cancelar y Reasignar'}
+              {tieneBloqueoDuro ? 'Corregir recursos' : 'Cancelar y reasignar'}
             </button>
             {!tieneBloqueoDuro && (
               <button
@@ -186,8 +186,8 @@ export const ResourceConflictModal: React.FC<ResourceConflictModalProps> = ({
                 }`}
               >
                 {soloAdvertencias
-                  ? 'Continuar con Advertencia'
-                  : 'Autorizar Excepción y Guardar'}
+                  ? 'Continuar con advertencia'
+                  : 'Autorizar excepción'}
               </button>
             )}
           </div>

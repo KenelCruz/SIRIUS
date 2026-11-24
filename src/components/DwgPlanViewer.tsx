@@ -630,7 +630,7 @@ export const DwgPlanViewer: React.FC<DwgPlanViewerProps> = ({
               title="Quitar plano actual"
             >
               <Trash2 className="h-3.5 w-3.5" />
-              Limpiar
+              Cerrar plano
             </button>
           )}
         </div>
@@ -921,7 +921,7 @@ export const DwgPlanViewer: React.FC<DwgPlanViewerProps> = ({
                     title="Descargar SVG vectorial con capas visibles"
                   >
                     <Download className="h-3.5 w-3.5" />
-                    SVG
+                    Exportar SVG
                   </button>
 
                   <button
@@ -932,7 +932,7 @@ export const DwgPlanViewer: React.FC<DwgPlanViewerProps> = ({
                     title="Descargar imagen PNG con capas visibles"
                   >
                     <ImageIcon className="h-3.5 w-3.5" />
-                    PNG
+                    Exportar PNG
                   </button>
                 </>
               )}

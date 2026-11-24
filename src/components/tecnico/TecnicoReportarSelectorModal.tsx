@@ -60,7 +60,7 @@ export const TecnicoReportarSelectorModal: React.FC<TecnicoReportarSelectorModal
               <Camera className="h-5 w-5" />
             </div>
             <div>
-              <div className="text-sm font-bold text-[#0F2942]">Registrar Viático / Gasto</div>
+              <div className="text-sm font-bold text-[#0F2942]">Registrar viático</div>
               <div className="text-xs text-slate-500">
                 Combustible, dieta, peaje u hospedaje con foto OCR o GPS.
               </div>
@@ -79,7 +79,7 @@ export const TecnicoReportarSelectorModal: React.FC<TecnicoReportarSelectorModal
               <ClipboardList className="h-5 w-5" />
             </div>
             <div>
-              <div className="text-sm font-bold text-[#0F2942]">Agregar Nota de Bitácora</div>
+              <div className="text-sm font-bold text-[#0F2942]">Agregar nota de bitácora</div>
               <div className="text-xs text-slate-500">
                 Observaciones técnicas, vértices y evidencia fotográfica.
               </div>

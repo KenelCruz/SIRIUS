@@ -376,7 +376,7 @@ export const KmzOsmViewer: React.FC<KmzOsmViewerProps> = ({
               className="inline-flex items-center gap-1.5 rounded-md border border-slate-300 bg-white px-3 py-1.5 text-xs font-semibold text-[#334155] hover:bg-slate-100 min-h-[36px] whitespace-nowrap shrink-0"
             >
               <Download className="h-3.5 w-3.5" />
-              CSV Vértices
+              Exportar vértices CSV
             </button>
           )}
         </div>
@@ -436,7 +436,7 @@ export const KmzOsmViewer: React.FC<KmzOsmViewerProps> = ({
               className="inline-flex items-center gap-1.5 rounded-md bg-[#091A2C]/92 backdrop-blur-md border border-white/15 px-3.5 py-2 text-xs font-semibold text-white shadow-lg hover:bg-[#0284C7] disabled:opacity-60 transition-colors min-h-[40px] whitespace-nowrap shrink-0"
             >
               <LocateFixed className="h-3.5 w-3.5 text-[#5BB8FE]" />
-              {isCapturingGps ? 'Fijando GPS...' : 'Fijar Posición GPS'}
+              {isCapturingGps ? 'Fijando GPS...' : 'Fijar posición GPS'}
             </button>
           </div>
         )}

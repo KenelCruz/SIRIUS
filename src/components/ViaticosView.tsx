@@ -78,6 +78,7 @@ export const ViaticosView: React.FC<ViaticosViewProps> = ({
   onEliminarViatico,
 }) => {
   const canDecide = puedeAprobarViatico(rol);
+  const [vistaSeccion, setVistaSeccion] = useState<'libro' | 'proyectos' | 'misiones'>('libro');
   const [filtroCat, setFiltroCat] = useState<CategoriaViatico | 'ALL'>('ALL');
   const [filtroEstado, setFiltroEstado] = useState<EstadoAprobacionViatico | 'ALL'>('ALL');
 
@@ -361,14 +362,63 @@ export const ViaticosView: React.FC<ViaticosViewProps> = ({
         </div>
       </div>
 
-      {/* F13: Reporte General por Proyecto (Presupuesto, Ejecutado y Saldo) */}
+      {/* Segmented Sub-View Switcher (keeps interface clean and focused) */}
+      <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-slate-200 bg-white px-4 py-3">
+        <div className="inline-flex flex-wrap rounded-lg bg-slate-100 p-1">
+          <button
+            type="button"
+            onClick={() => setVistaSeccion('libro')}
+            className={`rounded-md px-3.5 py-2 text-xs font-semibold transition-colors whitespace-nowrap shrink-0 min-h-[36px] ${
+              vistaSeccion === 'libro'
+                ? 'bg-white text-[#0F2942] shadow-sm'
+                : 'text-[#43474D] hover:text-[#0F2942]'
+            }`}
+          >
+            Libro de viáticos ({viaticos.length})
+          </button>
+          <button
+            type="button"
+            onClick={() => setVistaSeccion('proyectos')}
+            className={`rounded-md px-3.5 py-2 text-xs font-semibold transition-colors whitespace-nowrap shrink-0 min-h-[36px] ${
+              vistaSeccion === 'proyectos'
+                ? 'bg-white text-[#0F2942] shadow-sm'
+                : 'text-[#43474D] hover:text-[#0F2942]'
+            }`}
+          >
+            Resumen por proyecto ({reportePorProyecto.filas.length})
+          </button>
+          <button
+            type="button"
+            onClick={() => setVistaSeccion('misiones')}
+            className={`rounded-md px-3.5 py-2 text-xs font-semibold transition-colors whitespace-nowrap shrink-0 min-h-[36px] ${
+              vistaSeccion === 'misiones'
+                ? 'bg-white text-[#0F2942] shadow-sm'
+                : 'text-[#43474D] hover:text-[#0F2942]'
+            }`}
+          >
+            Resumen por misión ({reportePorMision.misiones.length})
+          </button>
+        </div>
+
+        <button
+          type="button"
+          onClick={onAbrirModalNuevo}
+          className="inline-flex items-center gap-1.5 rounded-md bg-[#0284C7] px-4 py-2 text-xs font-semibold text-white hover:bg-[#006398] min-h-[40px] whitespace-nowrap shrink-0"
+        >
+          <Camera className="h-4 w-4" />
+          Registrar viático
+        </button>
+      </div>
+
+      {/* Reporte General por Proyecto */}
+      {vistaSeccion === 'proyectos' && (
       <div className="rounded-lg border border-slate-200 bg-white overflow-hidden">
         <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 bg-slate-50 px-5 py-3.5">
           <div className="flex items-center gap-2">
             <BarChart3 className="h-4 w-4 text-[#0284C7] shrink-0" />
             <div>
               <h2 className="text-xs sm:text-sm font-bold text-[#0F2942]">
-                Reporte General por Proyecto: Presupuesto, Ejecutado y Saldo (F13)
+                Resumen por proyecto: presupuesto, ejecutado y saldo
               </h2>
               <p className="text-[11px] text-[#43474D]">
                 Incluye líneas de reparto aprobadas y pendientes; excluye viáticos rechazados.
@@ -381,7 +431,7 @@ export const ViaticosView: React.FC<ViaticosViewProps> = ({
             className="inline-flex items-center gap-1.5 rounded-md border border-slate-300 bg-white px-3 py-2 text-xs font-semibold text-[#0F2942] hover:bg-[#EFF6FF] min-h-[38px] whitespace-nowrap shrink-0"
           >
             <FileSpreadsheet className="h-3.5 w-3.5" />
-            Exportar Resumen Proyectos CSV
+            Exportar CSV
           </button>
         </div>
 
@@ -480,15 +530,17 @@ export const ViaticosView: React.FC<ViaticosViewProps> = ({
           </table>
         </div>
       </div>
+      )}
 
-      {/* B5: Reporte de Viáticos y Rentas por Misión + CSV */}
+      {/* Reporte de Viáticos y Rentas por Misión + CSV */}
+      {vistaSeccion === 'misiones' && (
       <div className="rounded-lg border border-slate-200 bg-white overflow-hidden">
         <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 bg-slate-50 px-5 py-3.5">
           <div className="flex items-center gap-2">
             <Compass className="h-4 w-4 text-[#0284C7] shrink-0" />
             <div>
               <h2 className="text-xs sm:text-sm font-bold text-[#0F2942]">
-                Reporte por Misión: Viáticos vs Topes por Cargo y Costo de Rentas
+                Resumen por misión: topes por cargo y rentas
               </h2>
               <p className="text-[11px] text-[#43474D]">
                 Los excedentes a cargo del colaborador se muestran aparte y quedan excluidos de los totales de la empresa.
@@ -501,7 +553,7 @@ export const ViaticosView: React.FC<ViaticosViewProps> = ({
             className="inline-flex items-center gap-1.5 rounded-md border border-slate-300 bg-white px-3 py-2 text-xs font-semibold text-[#0F2942] hover:bg-[#EFF6FF] min-h-[38px] whitespace-nowrap shrink-0"
           >
             <FileSpreadsheet className="h-3.5 w-3.5" />
-            Exportar Reporte Misiones CSV
+            Exportar CSV
           </button>
         </div>
 
@@ -624,9 +676,12 @@ export const ViaticosView: React.FC<ViaticosViewProps> = ({
           </table>
         </div>
       </div>
+      )}
 
+      {vistaSeccion === 'libro' && (
+      <>
       {/* Controls */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 rounded-lg border border-slate-200 bg-white p-5">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 rounded-lg border border-slate-200 bg-white p-4">
         <div className="flex flex-wrap items-center gap-2.5 text-xs">
           <select
             value={filtroCat}
@@ -659,15 +714,7 @@ export const ViaticosView: React.FC<ViaticosViewProps> = ({
             className="inline-flex items-center gap-1.5 rounded-md border border-slate-300 bg-white px-3.5 py-2 text-xs font-semibold text-[#334155] hover:bg-slate-50 min-h-[40px] whitespace-nowrap shrink-0"
           >
             <FileSpreadsheet className="h-4 w-4" />
-            Exportar Detalle + Reparto CSV
-          </button>
-          <button
-            type="button"
-            onClick={onAbrirModalNuevo}
-            className="inline-flex items-center gap-1.5 rounded-md bg-[#0284C7] px-4 py-2 text-xs font-semibold text-white hover:bg-[#006398] min-h-[40px] whitespace-nowrap shrink-0"
-          >
-            <Camera className="h-4 w-4" />
-            Reportar Viático Móvil
+            Exportar CSV
           </button>
         </div>
       </div>
@@ -965,7 +1012,7 @@ export const ViaticosView: React.FC<ViaticosViewProps> = ({
                     className="inline-flex items-center justify-center gap-1 rounded-md border border-slate-300 bg-white py-2 text-xs font-semibold text-[#0F2942] min-h-[40px] whitespace-nowrap shrink-0"
                   >
                     <Split className="h-3.5 w-3.5" />
-                    Repartir
+                    Redistribuir
                   </button>
                   <button
                     type="button"
@@ -974,7 +1021,7 @@ export const ViaticosView: React.FC<ViaticosViewProps> = ({
                     className="inline-flex items-center justify-center gap-1 rounded-md border border-[#FCA5A5] bg-white py-2 text-xs font-semibold text-[#DC2626] min-h-[40px] whitespace-nowrap shrink-0"
                   >
                     <Trash2 className="h-3.5 w-3.5" />
-                    Borrar
+                    Eliminar
                   </button>
                 </div>
               ) : (
@@ -992,6 +1039,8 @@ export const ViaticosView: React.FC<ViaticosViewProps> = ({
           </div>
         ))}
       </div>
+      </>
+      )}
 
       {/* Modal Aprobar Viático (F12 + decisión de excedente B2) */}
       {aprobacionTarget && (
@@ -1108,7 +1157,7 @@ export const ViaticosView: React.FC<ViaticosViewProps> = ({
                   type="submit"
                   className="rounded-md bg-[#15803D] px-4 py-2 font-semibold text-white hover:bg-[#166534] min-h-[40px] whitespace-nowrap shrink-0"
                 >
-                  Confirmar Aprobación
+                  Confirmar aprobación
                 </button>
               </div>
             </form>
@@ -1163,7 +1212,7 @@ export const ViaticosView: React.FC<ViaticosViewProps> = ({
                   type="submit"
                   className="rounded-md bg-[#DC2626] px-4 py-2 font-semibold text-white hover:bg-[#B91C1C] min-h-[40px] whitespace-nowrap shrink-0"
                 >
-                  Confirmar Rechazo
+                  Confirmar rechazo
                 </button>
               </div>
             </form>
@@ -1275,7 +1324,7 @@ export const ViaticosView: React.FC<ViaticosViewProps> = ({
                   className="inline-flex items-center gap-1 rounded-md border border-slate-300 px-3 py-2 font-semibold text-[#0F2942] min-h-[38px] whitespace-nowrap shrink-0"
                 >
                   <Plus className="h-3.5 w-3.5" />
-                  Añadir proyecto
+                  Agregar proyecto
                 </button>
                 <button
                   type="button"
@@ -1286,7 +1335,7 @@ export const ViaticosView: React.FC<ViaticosViewProps> = ({
                   }
                   className="rounded-md bg-[#FEF3C7] px-3 py-2 font-semibold text-[#A16207] min-h-[38px] whitespace-nowrap shrink-0"
                 >
-                  Completar saldo en Sin asignar
+                  Completar sin asignar
                 </button>
               </div>
 
@@ -1302,7 +1351,7 @@ export const ViaticosView: React.FC<ViaticosViewProps> = ({
                   type="submit"
                   className="rounded-md bg-[#0F2942] px-4 py-2 font-semibold text-white hover:bg-[#0284C7] min-h-[40px] whitespace-nowrap shrink-0"
                 >
-                  Guardar Reparto
+                  Confirmar reparto
                 </button>
               </div>
             </form>

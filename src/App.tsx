@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   Building2,
+  Calculator,
   CalendarDays,
   Camera,
   CheckCircle2,
@@ -33,6 +34,7 @@ import { KmzOsmViewer } from './components/KmzOsmViewer';
 import { MobileExpenseCaptureModal } from './components/MobileExpenseCaptureModal';
 import { DemoBanner, OfflineSyncBanner } from './components/OfflineSyncBanner';
 import { OnboardingWizardModal } from './components/OnboardingWizardModal';
+import { PresupuestosView } from './components/PresupuestosView';
 import { ProyectosView } from './components/ProyectosView';
 import { PWAInstallButton } from './components/PWAInstallButton';
 import { ResourceConflictModal } from './components/ResourceConflictModal';
@@ -78,6 +80,7 @@ import { parseKmzOrKmlFile, type ParsedKmzResult } from './utils/kmzParser';
 type AdminTab =
   | 'hoy'
   | 'proyectos'
+  | 'presupuestos'
   | 'agenda'
   | 'rutas'
   | 'map'
@@ -527,7 +530,7 @@ export default function App() {
                     className="inline-flex items-center gap-1 text-[#CBD5E1] hover:text-white whitespace-nowrap shrink-0"
                   >
                     <LogOut className="h-3 w-3" />
-                    Salir
+                    Cerrar sesión
                   </button>
                 </div>
               </div>
@@ -538,7 +541,7 @@ export default function App() {
                 className="w-full flex items-center justify-center gap-2 rounded-md bg-[#0284C7] px-4 py-2.5 text-xs font-semibold text-white hover:bg-[#006398] transition-colors whitespace-nowrap shrink-0 min-h-[44px]"
               >
                 <PlusCircle className="h-4 w-4" />
-                Reportar en Campo
+                Reportar en campo
               </button>
             </div>
           </aside>
@@ -580,7 +583,7 @@ export default function App() {
                   title="Ver guía visual del módulo técnico"
                 >
                   <HelpCircle className="h-4 w-4 text-[#0284C7]" />
-                  <span className="hidden sm:inline">Ayuda</span>
+                  <span className="hidden sm:inline">Ver guía</span>
                 </button>
 
                 <button
@@ -589,7 +592,7 @@ export default function App() {
                   className="inline-flex items-center gap-1.5 rounded-md bg-[#0284C7] px-3.5 py-2 text-xs font-semibold text-white hover:bg-[#006398] min-h-[40px] whitespace-nowrap shrink-0"
                 >
                   <PlusCircle className="h-4 w-4" />
-                  <span className="hidden sm:inline">Reportar</span>
+                  <span className="hidden sm:inline">Reportar en campo</span>
                 </button>
               </div>
             </header>
@@ -969,14 +972,15 @@ export default function App() {
     ...(rol === 'admin'
       ? [{ id: 'hoy' as const, label: 'Hoy', shortLabel: 'Hoy', icon: Home }]
       : []),
-    { id: 'proyectos', label: 'Proyectos y Rutas', shortLabel: 'Proyectos', icon: FolderKanban },
-    { id: 'agenda', label: 'Agenda y Cuadrillas', shortLabel: 'Agenda', icon: CalendarDays },
-    { id: 'rutas', label: 'Rutas y Servicios', shortLabel: 'Rutas', icon: Route },
-    { id: 'map', label: 'Visor KMZ / KML / DWG', shortLabel: 'Visor', icon: Layers },
-    { id: 'viaticos', label: 'Viáticos y Gastos', shortLabel: 'Viáticos', icon: Receipt },
-    { id: 'catalogos', label: 'Catálogos y Equipos', shortLabel: 'Catálogos', icon: Users },
+    { id: 'proyectos', label: 'Proyectos', shortLabel: 'Proyectos', icon: FolderKanban },
+    { id: 'presupuestos', label: 'Presupuestos', shortLabel: 'Presupuestos', icon: Calculator },
+    { id: 'agenda', label: 'Agenda', shortLabel: 'Agenda', icon: CalendarDays },
+    { id: 'rutas', label: 'Cotizador', shortLabel: 'Cotizador', icon: Route },
+    { id: 'map', label: 'Visor KMZ / DWG', shortLabel: 'Visor', icon: Layers },
+    { id: 'viaticos', label: 'Viáticos', shortLabel: 'Viáticos', icon: Receipt },
+    { id: 'catalogos', label: 'Catálogos', shortLabel: 'Catálogos', icon: Users },
     ...(canAudit
-      ? [{ id: 'auditoria' as const, label: 'Auditoría F16', shortLabel: 'Auditoría', icon: History }]
+      ? [{ id: 'auditoria' as const, label: 'Auditoría', shortLabel: 'Auditoría', icon: History }]
       : []),
     ...(canViewConfig
       ? [
@@ -1092,7 +1096,7 @@ export default function App() {
                   className="inline-flex items-center gap-1 text-[#CBD5E1] hover:text-white whitespace-nowrap shrink-0"
                 >
                   <LogOut className="h-3 w-3" />
-                  Salir
+                  Cerrar sesión
                 </button>
               </div>
             </div>
@@ -1103,7 +1107,7 @@ export default function App() {
               className="w-full flex items-center justify-center gap-2 rounded-md border border-white/20 bg-[#0284C7] px-3 py-2.5 text-xs font-semibold text-white hover:bg-[#006398] transition-colors whitespace-nowrap shrink-0 min-h-[40px]"
             >
               <Camera className="h-3.5 w-3.5" />
-              Reportar Viático Móvil
+              Registrar viático
             </button>
           </div>
         </aside>
@@ -1118,16 +1122,18 @@ export default function App() {
               <div className="min-w-0">
                 <h1 className="text-sm sm:text-base font-bold tracking-tight text-[#0D1C2F] truncate">
                   {adminTab === 'hoy' && `${snapshot.empresa.nombre} · Hoy`}
-                  {adminTab === 'proyectos' && `${snapshot.empresa.nombre} · Proyectos y Rutas`}
-                  {adminTab === 'agenda' && 'Agenda de Cuadrillas y Conflictos'}
-                  {adminTab === 'rutas' && 'Cálculo de Rutas y Servicios Sumatorios'}
+                  {adminTab === 'proyectos' && `${snapshot.empresa.nombre} · Proyectos y rutas`}
+                  {adminTab === 'presupuestos' &&
+                    `${snapshot.empresa.nombre} · Presupuestos y márgenes`}
+                  {adminTab === 'agenda' && 'Agenda de cuadrillas y conflictos'}
+                  {adminTab === 'rutas' && 'Cotizador de rutas y servicios'}
                   {adminTab === 'map' &&
                     (mapViewerMode === 'planos'
-                      ? 'Planos Arquitectónicos · AutoCAD (.DWG / .DXF)'
-                      : 'Visualizador KMZ / KML / GeoJSON · OpenStreetMap')}
-                  {adminTab === 'viaticos' && 'Control de Viáticos y Reparto por Proyecto'}
-                  {adminTab === 'catalogos' && 'Catálogos, Flota y Equipos GNSS'}
-                  {adminTab === 'auditoria' && 'Auditoría Operativa (F16)'}
+                      ? 'Planos arquitectónicos (.DWG / .DXF)'
+                      : 'Visor cartográfico (KMZ / KML / GeoJSON)')}
+                  {adminTab === 'viaticos' && 'Control de viáticos y reparto por proyecto'}
+                  {adminTab === 'catalogos' && 'Catálogos, flota y equipos GNSS'}
+                  {adminTab === 'auditoria' && 'Auditoría operativa'}
                   {adminTab === 'configuracion' && `${snapshot.empresa.nombre} · Configuración`}
                 </h1>
               </div>
@@ -1176,7 +1182,7 @@ export default function App() {
                 title="Abrir tutorial visual del perfil"
               >
                 <HelpCircle className="h-4 w-4 text-[#0284C7]" />
-                <span className="hidden sm:inline">Ayuda</span>
+                <span className="hidden sm:inline">Ver tutorial</span>
               </button>
 
               {canEdit && (
@@ -1190,7 +1196,7 @@ export default function App() {
                   className="inline-flex items-center gap-1.5 rounded-md bg-[#0F2942] px-4 py-2 text-xs font-semibold text-white hover:bg-[#0284C7] transition-colors whitespace-nowrap shrink-0 min-h-[40px]"
                 >
                   <Plus className="h-4 w-4" />
-                  <span className="hidden sm:inline">Nueva Ruta KMZ</span>
+                  <span className="hidden sm:inline">Importar KMZ</span>
                   <span className="sm:hidden">KMZ</span>
                 </button>
               )}
@@ -1339,6 +1345,28 @@ export default function App() {
                 onReportarViaticoEnRuta={(rId, pId) =>
                   abrirModalViatico({ rutaId: rId, proyectoId: pId })
                 }
+                onAbrirPanelPresupuestos={() => setAdminTab('presupuestos')}
+              />
+            )}
+
+            {adminTab === 'presupuestos' && (
+              <PresupuestosView
+                rol={rol}
+                snapshot={snapshot}
+                configuracion={configuracion}
+                isLoading={isLoadingSnapshot}
+                onCrearVersionPresupuesto={async (params) => {
+                  const creado = await actions.crearVersionPresupuestoProyecto(params);
+                  showToast(`Presupuesto v${creado.version} (${creado.estado}) guardado.`);
+                }}
+                onEditarBorradorPresupuesto={async (params) => {
+                  const act = await actions.editarBorradorPresupuestoProyecto(params);
+                  showToast(`Borrador de presupuesto v${act.version} actualizado.`);
+                }}
+                onTransicionarPresupuesto={async (params) => {
+                  const act = await actions.transicionarPresupuestoProyecto(params);
+                  showToast(`Presupuesto v${act.version} marcado como ${act.estado}.`);
+                }}
               />
             )}
 
@@ -1478,7 +1506,7 @@ export default function App() {
                       }`}
                     >
                       <Layers className="h-3.5 w-3.5" />
-                      Mapa Cartográfico (KMZ / KML / GeoJSON)
+                      Mapa cartográfico
                     </button>
                     <button
                       type="button"
@@ -1490,7 +1518,7 @@ export default function App() {
                       }`}
                     >
                       <Compass className="h-3.5 w-3.5" />
-                      Planos Arquitectónicos (.DWG / .DXF)
+                      Planos DWG / DXF
                     </button>
                   </div>
 
@@ -1545,7 +1573,7 @@ export default function App() {
                           className="inline-flex items-center gap-1.5 rounded-md border border-slate-200 bg-slate-50 px-3.5 py-2 text-xs font-semibold text-[#0F2942] hover:bg-sky-50 min-h-[40px] whitespace-nowrap shrink-0"
                         >
                           <FileUp className="h-4 w-4 text-[#0284C7]" />
-                          Abrir Archivo KMZ / KML / GeoJSON
+                          Cargar archivo KMZ
                         </button>
 
                         {standaloneKmz && canEdit && (
@@ -1558,7 +1586,7 @@ export default function App() {
                             className="inline-flex items-center gap-1.5 rounded-md bg-[#0F2942] px-3.5 py-2 text-xs font-semibold text-white hover:bg-[#0284C7] min-h-[40px] whitespace-nowrap shrink-0"
                           >
                             <Plus className="h-4 w-4" />
-                            Guardar como Ruta de Proyecto
+                            Crear ruta desde archivo
                           </button>
                         )}
                       </div>
@@ -1570,7 +1598,7 @@ export default function App() {
                         className="inline-flex items-center justify-center gap-1.5 rounded-md bg-[#0284C7] px-4 py-2 text-xs font-semibold text-white hover:bg-[#006398] disabled:opacity-60 min-h-[40px] whitespace-nowrap shrink-0"
                       >
                         <Compass className="h-4 w-4" />
-                        {isCapturingGps ? 'Fijando GPS...' : 'Capturar GPS Actual'}
+                        {isCapturingGps ? 'Fijando GPS...' : 'Capturar GPS'}
                       </button>
                     </div>
 

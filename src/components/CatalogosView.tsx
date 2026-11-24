@@ -446,7 +446,7 @@ export const CatalogosView: React.FC<CatalogosViewProps> = ({
             { id: 'cuadrillas', label: `Cuadrillas (${cuadrillas.length})`, icon: Users },
             { id: 'vehiculos', label: `Vehículos (${vehiculos.length})`, icon: Car },
             { id: 'equipos', label: `Equipos GNSS (${equipos.length})`, icon: Compass },
-            { id: 'rentas', label: `Rentas y Misiones (${rentas.length})`, icon: CalendarRange },
+            { id: 'rentas', label: `Rentas y misiones (${rentas.length})`, icon: CalendarRange },
             { id: 'clientes', label: `Clientes (${clientes.length})`, icon: Building2 },
           ] as const
         ).map((tab) => {
@@ -563,7 +563,7 @@ export const CatalogosView: React.FC<CatalogosViewProps> = ({
               }}
               className="lg:col-span-4 rounded-lg border border-slate-200 bg-white p-5 space-y-3.5 text-xs"
             >
-              <h3 className="text-sm font-bold text-[#0F2942]">Agregar Personal</h3>
+              <h3 className="text-sm font-bold text-[#0F2942]">Agregar personal</h3>
               <input
                 type="text"
                 required
@@ -595,7 +595,7 @@ export const CatalogosView: React.FC<CatalogosViewProps> = ({
                 className="w-full min-h-[42px] inline-flex items-center justify-center gap-1.5 rounded-md bg-[#0F2942] py-2 font-semibold text-white hover:bg-[#0284C7] transition-colors whitespace-nowrap"
               >
                 <Plus className="h-3.5 w-3.5" />
-                Guardar Personal
+                Registrar personal
               </button>
             </form>
           )}
@@ -672,7 +672,7 @@ export const CatalogosView: React.FC<CatalogosViewProps> = ({
               }}
               className="lg:col-span-4 rounded-lg border border-slate-200 bg-white p-5 space-y-3.5 text-xs"
             >
-              <h3 className="text-sm font-bold text-[#0F2942]">Nueva Cuadrilla</h3>
+              <h3 className="text-sm font-bold text-[#0F2942]">Nueva cuadrilla</h3>
               <input
                 type="text"
                 required
@@ -724,7 +724,7 @@ export const CatalogosView: React.FC<CatalogosViewProps> = ({
                 className="w-full min-h-[42px] inline-flex items-center justify-center gap-1.5 rounded-md bg-[#0F2942] py-2 font-semibold text-white hover:bg-[#0284C7] transition-colors whitespace-nowrap"
               >
                 <Plus className="h-3.5 w-3.5" />
-                Crear Cuadrilla
+                Crear cuadrilla
               </button>
             </form>
           )}
@@ -804,7 +804,7 @@ export const CatalogosView: React.FC<CatalogosViewProps> = ({
                             }}
                             className="min-h-[40px] rounded-md border border-slate-300 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50 whitespace-nowrap shrink-0"
                           >
-                            {isEditing ? 'Cerrar' : 'Editar tarifas'}
+                            {isEditing ? 'Cancelar edición' : 'Editar tarifas'}
                           </button>
                           <div className="flex items-center gap-1.5">
                             <Wrench className="h-3.5 w-3.5 text-slate-500" />
@@ -962,7 +962,7 @@ export const CatalogosView: React.FC<CatalogosViewProps> = ({
                           }}
                           className="min-h-[40px] rounded-md bg-[#0F2942] px-3 py-2 font-semibold text-white hover:bg-[#0284C7] transition-colors whitespace-nowrap"
                         >
-                          Guardar
+                          Actualizar tarifas
                         </button>
                       </div>
                     )}
@@ -1001,7 +1001,7 @@ export const CatalogosView: React.FC<CatalogosViewProps> = ({
                 }}
                 className="lg:col-span-4 rounded-lg border border-slate-200 bg-white p-5 space-y-3.5 text-xs self-start"
               >
-                <h3 className="text-sm font-bold text-[#0F2942]">Agregar Vehículo</h3>
+                <h3 className="text-sm font-bold text-[#0F2942]">Agregar vehículo</h3>
                 <input
                   type="text"
                   required
@@ -1063,7 +1063,7 @@ export const CatalogosView: React.FC<CatalogosViewProps> = ({
                   className="w-full min-h-[42px] inline-flex items-center justify-center gap-1.5 rounded-md bg-[#0F2942] py-2 font-semibold text-white hover:bg-[#0284C7] transition-colors whitespace-nowrap"
                 >
                   <Plus className="h-3.5 w-3.5" />
-                  Guardar Vehículo
+                  Registrar vehículo
                 </button>
               </form>
             )}
@@ -1122,7 +1122,7 @@ export const CatalogosView: React.FC<CatalogosViewProps> = ({
               }}
               className="lg:col-span-4 rounded-lg border border-slate-200 bg-white p-5 space-y-3.5 text-xs"
             >
-              <h3 className="text-sm font-bold text-[#0F2942]">Agregar Equipo GNSS</h3>
+              <h3 className="text-sm font-bold text-[#0F2942]">Agregar equipo GNSS</h3>
               <input
                 type="text"
                 required
@@ -1144,7 +1144,7 @@ export const CatalogosView: React.FC<CatalogosViewProps> = ({
                 className="w-full min-h-[42px] inline-flex items-center justify-center gap-1.5 rounded-md bg-[#0F2942] py-2 font-semibold text-white hover:bg-[#0284C7] transition-colors whitespace-nowrap"
               >
                 <Plus className="h-3.5 w-3.5" />
-                Guardar Equipo
+                Registrar equipo
               </button>
             </form>
           )}
@@ -1302,7 +1302,7 @@ export const CatalogosView: React.FC<CatalogosViewProps> = ({
                               className="min-h-[40px] inline-flex items-center gap-1.5 rounded-md border border-[#0F2942] bg-white px-3 py-1.5 text-xs font-semibold text-[#0F2942] hover:bg-[#0F2942] hover:text-white transition-colors whitespace-nowrap shrink-0"
                             >
                               <RotateCcw className="h-3.5 w-3.5" />
-                              Marcar devuelta
+                              Marcar como devuelta
                             </button>
                           )}
                         </div>
@@ -1354,7 +1354,7 @@ export const CatalogosView: React.FC<CatalogosViewProps> = ({
                     onSubmit={handleSubmitRenta}
                     className="rounded-lg border border-slate-200 bg-white p-5 space-y-3.5 text-xs"
                   >
-                    <h3 className="text-sm font-bold text-[#0F2942]">Registrar Renta (sin chofer)</h3>
+                    <h3 className="text-sm font-bold text-[#0F2942]">Registrar renta (sin chofer)</h3>
 
                     <div className="grid grid-cols-2 gap-2.5">
                       <label className="block">
@@ -1626,7 +1626,7 @@ export const CatalogosView: React.FC<CatalogosViewProps> = ({
                       className="w-full min-h-[42px] inline-flex items-center justify-center gap-1.5 rounded-md bg-[#0F2942] py-2 font-semibold text-white hover:bg-[#0284C7] transition-colors whitespace-nowrap"
                     >
                       <Plus className="h-3.5 w-3.5" />
-                      Guardar Renta
+                      Registrar renta
                     </button>
                   </form>
                 )}
@@ -1658,7 +1658,7 @@ export const CatalogosView: React.FC<CatalogosViewProps> = ({
                     }}
                     className="rounded-lg border border-slate-200 bg-white p-5 space-y-3 text-xs"
                   >
-                    <h3 className="text-sm font-bold text-[#0F2942]">Nueva Misión de Campo</h3>
+                    <h3 className="text-sm font-bold text-[#0F2942]">Nueva misión de campo</h3>
                     <input
                       type="text"
                       required
@@ -1734,7 +1734,7 @@ export const CatalogosView: React.FC<CatalogosViewProps> = ({
                       className="w-full min-h-[42px] inline-flex items-center justify-center gap-1.5 rounded-md border border-[#0F2942] bg-white py-2 font-semibold text-[#0F2942] hover:bg-[#0F2942] hover:text-white transition-colors whitespace-nowrap"
                     >
                       <Plus className="h-3.5 w-3.5" />
-                      Crear Misión
+                      Crear misión
                     </button>
                   </form>
                 )}
@@ -1783,7 +1783,7 @@ export const CatalogosView: React.FC<CatalogosViewProps> = ({
               }}
               className="lg:col-span-4 rounded-lg border border-slate-200 bg-white p-5 space-y-3.5 text-xs"
             >
-              <h3 className="text-sm font-bold text-[#0F2942]">Nuevo Cliente</h3>
+              <h3 className="text-sm font-bold text-[#0F2942]">Nuevo cliente</h3>
               <input
                 type="text"
                 required
@@ -1813,7 +1813,7 @@ export const CatalogosView: React.FC<CatalogosViewProps> = ({
                 className="w-full min-h-[42px] inline-flex items-center justify-center gap-1.5 rounded-md bg-[#0F2942] py-2 font-semibold text-white hover:bg-[#0284C7] transition-colors whitespace-nowrap"
               >
                 <Plus className="h-3.5 w-3.5" />
-                Guardar Cliente
+                Registrar cliente
               </button>
             </form>
           )}

@@ -95,7 +95,7 @@ export const PWAInstallButton: React.FC = () => {
                 onClick={() => setShowGuide(false)}
                 className="rounded-md bg-[#0F2942] px-4 py-2 text-xs font-semibold text-white hover:bg-[#0284C7] transition-colors min-h-[40px] whitespace-nowrap"
               >
-                Entendido
+                Cerrar guía
               </button>
             </div>
           </div>

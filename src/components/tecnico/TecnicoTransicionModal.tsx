@@ -223,7 +223,7 @@ export const TecnicoTransicionModal: React.FC<TecnicoTransicionModalProps> = ({
                     className="w-full inline-flex items-center justify-center gap-2 rounded-md bg-[#0F2942] px-3 py-2 text-xs font-semibold text-white hover:bg-[#0284C7] min-h-[44px]"
                   >
                     <ClipboardList className="h-4 w-4" />
-                    Agregar Nota de Bitácora Ahora
+                    Agregar nota de bitácora
                   </button>
                 </div>
               ) : (
@@ -261,8 +261,8 @@ export const TecnicoTransicionModal: React.FC<TecnicoTransicionModalProps> = ({
               {isSaving
                 ? 'Aplicando...'
                 : esIniciarCampo
-                ? 'Confirmar Inicio en Campo'
-                : 'Cerrar Servicio'}
+                ? 'Confirmar inicio en campo'
+                : 'Cerrar servicio'}
             </button>
           </div>
         </form>

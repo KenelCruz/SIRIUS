@@ -1,6 +1,17 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Calculator, CheckCircle2, Lock, Plus, X } from 'lucide-react';
 import {
+  BarChart,
+  Bar,
+  CartesianGrid,
+  Cell,
+  Legend,
+  ResponsiveContainer,
+  Tooltip,
+  XAxis,
+  YAxis,
+} from 'recharts';
+import {
   CATEGORIAS_PRESUPUESTO,
   ETIQUETA_EJEMPLO_CONFIRMAR,
   ETIQUETAS_CATEGORIA_PRESUPUESTO,
@@ -378,7 +389,7 @@ export const PresupuestoProyectoModal: React.FC<PresupuestoProyectoModalProps> =
                   : 'text-[#43474D] hover:text-[#0F2942]'
               }`}
             >
-              Plan vs Ejecutado y Margen
+              Plan vs. ejecutado
             </button>
             <button
               type="button"
@@ -389,7 +400,7 @@ export const PresupuestoProyectoModal: React.FC<PresupuestoProyectoModalProps> =
                   : 'text-[#43474D] hover:text-[#0F2942]'
               }`}
             >
-              Versiones y Edición ({historial.length})
+              Versiones ({historial.length})
             </button>
           </div>
 
@@ -400,7 +411,7 @@ export const PresupuestoProyectoModal: React.FC<PresupuestoProyectoModalProps> =
               className="inline-flex items-center gap-1.5 rounded-md bg-[#0F2942] px-4 py-2 text-xs font-semibold text-white hover:bg-[#0284C7] whitespace-nowrap shrink-0 min-h-[40px]"
             >
               <Plus className="h-3.5 w-3.5" />
-              Nueva Versión
+              Nueva versión
             </button>
           )}
         </div>
@@ -453,7 +464,7 @@ export const PresupuestoProyectoModal: React.FC<PresupuestoProyectoModalProps> =
                 </div>
 
                 <div className="rounded-lg border border-slate-200 bg-[#F8FAFC] p-4">
-                  <div className="text-xs font-medium text-[#43474D]">Margen Real Actual</div>
+                  <div className="text-xs font-medium text-[#43474D]">Margen real actual</div>
                   <div
                     className={`mt-1.5 font-mono text-lg font-bold tabular-nums ${
                       comparacion.margenRealRD < 0 ? 'text-[#DC2626]' : 'text-[#15803D]'
@@ -466,6 +477,89 @@ export const PresupuestoProyectoModal: React.FC<PresupuestoProyectoModalProps> =
                       ? `${comparacion.margenRealPct}% del contrato`
                       : 'Sin valor de contrato'}
                   </div>
+                </div>
+              </div>
+
+              {/* Category Comparison Recharts Bar Chart */}
+              <div className="rounded-lg border border-slate-200 bg-white p-4">
+                <div className="flex items-center justify-between gap-2 mb-3">
+                  <div className="text-xs font-bold text-[#0D1C2F]">
+                    Comparación gráfica por categoría ({moneda})
+                  </div>
+                  <div className="text-[11px] text-[#43474D]">
+                    Barras en rojo indican excedente sobre el plan
+                  </div>
+                </div>
+                <div className="w-full h-[200px] min-w-0">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <BarChart
+                      data={comparacion.filas.map((f) => ({
+                        nombre:
+                          f.categoria === 'vehiculos'
+                            ? 'Vehículos'
+                            : f.categoria === 'equipos_gnss'
+                            ? 'Equipos GNSS'
+                            : f.etiqueta,
+                        planificado: Math.round(f.planificadoRD),
+                        ejecutado: Math.round(f.ejecutadoRD),
+                        excedido: f.excedido,
+                      }))}
+                      margin={{ top: 8, right: 8, left: 0, bottom: 0 }}
+                      barGap={4}
+                    >
+                      <CartesianGrid strokeDasharray="3 3" stroke="#E2E8F0" vertical={false} />
+                      <XAxis
+                        dataKey="nombre"
+                        tick={{ fontSize: 11, fill: '#475569' }}
+                        axisLine={{ stroke: '#CBD5E1' }}
+                        tickLine={false}
+                      />
+                      <YAxis
+                        tickFormatter={(val: number) =>
+                          val >= 1000 ? `${Math.round(val / 1000)}k` : String(val)
+                        }
+                        tick={{
+                          fontSize: 11,
+                          fill: '#475569',
+                          fontFamily: 'JetBrains Mono, monospace',
+                        }}
+                        axisLine={false}
+                        tickLine={false}
+                        width={44}
+                      />
+                      <Tooltip
+                        formatter={(value) => formatRD(Number(value) || 0, moneda)}
+                        contentStyle={{ fontSize: '11px', borderRadius: '8px' }}
+                        cursor={{ fill: '#F1F5F9' }}
+                      />
+                      <Legend
+                        wrapperStyle={{ fontSize: '11px', paddingTop: '6px' }}
+                        iconType="square"
+                        iconSize={9}
+                      />
+                      <Bar
+                        dataKey="planificado"
+                        name="Planificado"
+                        fill="#0F2942"
+                        radius={[4, 4, 0, 0]}
+                        maxBarSize={26}
+                      />
+                      <Bar
+                        dataKey="ejecutado"
+                        name="Ejecutado"
+                        fill="#0284C7"
+                        radius={[4, 4, 0, 0]}
+                        maxBarSize={26}
+                      >
+                        {comparacion.filas.map((f) => (
+                          <Cell
+                            key={f.categoria}
+                            fill={f.excedido ? '#DC2626' : '#0284C7'}
+                          />
+                        ))}
+                      </Bar>
+                    </BarChart>
+                  </ResponsiveContainer>
                 </div>
               </div>
 
@@ -588,7 +682,7 @@ export const PresupuestoProyectoModal: React.FC<PresupuestoProyectoModalProps> =
                       }}
                       className="rounded-md bg-[#0F2942] px-3 py-1.5 font-semibold text-white whitespace-nowrap shrink-0"
                     >
-                      Editar Borrador
+                      Editar borrador
                     </button>
                   )}
                 </div>
@@ -604,8 +698,8 @@ export const PresupuestoProyectoModal: React.FC<PresupuestoProyectoModalProps> =
                     <div>
                       <h4 className="text-sm font-bold text-[#0D1C2F]">
                         {modoFormulario === 'editar_borrador' && borradorAbierto
-                          ? `Editando Borrador v${borradorAbierto.version}`
-                          : 'Nueva Versión de Presupuesto'}
+                          ? `Editando borrador v${borradorAbierto.version}`
+                          : 'Nueva versión de presupuesto'}
                       </h4>
                       <p className="text-xs text-[#43474D]">
                         Los presupuestos aprobados son inmutables; cada cambio genera una nueva versión con vigencia.
@@ -617,7 +711,7 @@ export const PresupuestoProyectoModal: React.FC<PresupuestoProyectoModalProps> =
                       className="inline-flex items-center gap-1.5 rounded-md border border-[#0284C7] bg-white px-3.5 py-2 text-xs font-semibold text-[#0284C7] hover:bg-sky-50 whitespace-nowrap shrink-0 min-h-[38px]"
                     >
                       <Calculator className="h-3.5 w-3.5" />
-                      {showEstimador ? 'Ocultar Estimador por Puesto' : 'Estimar Viáticos por Puesto'}
+                      {showEstimador ? 'Ocultar estimador' : 'Calcular por puesto'}
                     </button>
                   </div>
 
@@ -718,7 +812,7 @@ export const PresupuestoProyectoModal: React.FC<PresupuestoProyectoModalProps> =
                           }
                           className="rounded-md bg-[#0284C7] px-3.5 py-2 text-xs font-semibold text-white hover:bg-[#006398] whitespace-nowrap shrink-0 min-h-[36px]"
                         >
-                          Aplicar a línea Viáticos
+                          Aplicar a viáticos
                         </button>
                       </div>
                     </div>
@@ -816,7 +910,9 @@ export const PresupuestoProyectoModal: React.FC<PresupuestoProyectoModalProps> =
                         disabled={isSaving}
                         className="rounded-md border border-[#0F2942] bg-white px-4 py-2 text-xs font-semibold text-[#0F2942] hover:bg-slate-50 disabled:opacity-60 min-h-[40px] whitespace-nowrap shrink-0"
                       >
-                        Guardar Borrador
+                        {modoFormulario === 'editar_borrador'
+                          ? 'Actualizar borrador'
+                          : 'Crear borrador'}
                       </button>
                       {modoFormulario === 'editar_borrador' && borradorAbierto ? (
                         <button
@@ -853,7 +949,7 @@ export const PresupuestoProyectoModal: React.FC<PresupuestoProyectoModalProps> =
                           className="inline-flex items-center gap-1.5 rounded-md bg-[#15803D] px-4 py-2 text-xs font-semibold text-white hover:bg-[#166534] disabled:opacity-60 min-h-[40px] whitespace-nowrap shrink-0"
                         >
                           <CheckCircle2 className="h-3.5 w-3.5" />
-                          Guardar y Aprobar
+                          Actualizar y aprobar
                         </button>
                       ) : (
                         <button
@@ -863,7 +959,7 @@ export const PresupuestoProyectoModal: React.FC<PresupuestoProyectoModalProps> =
                           className="inline-flex items-center gap-1.5 rounded-md bg-[#15803D] px-4 py-2 text-xs font-semibold text-white hover:bg-[#166534] disabled:opacity-60 min-h-[40px] whitespace-nowrap shrink-0"
                         >
                           <CheckCircle2 className="h-3.5 w-3.5" />
-                          Crear y Aprobar
+                          Crear y aprobar
                         </button>
                       )}
                     </div>
@@ -875,7 +971,7 @@ export const PresupuestoProyectoModal: React.FC<PresupuestoProyectoModalProps> =
               <div className="space-y-3">
                 <div className="flex items-center justify-between">
                   <h4 className="text-xs font-bold uppercase tracking-wide text-[#43474D]">
-                    Historial de Versiones ({historial.length})
+                    Historial de versiones ({historial.length})
                   </h4>
                   {canManage && vigente?.estado === 'aprobado' && !borradorAbierto && !hayCerrado && (
                     <button
@@ -885,7 +981,7 @@ export const PresupuestoProyectoModal: React.FC<PresupuestoProyectoModalProps> =
                       className="inline-flex items-center gap-1.5 rounded-md border border-slate-300 bg-white px-3 py-1.5 text-xs font-semibold text-[#334155] hover:bg-slate-50 min-h-[36px] whitespace-nowrap shrink-0"
                     >
                       <Lock className="h-3.5 w-3.5" />
-                      Cerrar Presupuesto v{vigente.version}
+                      Cerrar versión v{vigente.version}
                     </button>
                   )}
                 </div>

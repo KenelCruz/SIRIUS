@@ -324,8 +324,8 @@ export const AgendaView: React.FC<AgendaViewProps> = ({
             <div>
               <h2 className="text-sm font-bold text-[#0F2942]">
                 {editingAsignacionId
-                  ? 'Reasignar / Editar Asignación de Cuadrilla (F5)'
-                  : 'Programar Asignación de Cuadrilla por Rango de Fechas (F5)'}
+                  ? 'Editar asignación de cuadrilla'
+                  : 'Programar asignación de cuadrilla'}
               </h2>
               <p className="text-xs text-[#43474D]">
                 Valida solapamientos en todo el rango de fechas de cuadrilla, técnicos, vehículos, equipos GNSS y proximidad espacial (&lt; 120 m).
@@ -498,8 +498,8 @@ export const AgendaView: React.FC<AgendaViewProps> = ({
               {isSaving
                 ? 'Validando y guardando...'
                 : editingAsignacionId
-                ? 'Validar Conflictos y Guardar Reasignación'
-                : 'Validar Conflictos y Programar'}
+                ? 'Confirmar reasignación'
+                : 'Programar asignación'}
             </button>
           </div>
         </form>
@@ -511,7 +511,7 @@ export const AgendaView: React.FC<AgendaViewProps> = ({
           <div className="flex items-center gap-2">
             <CalendarDays className="h-4 w-4 text-[#0284C7]" />
             <h2 className="text-sm font-bold text-[#0F2942]">
-              Agenda Operativa (F6 — Diaria y Semanal)
+              Agenda operativa
             </h2>
           </div>
 
@@ -526,7 +526,7 @@ export const AgendaView: React.FC<AgendaViewProps> = ({
                     : 'text-[#43474D] hover:bg-white'
                 }`}
               >
-                Vista Diaria
+                Vista diaria
               </button>
               <button
                 type="button"
@@ -537,7 +537,7 @@ export const AgendaView: React.FC<AgendaViewProps> = ({
                     : 'text-[#43474D] hover:bg-white'
                 }`}
               >
-                Vista Semanal
+                Vista semanal
               </button>
             </div>
 
@@ -590,7 +590,7 @@ export const AgendaView: React.FC<AgendaViewProps> = ({
                   className="inline-flex items-center gap-1 rounded-md border border-slate-300 bg-white px-3 py-2 font-semibold text-[#334155] hover:bg-slate-50 min-h-[38px] whitespace-nowrap shrink-0"
                 >
                   <ChevronLeft className="h-3.5 w-3.5" />
-                  Anterior
+                  Semana anterior
                 </button>
                 <button
                   type="button"
@@ -608,7 +608,7 @@ export const AgendaView: React.FC<AgendaViewProps> = ({
                   onClick={() => setSemanaInicioIso((s) => sumarDiasIso(s, 7))}
                   className="inline-flex items-center gap-1 rounded-md border border-slate-300 bg-white px-3 py-2 font-semibold text-[#334155] hover:bg-slate-50 min-h-[38px] whitespace-nowrap shrink-0"
                 >
-                  Siguiente
+                  Semana siguiente
                   <ChevronRight className="h-3.5 w-3.5" />
                 </button>
               </div>
