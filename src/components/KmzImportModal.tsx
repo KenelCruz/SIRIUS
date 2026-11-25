@@ -1106,7 +1106,7 @@ export const KmzImportModal: React.FC<KmzImportModalProps> = ({
                           <span
                             className={`flex h-4 w-4 shrink-0 items-center justify-center rounded border ${
                               checked
-                                ? 'border-[#FBBF24] bg-[#FBBF24] text-[#0F2942]'
+                                ? 'border-[#38BDF8] bg-[#0284C7] text-white'
                                 : 'border-slate-400 bg-white'
                             }`}
                           >
@@ -1125,7 +1125,7 @@ export const KmzImportModal: React.FC<KmzImportModalProps> = ({
                         </div>
                         <span
                           className={`font-mono text-xs font-bold tabular-nums whitespace-nowrap shrink-0 ${
-                            checked ? 'text-[#FBBF24]' : 'text-[#0F2942]'
+                            checked ? 'text-[#38BDF8]' : 'text-[#0F2942]'
                           }`}
                         >
                           + {formatRD(svc.precioBaseRD, moneda).replace('.00', '')}

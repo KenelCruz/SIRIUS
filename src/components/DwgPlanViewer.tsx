@@ -644,7 +644,7 @@ export const DwgPlanViewer: React.FC<DwgPlanViewerProps> = ({
               <Loader2 className="h-3.5 w-3.5 animate-spin text-[#38BDF8] shrink-0" />
               <span className="font-semibold truncate">{loadProgress.message}</span>
             </div>
-            <span className="font-mono text-[11px] font-bold text-[#FBBF24] tabular-nums shrink-0">
+            <span className="font-mono text-[11px] font-bold text-[#38BDF8] tabular-nums shrink-0">
               {loadProgress.percent}%
               {loadProgress.totalEntities > 0 &&
                 ` · ${loadProgress.processedEntities.toLocaleString('en-US')}/${loadProgress.totalEntities.toLocaleString('en-US')}`}

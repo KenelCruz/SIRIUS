@@ -216,7 +216,7 @@ export default function App() {
     }, 5000);
   };
 
-  // Al iniciar sesión o cambiar de empresa: Admin abre en 'hoy', Coordinador en 'proyectos', Técnico en 'hoy'
+  // Al iniciar sesión o cambiar de empresa: Admin y Coordinador abren en Inicio ('hoy'), Técnico en 'hoy'
   useEffect(() => {
     if (!sesion) return;
     setConfigSeccionInicial(undefined);
@@ -224,10 +224,8 @@ export default function App() {
     if (sesion.rolActivo === 'tecnico') {
       setTecnicoTab('hoy');
       setTecnicoRutaDetalleId('');
-    } else if (sesion.rolActivo === 'admin') {
-      setAdminTab('hoy');
     } else {
-      setAdminTab('proyectos');
+      setAdminTab('hoy');
     }
   }, [sesion?.usuario.id, sesion?.empresaActivaId, sesion?.rolActivo]);
 
@@ -265,10 +263,8 @@ export default function App() {
     const nuevaSesion = await iniciarSesion(email, password);
     if (nuevaSesion.rolActivo === 'tecnico') {
       setTecnicoTab('hoy');
-    } else if (nuevaSesion.rolActivo === 'admin') {
-      setAdminTab('hoy');
     } else {
-      setAdminTab('proyectos');
+      setAdminTab('hoy');
     }
   };
 
@@ -277,10 +273,8 @@ export default function App() {
     if (!guardada) return;
     if (guardada.rolActivo === 'tecnico') {
       setTecnicoTab('hoy');
-    } else if (guardada.rolActivo === 'admin') {
-      setAdminTab('hoy');
     } else {
-      setAdminTab('proyectos');
+      setAdminTab('hoy');
     }
     showToast('Sesión restaurada desde caché offline.');
   };
@@ -334,10 +328,8 @@ export default function App() {
     const actualizada = await seleccionarEmpresa(empresaId);
     if (actualizada.rolActivo === 'tecnico') {
       setTecnicoTab('hoy');
-    } else if (actualizada.rolActivo === 'admin') {
-      setAdminTab('hoy');
     } else {
-      setAdminTab('proyectos');
+      setAdminTab('hoy');
     }
   };
 
@@ -1245,9 +1237,7 @@ export default function App() {
     shortLabel: string;
     icon: React.FC<{ className?: string }>;
   }> = [
-    ...(rol === 'admin'
-      ? [{ id: 'hoy' as const, label: 'Hoy', shortLabel: 'Hoy', icon: Home }]
-      : []),
+    { id: 'hoy', label: 'Inicio', shortLabel: 'Inicio', icon: Home },
     { id: 'proyectos', label: 'Proyectos', shortLabel: 'Proyectos', icon: FolderKanban },
     { id: 'presupuestos', label: 'Presupuestos', shortLabel: 'Presupuestos', icon: Calculator },
     { id: 'agenda', label: 'Agenda', shortLabel: 'Agenda', icon: CalendarDays },
@@ -1310,7 +1300,7 @@ export default function App() {
               <div className="flex items-center justify-between gap-2 px-1">
                 <button
                   type="button"
-                  onClick={() => setAdminTab(rol === 'admin' ? 'hoy' : 'proyectos')}
+                  onClick={() => setAdminTab('hoy')}
                   className="flex items-center gap-2.5 min-w-0 text-left"
                 >
                   <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br from-[#0F2942] to-[#0284C7] text-white shadow-sm shrink-0">
@@ -1340,7 +1330,7 @@ export default function App() {
               <>
                 <button
                   type="button"
-                  onClick={() => setAdminTab(rol === 'admin' ? 'hoy' : 'proyectos')}
+                  onClick={() => setAdminTab('hoy')}
                   title="SIRIUS — Inicio"
                   aria-label="SIRIUS Inicio"
                   className="flex h-11 w-11 items-center justify-center rounded-2xl bg-gradient-to-br from-[#0F2942] to-[#0284C7] text-white shadow-sm hover:opacity-95 transition-opacity"
@@ -1521,17 +1511,15 @@ export default function App() {
 
               <PWAInstallButton />
 
-              {rol === 'admin' && (
-                <button
-                  type="button"
-                  onClick={() => setAdminTab('hoy')}
-                  className="lg:hidden inline-flex items-center justify-center rounded-xl border border-slate-200 bg-white px-2.5 py-2 text-xs font-semibold text-[#0F2942] hover:bg-slate-50 min-h-[40px] min-w-[40px]"
-                  title="Hoy"
-                  aria-label="Ir a Hoy"
-                >
-                  <Home className="h-4 w-4 text-[#0F2942]" />
-                </button>
-              )}
+              <button
+                type="button"
+                onClick={() => setAdminTab('hoy')}
+                className="lg:hidden inline-flex items-center justify-center rounded-xl border border-slate-200 bg-white px-2.5 py-2 text-xs font-semibold text-[#0F2942] hover:bg-slate-50 min-h-[40px] min-w-[40px]"
+                title="Inicio"
+                aria-label="Ir a Inicio"
+              >
+                <Home className="h-4 w-4 text-[#0F2942]" />
+              </button>
 
               {canViewConfig && (
                 <button
@@ -1686,14 +1674,13 @@ export default function App() {
               </div>
             </div>
 
-            {adminTab === 'hoy' && rol === 'admin' && onboarding && (
+            {adminTab === 'hoy' && (
               <AdminHoyView
+                rol={rol}
                 empresa={snapshot.empresa}
                 isLoading={isLoadingSnapshot}
                 personal={snapshot.personal}
                 proyectos={snapshot.proyectos}
-                presupuestos={snapshot.presupuestos ?? []}
-                configuracion={configuracion}
                 serviciosConfig={configuracion?.servicios ?? []}
                 rutas={snapshot.rutas}
                 servicios={snapshot.servicios}
@@ -1702,7 +1689,7 @@ export default function App() {
                 vehiculos={snapshot.vehiculos}
                 viaticos={snapshot.viaticos}
                 rentas={snapshot.rentas}
-                onboarding={onboarding}
+                onboarding={rol === 'admin' ? onboarding : null}
                 isDemo={isDemoActivo}
                 usuarioNombre={sesion.usuario.nombre}
                 onIrAPasoOnboarding={(pasoId) => {
@@ -1710,6 +1697,7 @@ export default function App() {
                 }}
                 onAbrirOnboarding={() => setIsOnboardingOpen(true)}
                 onCerrarTarjetaOnboarding={async () => {
+                  if (!onboarding) return;
                   const oculta = ocultarTarjetaOnboarding(onboarding);
                   await actions.guardarOnboarding(oculta);
                   showToast(
@@ -1717,11 +1705,6 @@ export default function App() {
                   );
                 }}
                 onAbrirModalViatico={() => abrirModalViatico()}
-                onAbrirKmzModal={() => {
-                  setPreloadedKmzForModal(null);
-                  setDefaultProyectoModal(snapshot.proyectos[0]?.id);
-                  setIsKmzModalOpen(true);
-                }}
                 onIrATab={(tab) => setAdminTab(tab)}
               />
             )}

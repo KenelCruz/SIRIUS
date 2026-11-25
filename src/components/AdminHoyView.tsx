@@ -3,14 +3,15 @@ import {
   AlertTriangle,
   ArrowRight,
   ArrowUpRight,
+  CalendarDays,
   Camera,
   CheckCircle2,
   Compass,
-  FolderKanban,
-  Plus,
+  Receipt,
   Search,
   Sparkles,
   Truck,
+  Users,
   X,
 } from 'lucide-react';
 import {
@@ -23,23 +24,23 @@ import {
   YAxis,
 } from 'recharts';
 import {
-  calcularReportePresupuestosEmpresa,
   obtenerFechaHoyAST,
   obtenerRentasVencidasSinDevolucion,
   obtenerResumenOnboarding,
+  puedeVerConfiguracion,
 } from '../domain';
 import type {
   Asignacion,
-  ConfiguracionEmpresa,
+  CategoriaViatico,
   Cuadrilla,
   Empresa,
   EstadoAprobacionViatico,
   EstadoOnboardingEmpresa,
   OnboardingPasoId,
   Personal,
-  PresupuestoProyecto,
   Proyecto,
   Renta,
+  RolEmpresa,
   Ruta,
   Servicio,
   ServicioCatalogoConfig,
@@ -50,11 +51,10 @@ import { formatRD } from '../utils/geodesy';
 import { AdminHoySkeleton } from './Skeletons';
 
 interface AdminHoyViewProps {
+  rol: RolEmpresa;
   empresa: Empresa;
   personal: Personal[];
   proyectos: Proyecto[];
-  presupuestos?: PresupuestoProyecto[];
-  configuracion?: ConfiguracionEmpresa | null;
   serviciosConfig: ServicioCatalogoConfig[];
   rutas: Ruta[];
   servicios: Servicio[];
@@ -63,7 +63,7 @@ interface AdminHoyViewProps {
   vehiculos: Vehiculo[];
   viaticos: Viatico[];
   rentas?: Renta[];
-  onboarding: EstadoOnboardingEmpresa;
+  onboarding: EstadoOnboardingEmpresa | null;
   isDemo: boolean;
   isLoading?: boolean;
   usuarioNombre?: string;
@@ -71,43 +71,46 @@ interface AdminHoyViewProps {
   onAbrirOnboarding: () => void;
   onCerrarTarjetaOnboarding: () => Promise<void>;
   onAbrirModalViatico?: () => void;
-  onAbrirKmzModal?: () => void;
   onIrATab: (
     tab: 'proyectos' | 'presupuestos' | 'agenda' | 'viaticos' | 'catalogos' | 'configuracion'
   ) => void;
 }
 
-interface HoyBarTooltipProps {
+interface HoyCategoriaTooltipProps {
   active?: boolean;
   payload?: Array<{
     payload?: {
-      codigo: string;
-      nombre: string;
-      planificado: number;
-      ejecutado: number;
+      categoria: string;
+      aprobado: number;
+      pendiente: number;
+      comprobantes: number;
     };
   }>;
   moneda: string;
 }
 
-const HoyBarTooltip: React.FC<HoyBarTooltipProps> = ({ active, payload, moneda }) => {
+const HoyCategoriaTooltip: React.FC<HoyCategoriaTooltipProps> = ({
+  active,
+  payload,
+  moneda,
+}) => {
   if (!active || !payload || payload.length === 0 || !payload[0].payload) return null;
   const item = payload[0].payload;
   return (
     <div className="rounded-xl border border-slate-200 bg-white p-3 shadow-lg text-xs min-w-[190px]">
-      <div className="font-mono text-[11px] font-bold text-[#0284C7]">{item.codigo}</div>
-      <div className="font-semibold text-[#0F2942] truncate max-w-[200px]">{item.nombre}</div>
+      <div className="font-semibold text-[#0F2942]">{item.categoria}</div>
+      <div className="text-[11px] text-[#475569]">{item.comprobantes} comprobante(s)</div>
       <div className="mt-2 space-y-1 border-t border-slate-100 pt-1.5">
         <div className="flex items-center justify-between gap-3">
-          <span className="text-slate-500">Planificado:</span>
+          <span className="text-slate-500">Aprobados:</span>
           <span className="font-mono font-bold text-[#0F2942] tabular-nums">
-            {formatRD(item.planificado, moneda)}
+            {formatRD(item.aprobado, moneda)}
           </span>
         </div>
         <div className="flex items-center justify-between gap-3">
-          <span className="text-slate-500">Ejecutado:</span>
+          <span className="text-slate-500">Por revisar:</span>
           <span className="font-mono font-bold text-[#0284C7] tabular-nums">
-            {formatRD(item.ejecutado, moneda)}
+            {formatRD(item.pendiente, moneda)}
           </span>
         </div>
       </div>
@@ -121,12 +124,20 @@ const ETIQUETA_ESTADO_VIATICO: Record<EstadoAprobacionViatico, string> = {
   rechazado: 'Rechazado',
 };
 
+const CATEGORIAS_CHART: Array<{ key: CategoriaViatico; label: string }> = [
+  { key: 'Combustible', label: 'Combust.' },
+  { key: 'Comida', label: 'Comida' },
+  { key: 'Hospedaje', label: 'Hospedaje' },
+  { key: 'Peaje', label: 'Peaje' },
+  { key: 'Materiales', label: 'Materiales' },
+  { key: 'Otro', label: 'Otro' },
+];
+
 export const AdminHoyView: React.FC<AdminHoyViewProps> = ({
+  rol,
   empresa,
   personal,
   proyectos,
-  presupuestos = [],
-  configuracion,
   serviciosConfig,
   rutas,
   servicios,
@@ -143,7 +154,6 @@ export const AdminHoyView: React.FC<AdminHoyViewProps> = ({
   onAbrirOnboarding,
   onCerrarTarjetaOnboarding,
   onAbrirModalViatico,
-  onAbrirKmzModal,
   onIrATab,
 }) => {
   const [actividadTab, setActividadTab] = useState<'comprobantes' | 'brigadas'>('comprobantes');
@@ -152,47 +162,40 @@ export const AdminHoyView: React.FC<AdminHoyViewProps> = ({
 
   const hoyIso = obtenerFechaHoyAST();
   const moneda = empresa.moneda || 'RD$';
+  const canViewConfig = puedeVerConfiguracion(rol);
 
-  const reportePresupuestos = useMemo(
-    () =>
-      calcularReportePresupuestosEmpresa({
-        proyectos,
-        presupuestos,
-        rutas,
-        asignaciones,
-        cuadrillas,
-        personal,
-        vehiculos,
-        viaticos,
-        rentas,
-        configuracion: configuracion ?? undefined,
-        fechaCalculoIso: hoyIso,
-      }),
-    [
-      proyectos,
-      presupuestos,
-      rutas,
-      asignaciones,
-      cuadrillas,
-      personal,
-      vehiculos,
-      viaticos,
-      rentas,
-      configuracion,
-      hoyIso,
-    ]
-  );
+  const chartCategorias = useMemo(() => {
+    const mapa = new Map<
+      CategoriaViatico,
+      { aprobado: number; pendiente: number; comprobantes: number }
+    >();
+    CATEGORIAS_CHART.forEach((c) => {
+      mapa.set(c.key, { aprobado: 0, pendiente: 0, comprobantes: 0 });
+    });
 
-  const chartData = useMemo(
-    () =>
-      reportePresupuestos.comparaciones.slice(0, 6).map((c) => ({
-        codigo: c.codigoContrato.replace(/^CT-\d{4}-/, '#'),
-        nombre: c.nombreProyecto,
-        planificado: Math.round(c.totalPlanificadoRD),
-        ejecutado: Math.round(c.totalEjecutadoRD),
-      })),
-    [reportePresupuestos]
-  );
+    viaticos.forEach((v) => {
+      if (v.estadoAprobacion === 'rechazado') return;
+      const cur = mapa.get(v.categoria) ?? { aprobado: 0, pendiente: 0, comprobantes: 0 };
+      cur.comprobantes += 1;
+      if (v.estadoAprobacion === 'aprobado') {
+        cur.aprobado += Math.round(v.montoAprobadoEmpresaRD ?? v.montoRD);
+      } else {
+        cur.pendiente += Math.round(v.montoRD);
+      }
+      mapa.set(v.categoria, cur);
+    });
+
+    return CATEGORIAS_CHART.map((c) => {
+      const vals = mapa.get(c.key) ?? { aprobado: 0, pendiente: 0, comprobantes: 0 };
+      return {
+        codigo: c.label,
+        categoria: c.key,
+        aprobado: vals.aprobado,
+        pendiente: vals.pendiente,
+        comprobantes: vals.comprobantes,
+      };
+    }).filter((item) => item.aprobado > 0 || item.pendiente > 0);
+  }, [viaticos]);
 
   const actividadesFiltradas = useMemo(() => {
     const q = busquedaActividad.trim().toLowerCase();
@@ -218,14 +221,17 @@ export const AdminHoyView: React.FC<AdminHoyViewProps> = ({
     return <AdminHoySkeleton />;
   }
 
-  const resumenOnboarding = obtenerResumenOnboarding(onboarding, isDemo, {
-    empresa,
-    personal,
-    vehiculos,
-    serviciosConfig,
-    proyectos,
-    esDemo: isDemo,
-  });
+  const resumenOnboarding =
+    rol === 'admin' && onboarding
+      ? obtenerResumenOnboarding(onboarding, isDemo, {
+          empresa,
+          personal,
+          vehiculos,
+          serviciosConfig,
+          proyectos,
+          esDemo: isDemo,
+        })
+      : null;
 
   const asignacionesHoy = asignaciones.filter(
     (a) => a.fechaInicio <= hoyIso && a.fechaFin >= hoyIso
@@ -238,6 +244,7 @@ export const AdminHoyView: React.FC<AdminHoyViewProps> = ({
   const totalAprobadosRD = viaticos
     .filter((v) => v.estadoAprobacion === 'aprobado')
     .reduce((acc, v) => acc + (v.montoAprobadoEmpresaRD ?? v.montoRD), 0);
+  const totalViaticosControlRD = totalAprobadosRD + totalPendientesRD;
 
   const rentasActivas = rentas.filter(
     (r) => r.estado === 'activa' || r.estado === 'reservada'
@@ -247,30 +254,33 @@ export const AdminHoyView: React.FC<AdminHoyViewProps> = ({
   const vehiculosDisponibles = vehiculos.filter((v) => v.estado !== 'en_mantenimiento').length;
   const vehiculosMantenimiento = vehiculos.filter((v) => v.estado === 'en_mantenimiento');
   const serviciosEnCampo = servicios.filter((s) => s.estado === 'en_campo');
+  const serviciosProcesando = servicios.filter((s) => s.estado === 'procesando');
   const rentasVencidas = obtenerRentasVencidasSinDevolucion(rentas, hoyIso);
 
-  const { totales } = reportePresupuestos;
-  const ejecucionPct =
-    totales.totalPlanificadoRD > 0
-      ? Math.round((totales.totalEjecutadoRD / totales.totalPlanificadoRD) * 100)
+  const coberturaCuadrillasPct =
+    cuadrillasDisponibles > 0
+      ? Math.min(100, Math.round((cuadrillasActivasHoyIds.size / cuadrillasDisponibles) * 100))
       : 0;
-  const ejecucionBarraPct = Math.min(100, Math.max(0, ejecucionPct));
-  const excedePresupuestoGlobal =
-    totales.totalPlanificadoRD > 0 && totales.totalEjecutadoRD > totales.totalPlanificadoRD;
+  const disponibilidadFlotaPct =
+    vehiculos.length > 0
+      ? Math.min(100, Math.round((vehiculosDisponibles / vehiculos.length) * 100))
+      : 0;
 
   const primerNombre = usuarioNombre ? usuarioNombre.split(' ')[0] : '';
-  const saludoTitulo = primerNombre ? `Resumen ejecutivo, ${primerNombre}` : `Hoy en ${empresa.nombre}`;
+  const saludoTitulo = primerNombre
+    ? `Resumen operativo, ${primerNombre}`
+    : `Inicio · ${empresa.nombre}`;
 
   return (
     <div className="space-y-6">
-      {/* Greeting Header — clean typographic anchor directly on canvas */}
+      {/* Greeting Header — Operación diaria independiente de Proyectos */}
       <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4">
         <div className="min-w-0">
           <h2 className="text-2xl sm:text-[28px] font-bold tracking-tight text-[#0F2942] text-balance leading-tight">
             {saludoTitulo}
           </h2>
           <p className="text-xs sm:text-sm text-[#475569] mt-1">
-            Supervisa contratos activos, ejecución presupuestaria y cuadrillas en{' '}
+            Supervisa cuadrillas activas, flujo de viáticos y disponibilidad de flota en{' '}
             <span className="font-semibold text-[#0F2942]">{empresa.nombre}</span> ·{' '}
             <span className="font-mono">{hoyIso}</span> (AST)
           </p>
@@ -278,23 +288,32 @@ export const AdminHoyView: React.FC<AdminHoyViewProps> = ({
         <div className="flex flex-wrap items-center gap-2 shrink-0">
           <button
             type="button"
-            onClick={() => onIrATab('presupuestos')}
+            onClick={() => onIrATab('agenda')}
             className="min-h-[40px] px-4 py-2 text-xs font-semibold rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-[#0F2942] whitespace-nowrap shrink-0 transition-colors"
           >
-            Ver presupuestos
+            Agenda de hoy
           </button>
           <button
             type="button"
-            onClick={() => onIrATab('configuracion')}
-            className="min-h-[40px] px-4 py-2 text-xs font-semibold rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-[#475569] hover:text-[#0F2942] whitespace-nowrap shrink-0 transition-colors"
+            onClick={() => onIrATab('viaticos')}
+            className="min-h-[40px] px-4 py-2 text-xs font-semibold rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-[#0F2942] whitespace-nowrap shrink-0 transition-colors"
           >
-            Configuración
+            Libro de viáticos
           </button>
+          {canViewConfig && (
+            <button
+              type="button"
+              onClick={() => onIrATab('configuracion')}
+              className="min-h-[40px] px-4 py-2 text-xs font-semibold rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-[#475569] hover:text-[#0F2942] whitespace-nowrap shrink-0 transition-colors"
+            >
+              Configuración
+            </button>
+          )}
         </div>
       </div>
 
-      {/* Tarjeta opcional de Onboarding */}
-      {resumenOnboarding.debeMostrarTarjetaHoy && (
+      {/* Tarjeta opcional de Onboarding (solo Administrador) */}
+      {resumenOnboarding && resumenOnboarding.debeMostrarTarjetaHoy && (
         <div className="bg-white border border-slate-200/90 rounded-2xl p-5 space-y-4">
           <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
             <div className="space-y-1">
@@ -326,8 +345,8 @@ export const AdminHoyView: React.FC<AdminHoyViewProps> = ({
                 onClick={() => {
                   onCerrarTarjetaOnboarding().catch(() => {});
                 }}
-                title="Ocultar tarjeta de configuración en Hoy"
-                aria-label="Ocultar tarjeta de configuración en Hoy"
+                title="Ocultar tarjeta de configuración en Inicio"
+                aria-label="Ocultar tarjeta de configuración en Inicio"
                 className="min-h-[40px] min-w-[40px] flex items-center justify-center text-slate-500 hover:text-slate-900 hover:bg-slate-100 rounded-xl"
               >
                 <X className="w-4 h-4" />
@@ -419,27 +438,35 @@ export const AdminHoyView: React.FC<AdminHoyViewProps> = ({
         </div>
       )}
 
-      {/* Top 3-Column Bento Row (Portfolio + 2x2 Metrics + Comparison Bar Chart) */}
+      {/* Top 3-Column Bento Row (Jornada Diaria + 2x2 Métricas Operativas + Viáticos por Categoría) */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 items-stretch">
-        {/* Col 1: Valor en Contratos + Acciones rápidas + Carteras operativas */}
+        {/* Col 1: Operación en Campo Hoy + Acciones rápidas + Cartera de gastos/rentas */}
         <div className="lg:col-span-4 rounded-2xl border border-slate-200/90 bg-white p-5 flex flex-col justify-between gap-5">
           <div className="space-y-3">
             <div className="flex items-center justify-between gap-2">
               <span className="text-xs font-semibold text-[#475569]">
-                Valor Total en Contratos
+                Operación en Campo Hoy
               </span>
               <span className="font-mono text-[11px] font-semibold text-[#0284C7]">
-                {moneda} · {proyectos.length} proy.
+                {hoyIso} · AST
               </span>
             </div>
 
             <div>
               <div className="font-mono text-3xl font-bold tracking-tight text-[#0F2942] tabular-nums">
-                {formatRD(totales.valorContratoRD, moneda)}
+                {asignacionesHoy.length}{' '}
+                <span className="text-base font-semibold text-[#475569]">
+                  {asignacionesHoy.length === 1 ? 'brigada hoy' : 'brigadas hoy'}
+                </span>
               </div>
               <p className="mt-1 text-xs text-[#475569]">
                 <span className="font-semibold text-[#15803D]">{serviciosEnCampo.length}</span>{' '}
-                {serviciosEnCampo.length === 1 ? 'servicio activo' : 'servicios activos'} en campo
+                {serviciosEnCampo.length === 1 ? 'servicio activo' : 'servicios activos'} en terreno
+                {' · '}
+                <span className="font-semibold text-[#0F2942]">
+                  {cuadrillasActivasHoyIds.size}/{cuadrillasDisponibles}
+                </span>{' '}
+                cuadrillas desplegadas
               </p>
             </div>
 
@@ -454,11 +481,11 @@ export const AdminHoyView: React.FC<AdminHoyViewProps> = ({
               </button>
               <button
                 type="button"
-                onClick={() => (onAbrirKmzModal ? onAbrirKmzModal() : onIrATab('proyectos'))}
+                onClick={() => onIrATab('agenda')}
                 className="inline-flex items-center justify-center gap-1.5 rounded-xl border border-slate-200 bg-[#F8FAFC] px-3.5 py-2.5 text-xs font-semibold text-[#0F2942] hover:bg-slate-100 transition-colors min-h-[42px] whitespace-nowrap"
               >
-                <Plus className="h-3.5 w-3.5 text-[#0284C7] shrink-0" />
-                Importar KMZ
+                <CalendarDays className="h-3.5 w-3.5 text-[#0284C7] shrink-0" />
+                Programar agenda
               </button>
             </div>
           </div>
@@ -510,72 +537,44 @@ export const AdminHoyView: React.FC<AdminHoyViewProps> = ({
           </div>
         </div>
 
-        {/* Col 2: 2x2 Bento Metric Grid with focal Navy-to-Sky brand tile */}
+        {/* Col 2: 2x2 Operational Bento Metric Grid */}
         <div className="lg:col-span-4 rounded-2xl border border-slate-200/90 bg-white p-4 grid grid-cols-2 gap-3">
           {/* Focal Brand Tile */}
           <button
             type="button"
-            onClick={() => onIrATab('presupuestos')}
+            onClick={() => onIrATab('viaticos')}
             className="rounded-xl bg-gradient-to-br from-[#0F2942] to-[#0284C7] p-4 text-left text-white flex flex-col justify-between hover:opacity-95 transition-opacity min-h-[126px]"
           >
             <div className="flex items-center justify-between gap-2">
-              <span className="text-xs font-medium text-white/90">Planificado</span>
+              <span className="text-xs font-medium text-white/90">Viáticos Activos</span>
               <ArrowUpRight className="h-4 w-4 text-white/80 shrink-0" />
             </div>
             <div>
               <div className="font-mono text-lg sm:text-xl font-bold tabular-nums tracking-tight">
-                {formatRD(totales.totalPlanificadoRD, moneda)}
+                {formatRD(totalViaticosControlRD, moneda)}
               </div>
               <div className="mt-1 text-[11px] text-white/80">
-                {reportePresupuestos.comparaciones.length} proyecto(s)
+                {viaticos.length} comprobante(s)
               </div>
             </div>
           </button>
 
-          {/* Ejecutado Real */}
+          {/* Servicios en Terreno */}
           <button
             type="button"
-            onClick={() => onIrATab('presupuestos')}
+            onClick={() => onIrATab('agenda')}
             className="rounded-xl border border-slate-200/80 bg-[#F8FAFC] p-4 text-left flex flex-col justify-between hover:border-[#0284C7] transition-colors min-h-[126px]"
           >
             <div className="flex items-center justify-between gap-2">
-              <span className="text-xs font-semibold text-[#475569]">Ejecutado Real</span>
-              <FolderKanban className="h-4 w-4 text-[#0284C7] shrink-0" />
+              <span className="text-xs font-semibold text-[#475569]">Servicios Hoy</span>
+              <Compass className="h-4 w-4 text-[#0284C7] shrink-0" />
             </div>
             <div>
               <div className="font-mono text-lg sm:text-xl font-bold text-[#0F2942] tabular-nums tracking-tight">
-                {formatRD(totales.totalEjecutadoRD, moneda)}
+                {serviciosEnCampo.length}
               </div>
-              <div
-                className={`mt-1 text-[11px] font-semibold tabular-nums ${
-                  excedePresupuestoGlobal ? 'text-[#DC2626]' : 'text-[#0284C7]'
-                }`}
-              >
-                {ejecucionPct}% del planificado
-              </div>
-            </div>
-          </button>
-
-          {/* Margen Proyectado */}
-          <button
-            type="button"
-            onClick={() => onIrATab('presupuestos')}
-            className="rounded-xl border border-slate-200/80 bg-[#F8FAFC] p-4 text-left flex flex-col justify-between hover:border-[#0284C7] transition-colors min-h-[126px]"
-          >
-            <div className="flex items-center justify-between gap-2">
-              <span className="text-xs font-semibold text-[#475569]">Margen Real</span>
-              <Compass className="h-4 w-4 text-[#15803D] shrink-0" />
-            </div>
-            <div>
-              <div
-                className={`font-mono text-lg sm:text-xl font-bold tabular-nums tracking-tight ${
-                  totales.margenRealRD < 0 ? 'text-[#DC2626]' : 'text-[#0F2942]'
-                }`}
-              >
-                {formatRD(totales.margenRealRD, moneda)}
-              </div>
-              <div className="mt-1 text-[11px] text-[#15803D] font-semibold tabular-nums">
-                {totales.margenRealPct !== null ? `${totales.margenRealPct}% margen` : 'Sin contrato'}
+              <div className="mt-1 text-[11px] font-semibold text-[#0284C7] tabular-nums">
+                {serviciosProcesando.length} en gabinete
               </div>
             </div>
           </button>
@@ -588,55 +587,80 @@ export const AdminHoyView: React.FC<AdminHoyViewProps> = ({
           >
             <div className="flex items-center justify-between gap-2">
               <span className="text-xs font-semibold text-[#475569]">Cuadrillas Hoy</span>
-              <Truck className="h-4 w-4 text-[#0F2942] shrink-0" />
+              <Users className="h-4 w-4 text-[#0F2942] shrink-0" />
             </div>
             <div>
               <div className="font-mono text-lg sm:text-xl font-bold text-[#0F2942] tabular-nums tracking-tight">
                 {cuadrillasActivasHoyIds.size} / {cuadrillasDisponibles}
               </div>
               <div className="mt-1 text-[11px] text-[#475569] tabular-nums">
-                {asignacionesHoy.length} ruta(s) en agenda hoy
+                {coberturaCuadrillasPct}% desplegadas
+              </div>
+            </div>
+          </button>
+
+          {/* Flota Vehicular */}
+          <button
+            type="button"
+            onClick={() => onIrATab('catalogos')}
+            className="rounded-xl border border-slate-200/80 bg-[#F8FAFC] p-4 text-left flex flex-col justify-between hover:border-[#0284C7] transition-colors min-h-[126px]"
+          >
+            <div className="flex items-center justify-between gap-2">
+              <span className="text-xs font-semibold text-[#475569]">Flota Disponible</span>
+              <Truck className="h-4 w-4 text-[#15803D] shrink-0" />
+            </div>
+            <div>
+              <div className="font-mono text-lg sm:text-xl font-bold text-[#0F2942] tabular-nums tracking-tight">
+                {vehiculosDisponibles} / {vehiculos.length}
+              </div>
+              <div className="mt-1 text-[11px] text-[#475569] tabular-nums">
+                {vehiculosMantenimiento.length} en taller
               </div>
             </div>
           </button>
         </div>
 
-        {/* Col 3: Comparativa por Proyecto (Planificado vs Ejecutado) */}
+        {/* Col 3: Distribución de Viáticos por Categoría */}
         <div className="lg:col-span-4 rounded-2xl border border-slate-200/90 bg-white p-5 flex flex-col justify-between gap-3">
           <div className="flex items-start justify-between gap-2">
             <div>
-              <h3 className="text-sm font-bold text-[#0F2942]">Ejecución por Proyecto</h3>
+              <h3 className="text-sm font-bold text-[#0F2942]">Viáticos por Categoría</h3>
               <p className="text-[11px] text-[#475569]">
-                Planificado vs. ejecutado real ({moneda})
+                Aprobados vs. pendientes ({moneda})
               </p>
             </div>
             <div className="flex items-center gap-3 text-[11px] text-[#475569] shrink-0">
               <span className="inline-flex items-center gap-1">
                 <span className="h-2 w-2 rounded-sm bg-[#0F2942]" />
-                Plan
+                Aprob.
               </span>
               <span className="inline-flex items-center gap-1">
                 <span className="h-2 w-2 rounded-sm bg-[#0284C7]" />
-                Real
+                Pend.
               </span>
             </div>
           </div>
 
           <div className="flex-1 min-h-[210px] rounded-xl border border-slate-100 bg-[#F8FAFC] p-2.5">
-            {chartData.length === 0 ? (
+            {chartCategorias.length === 0 ? (
               <div className="h-full min-h-[190px] flex flex-col items-center justify-center text-center px-4 text-xs text-[#475569]">
-                <p>No hay proyectos con presupuesto registrado todavía.</p>
+                <p>No hay viáticos registrados todavía.</p>
                 <button
                   type="button"
-                  onClick={() => onIrATab('presupuestos')}
+                  onClick={() =>
+                    onAbrirModalViatico ? onAbrirModalViatico() : onIrATab('viaticos')
+                  }
                   className="mt-2 font-semibold text-[#0284C7] hover:text-[#0F2942]"
                 >
-                  Configurar primer presupuesto &rarr;
+                  Registrar primer viático &rarr;
                 </button>
               </div>
             ) : (
               <ResponsiveContainer width="100%" height={200}>
-                <BarChart data={chartData} margin={{ top: 8, right: 6, left: -16, bottom: 0 }}>
+                <BarChart
+                  data={chartCategorias}
+                  margin={{ top: 8, right: 6, left: -16, bottom: 0 }}
+                >
                   <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#E2E8F0" />
                   <XAxis
                     dataKey="codigo"
@@ -653,19 +677,19 @@ export const AdminHoyView: React.FC<AdminHoyViewProps> = ({
                     }
                   />
                   <Tooltip
-                    content={<HoyBarTooltip moneda={moneda} />}
+                    content={<HoyCategoriaTooltip moneda={moneda} />}
                     cursor={{ fill: 'rgba(2, 132, 199, 0.06)' }}
                   />
                   <Bar
-                    dataKey="planificado"
-                    name="Planificado"
+                    dataKey="aprobado"
+                    name="Aprobados"
                     fill="#0F2942"
                     radius={[5, 5, 0, 0]}
                     barSize={14}
                   />
                   <Bar
-                    dataKey="ejecutado"
-                    name="Ejecutado"
+                    dataKey="pendiente"
+                    name="Por revisar"
                     fill="#0284C7"
                     radius={[5, 5, 0, 0]}
                     barSize={14}
@@ -677,41 +701,48 @@ export const AdminHoyView: React.FC<AdminHoyViewProps> = ({
         </div>
       </div>
 
-      {/* Bottom 2-Column Asymmetric Bento Row (4 cols Limits & Fleet + 8 cols Recent Activity Table) */}
+      {/* Bottom 2-Column Asymmetric Bento Row (4 cols Cobertura & Flota + 8 cols Actividad Reciente) */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 items-stretch">
-        {/* Left Column: Budget Utilization Progress + Fleet & Operations Visual Cards */}
+        {/* Left Column: Cobertura Operativa Hoy + Flota & Control de Viáticos */}
         <div className="lg:col-span-4 flex flex-col gap-5">
-          <div className="rounded-2xl border border-slate-200/90 bg-white p-5 space-y-3">
+          <div className="rounded-2xl border border-slate-200/90 bg-white p-5 space-y-4">
             <div className="flex items-center justify-between gap-2">
-              <h3 className="text-sm font-bold text-[#0F2942]">Límite de Ejecución Global</h3>
-              <span
-                className={`font-mono text-xs font-bold tabular-nums ${
-                  excedePresupuestoGlobal ? 'text-[#DC2626]' : 'text-[#0284C7]'
-                }`}
-              >
-                {ejecucionPct}%
+              <h3 className="text-sm font-bold text-[#0F2942]">Cobertura Operativa Hoy</h3>
+              <span className="font-mono text-xs font-bold text-[#0284C7] tabular-nums">
+                {coberturaCuadrillasPct}% brigadas
               </span>
             </div>
 
-            <div className="h-3 w-full rounded-full bg-slate-100 overflow-hidden">
-              <div
-                className={`h-full rounded-full transition-all ${
-                  excedePresupuestoGlobal ? 'bg-[#DC2626]' : 'bg-[#0284C7]'
-                }`}
-                style={{ width: `${ejecucionBarraPct}%` }}
-              />
-            </div>
+            <div className="space-y-3">
+              <div className="space-y-1.5">
+                <div className="flex items-center justify-between text-xs text-[#475569] tabular-nums">
+                  <span>Cuadrillas en terreno</span>
+                  <span className="font-mono font-semibold text-[#0F2942]">
+                    {cuadrillasActivasHoyIds.size} / {cuadrillasDisponibles}
+                  </span>
+                </div>
+                <div className="h-2.5 w-full rounded-full bg-slate-100 overflow-hidden">
+                  <div
+                    className="h-full rounded-full bg-[#0284C7] transition-all"
+                    style={{ width: `${coberturaCuadrillasPct}%` }}
+                  />
+                </div>
+              </div>
 
-            <div className="flex items-center justify-between gap-2 text-xs text-[#475569] tabular-nums">
-              <span>
-                <strong className="font-mono text-[#0F2942]">
-                  {formatRD(totales.totalEjecutadoRD, moneda)}
-                </strong>{' '}
-                ejecutado de
-              </span>
-              <span className="font-mono font-semibold text-[#0F2942]">
-                {formatRD(totales.totalPlanificadoRD, moneda)}
-              </span>
+              <div className="space-y-1.5">
+                <div className="flex items-center justify-between text-xs text-[#475569] tabular-nums">
+                  <span>Flota vehicular operativa</span>
+                  <span className="font-mono font-semibold text-[#0F2942]">
+                    {vehiculosDisponibles} / {vehiculos.length} ({disponibilidadFlotaPct}%)
+                  </span>
+                </div>
+                <div className="h-2.5 w-full rounded-full bg-slate-100 overflow-hidden">
+                  <div
+                    className="h-full rounded-full bg-[#15803D] transition-all"
+                    style={{ width: `${disponibilidadFlotaPct}%` }}
+                  />
+                </div>
+              </div>
             </div>
           </div>
 
@@ -754,7 +785,7 @@ export const AdminHoyView: React.FC<AdminHoyViewProps> = ({
               >
                 <div className="flex items-center justify-between text-[11px] text-sky-100 font-semibold">
                   <span>Control Viáticos</span>
-                  <ArrowUpRight className="h-4 w-4 text-white" />
+                  <Receipt className="h-4 w-4 text-white" />
                 </div>
                 <div className="mt-3">
                   <div className="font-mono text-xl font-bold tabular-nums">

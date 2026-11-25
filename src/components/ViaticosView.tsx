@@ -384,7 +384,7 @@ export const ViaticosView: React.FC<ViaticosViewProps> = ({
   const estadoStyle = (estado: EstadoAprobacionViatico) => {
     if (estado === 'aprobado') return 'border-[#86EFAC] bg-[#F0FDF4] text-[#15803D]';
     if (estado === 'rechazado') return 'border-[#FCA5A5] bg-[#FEE2E2] text-[#93000A]';
-    return 'border-[#FDE047] bg-[#FEF9C3]/60 text-[#A16207]';
+    return 'border-amber-300 bg-amber-50 text-[#B45309]';
   };
 
   const sumaRepartoActual = repartoEdicion.reduce((acc, item) => acc + (Number(item.montoRD) || 0), 0);
@@ -553,8 +553,8 @@ export const ViaticosView: React.FC<ViaticosViewProps> = ({
                 </tr>
               ))}
               {reportePorProyecto.sinAsignar.ejecutadoRD > 0 && (
-                <tr className="bg-[#FEF9C3]/35">
-                  <td className="px-4 py-2.5 font-semibold text-[#A16207]">
+                <tr className="bg-amber-50/60">
+                  <td className="px-4 py-2.5 font-semibold text-[#B45309]">
                     Sin asignar a proyecto
                   </td>
                   <td className="px-4 py-2.5 text-right font-mono tabular-nums text-[#43474D]">
@@ -703,8 +703,8 @@ export const ViaticosView: React.FC<ViaticosViewProps> = ({
                 </React.Fragment>
               ))}
               {reportePorMision.sinMision.cantidadViaticos > 0 && (
-                <tr className="bg-[#FEF9C3]/35">
-                  <td className="px-4 py-2.5 font-semibold text-[#A16207]">
+                <tr className="bg-amber-50/60">
+                  <td className="px-4 py-2.5 font-semibold text-[#B45309]">
                     Gastos sueltos sin misión ({reportePorMision.sinMision.cantidadViaticos})
                   </td>
                   <td className="px-4 py-2.5 text-right font-mono tabular-nums">
@@ -921,7 +921,7 @@ export const ViaticosView: React.FC<ViaticosViewProps> = ({
                           )}
                         </div>
                         {typeof v.excedenteRD === 'number' && v.excedenteRD > 0 && (
-                          <div className="mt-1.5 rounded-md border border-[#FDE047] bg-[#FEF9C3]/70 px-2.5 py-1.5 text-[11px] text-[#92400E]">
+                          <div className="mt-1.5 rounded-md border border-amber-300 bg-amber-50 px-2.5 py-1.5 text-[11px] text-amber-900">
                             <strong>Excedente:</strong> {formatRD(v.excedenteRD, moneda)} (tope{' '}
                             {formatRD(v.topeAplicadoRD ?? 0, moneda)})
                             {v.motivoExcedente ? ` · Motivo: ${v.motivoExcedente}` : ''}
@@ -1098,7 +1098,7 @@ export const ViaticosView: React.FC<ViaticosViewProps> = ({
             </div>
 
             {typeof v.excedenteRD === 'number' && v.excedenteRD > 0 && (
-              <div className="rounded-xl border border-[#FDE047] bg-[#FEF9C3]/70 px-3 py-2 text-[11px] text-[#92400E]">
+              <div className="rounded-xl border border-amber-300 bg-amber-50 px-3 py-2 text-[11px] text-amber-900">
                 <strong>Excedente:</strong> {formatRD(v.excedenteRD, moneda)}
                 {v.motivoExcedente ? ` · ${v.motivoExcedente}` : ''}
                 {v.decisionExcedente === 'cargo_colaborador' && (

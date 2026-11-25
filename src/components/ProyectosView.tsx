@@ -1,18 +1,26 @@
 import React, { useMemo, useState } from 'react';
 import {
+  ArrowLeft,
+  ArrowUpRight,
   Calculator,
   Camera,
   CheckCircle2,
   ClipboardList,
   DollarSign,
+  FolderKanban,
   FolderPlus,
+  LayoutGrid,
   Layers,
+  List,
+  Map as MapIcon,
   MapPin,
   MessageSquarePlus,
   Plus,
+  Receipt,
   Route as RouteIcon,
   Search,
   UserPlus,
+  Users,
   X,
 } from 'lucide-react';
 import {
@@ -58,6 +66,7 @@ import type {
 import { formatArea, formatPerimeter, formatRD } from '../utils/geodesy';
 import { MediaThumb } from './MediaThumb';
 import { PresupuestoProyectoModal } from './PresupuestoProyectoModal';
+import { ProyectosLocationMap } from './ProyectosLocationMap';
 import { ProyectosViewSkeleton } from './Skeletons';
 import { ViaticosComparisonChart } from './ViaticosComparisonChart';
 import { WorkflowBadge } from './WorkflowBadge';
@@ -141,9 +150,33 @@ const ACCION_ESTADO_SERVICIO: Record<EstadoServicio, string> = {
   cobrado: 'Registrar cobro',
 };
 
+const PROJECT_COVER_IMAGES = [
+  '/src/assets/images/project_cover_catastro_1795614820962.jpg',
+  '/src/assets/images/project_cover_gnss_1795614821770.jpg',
+  '/src/assets/images/project_cover_lidar_1795614822032.jpg',
+  '/src/assets/images/auth_topography_hero_1795434660064.jpg',
+];
+
+const FOLDER_SURFACES = [
+  { tab: 'bg-sky-100', body: 'bg-[#EFF6FF] border-sky-200/80' },
+  { tab: 'bg-slate-200', body: 'bg-[#F1F5F9] border-slate-200/90' },
+  { tab: 'bg-cyan-100', body: 'bg-[#F0F9FF] border-sky-200/70' },
+  { tab: 'bg-slate-100', body: 'bg-[#F8FAFC] border-slate-200/90' },
+];
+
 const DEFAULT_CFG_PROY = crearConfiguracionInicialEmpresa('default');
 const DEFAULT_SERVICIOS_PROY = obtenerServiciosVigentes(DEFAULT_CFG_PROY);
 const DEFAULT_TERRENO_PROY = obtenerFactoresTerrenoVigentes(DEFAULT_CFG_PROY);
+
+function getInitials(nombre: string): string {
+  return nombre
+    .split(' ')
+    .filter(Boolean)
+    .map((p) => p[0])
+    .slice(0, 2)
+    .join('')
+    .toUpperCase();
+}
 
 async function compressPhoto(file: File): Promise<string> {
   return new Promise((resolve, reject) => {
@@ -223,9 +256,14 @@ export const ProyectosView: React.FC<ProyectosViewProps> = ({
     [serviciosCatalogo]
   );
   const terrenoActivo = factoresTerreno ?? DEFAULT_TERRENO_PROY;
+
+  const [viewMode, setViewMode] = useState<'tarjetas' | 'mapa' | 'lista'>('tarjetas');
+  const [selectedProyectoId, setSelectedProyectoId] = useState<string | null>(null);
+  const [clienteFolderFiltro, setClienteFolderFiltro] = useState<string>('ALL');
   const [searchQuery, setSearchQuery] = useState('');
   const [estadoFiltro, setEstadoFiltro] = useState<EstadoServicio | 'ALL'>('ALL');
   const [actionError, setActionError] = useState<string | null>(null);
+  const [failedCovers, setFailedCovers] = useState<Record<string, boolean>>({});
 
   // Modales F2 Cliente / Proyecto
   const [showClienteModal, setShowClienteModal] = useState(false);
@@ -244,14 +282,14 @@ export const ProyectosView: React.FC<ProyectosViewProps> = ({
   const [proyValor, setProyValor] = useState('120000');
   const [proyNotas, setProyNotas] = useState('');
 
-  // Modal F4 agregar servicio a ruta (lee catálogo configurable)
+  // Modal F4 agregar servicio a ruta
   const primerServicio = serviciosActivos[0] ?? DEFAULT_SERVICIOS_PROY[0];
   const [rutaParaServicio, setRutaParaServicio] = useState<Ruta | null>(null);
   const [srvTipoCodigo, setSrvTipoCodigo] = useState(primerServicio.codigo);
   const [srvNombre, setSrvNombre] = useState(primerServicio.nombre);
   const [srvCotizacion, setSrvCotizacion] = useState(String(primerServicio.precioBaseRD));
 
-  // Modal transición de estado (especialmente fechas reales y cobro)
+  // Modal transición de estado
   const [transicionTarget, setTransicionTarget] = useState<{
     servicio: Servicio;
     nuevoEstado: EstadoServicio;
@@ -260,44 +298,21 @@ export const ProyectosView: React.FC<ProyectosViewProps> = ({
   const [montoCobradoInput, setMontoCobradoInput] = useState('');
   const [modalError, setModalError] = useState<string | null>(null);
 
-  // Drawer/Modal de Bitácora F8
+  // Modal Bitácora F8
   const [bitacoraServicio, setBitacoraServicio] = useState<Servicio | null>(null);
   const [notaBitacora, setNotaBitacora] = useState('');
   const [fotosBitacora, setFotosBitacora] = useState<string[]>([]);
 
   const gastosPorProyecto = useMemo(() => calcularGastoPorProyecto(viaticos), [viaticos]);
 
-  const proyectosVisibles = useMemo(() => {
+  const proyectosEnriquecidos = useMemo(() => {
     const rutasVisiblesIds = new Set(rutas.map((r) => r.id));
-    const q = searchQuery.trim().toLowerCase();
-
     return proyectos
       .filter((p) => {
         if (rol === 'tecnico') {
-          const tieneRutaAsignada = rutas.some(
-            (r) => r.proyectoId === p.id && rutasVisiblesIds.has(r.id)
-          );
-          if (!tieneRutaAsignada) return false;
+          return rutas.some((r) => r.proyectoId === p.id && rutasVisiblesIds.has(r.id));
         }
-
-        const cliente = clientes.find((c) => c.id === p.clienteId);
-        const rutasProy = rutas.filter((r) => r.proyectoId === p.id);
-        const srvsProy = servicios.filter((s) => rutasProy.some((r) => r.id === s.rutaId));
-        const estadoDerivado = calcularEstadoProyecto(srvsProy, p.estado);
-
-        const matchesEstado = estadoFiltro === 'ALL' || estadoDerivado === estadoFiltro;
-        const matchesSearch =
-          !q ||
-          p.nombre.toLowerCase().includes(q) ||
-          p.codigoContrato.toLowerCase().includes(q) ||
-          (cliente?.nombre || '').toLowerCase().includes(q) ||
-          rutasProy.some(
-            (r) =>
-              r.codigoParcela.toLowerCase().includes(q) ||
-              r.nombre.toLowerCase().includes(q) ||
-              r.provincia.toLowerCase().includes(q)
-          );
-        return matchesEstado && matchesSearch;
+        return true;
       })
       .map((p) => {
         const cliente = clientes.find((c) => c.id === p.clienteId);
@@ -305,6 +320,15 @@ export const ProyectosView: React.FC<ProyectosViewProps> = ({
         const srvsProy = servicios.filter((s) => rutasProy.some((r) => r.id === s.rutaId));
         const estadoActual = calcularEstadoProyecto(srvsProy, p.estado);
         const gastoReal = gastosPorProyecto[p.id]?.totalEjecutadoRD || 0;
+        const asigsProy = asignaciones.filter((a) =>
+          rutasProy.some((r) => r.id === a.rutaId)
+        );
+        const cuadrillasProy = Array.from(
+          new Set(asigsProy.map((a) => a.cuadrillaId))
+        )
+          .map((cId) => cuadrillas.find((c) => c.id === cId))
+          .filter((c): c is Cuadrilla => Boolean(c));
+
         let comparacionPresupuesto: ComparacionPresupuestoProyecto | undefined;
         if (canViewFinances) {
           const vigente = obtenerPresupuestoVigenteProyecto(presupuestos, p.id);
@@ -325,11 +349,14 @@ export const ProyectosView: React.FC<ProyectosViewProps> = ({
             ejecutado,
           });
         }
+
         return {
           proyecto: p,
           cliente,
           rutasProy,
           srvsProy,
+          asigsProy,
+          cuadrillasProy,
           estadoActual,
           gastoReal,
           comparacionPresupuesto,
@@ -341,8 +368,6 @@ export const ProyectosView: React.FC<ProyectosViewProps> = ({
     rutas,
     servicios,
     gastosPorProyecto,
-    searchQuery,
-    estadoFiltro,
     rol,
     canViewFinances,
     presupuestos,
@@ -355,20 +380,81 @@ export const ProyectosView: React.FC<ProyectosViewProps> = ({
     configuracion,
   ]);
 
+  const proyectosVisibles = useMemo(() => {
+    const q = searchQuery.trim().toLowerCase();
+    return proyectosEnriquecidos.filter((item) => {
+      if (clienteFolderFiltro !== 'ALL' && item.proyecto.clienteId !== clienteFolderFiltro) {
+        return false;
+      }
+      const matchesEstado = estadoFiltro === 'ALL' || item.estadoActual === estadoFiltro;
+      const matchesSearch =
+        !q ||
+        item.proyecto.nombre.toLowerCase().includes(q) ||
+        item.proyecto.codigoContrato.toLowerCase().includes(q) ||
+        (item.cliente?.nombre || '').toLowerCase().includes(q) ||
+        item.rutasProy.some(
+          (r) =>
+            r.codigoParcela.toLowerCase().includes(q) ||
+            r.nombre.toLowerCase().includes(q) ||
+            r.provincia.toLowerCase().includes(q)
+        );
+      return matchesEstado && matchesSearch;
+    });
+  }, [proyectosEnriquecidos, clienteFolderFiltro, estadoFiltro, searchQuery]);
+
+  // Carpetas por Cliente (inspirado en "Folders" del diseño de referencia)
+  const carpetasClientes = useMemo(() => {
+    const map = new Map<
+      string,
+      {
+        cliente: Cliente;
+        proyectosCount: number;
+        rutasCount: number;
+        inicialesEquipo: string[];
+      }
+    >();
+
+    for (const item of proyectosEnriquecidos) {
+      if (!item.cliente) continue;
+      const cur = map.get(item.cliente.id) ?? {
+        cliente: item.cliente,
+        proyectosCount: 0,
+        rutasCount: 0,
+        inicialesEquipo: [],
+      };
+      cur.proyectosCount += 1;
+      cur.rutasCount += item.rutasProy.length;
+      item.cuadrillasProy.forEach((c) => {
+        const jefe = personal.find((p) => p.id === c.jefeId);
+        const ini = getInitials(jefe?.nombre || c.nombre);
+        if (ini && !cur.inicialesEquipo.includes(ini)) {
+          cur.inicialesEquipo.push(ini);
+        }
+      });
+      map.set(item.cliente.id, cur);
+    }
+    return Array.from(map.values());
+  }, [proyectosEnriquecidos, personal]);
+
+  const selectedProyectoItem = useMemo(
+    () =>
+      selectedProyectoId
+        ? proyectosEnriquecidos.find((p) => p.proyecto.id === selectedProyectoId) ?? null
+        : null,
+    [proyectosEnriquecidos, selectedProyectoId]
+  );
+
   const kpis = useMemo(() => {
-    const activos = proyectos.filter((p) => {
-      const rutasP = rutas.filter((r) => r.proyectoId === p.id);
-      const srvsP = servicios.filter((s) => rutasP.some((r) => r.id === s.rutaId));
-      return calcularEstadoProyecto(srvsP, p.estado) !== 'cobrado';
-    }).length;
+    const activos = proyectosEnriquecidos.filter((p) => p.estadoActual !== 'cobrado').length;
     const totalAreaM2 = rutas.reduce((acc, r) => acc + r.totalAreaM2, 0);
+    const totalContratoRD = proyectos.reduce((acc, p) => acc + p.valorContratoRD, 0);
     const totalPresupViaticos = proyectos.reduce((acc, p) => acc + p.presupuestoViaticosRD, 0);
     const totalEjecutado = Object.values(gastosPorProyecto).reduce(
       (acc, item) => acc + item.totalEjecutadoRD,
       0
     );
-    return { activos, totalAreaM2, totalPresupViaticos, totalEjecutado };
-  }, [proyectos, rutas, servicios, gastosPorProyecto]);
+    return { activos, totalAreaM2, totalContratoRD, totalPresupViaticos, totalEjecutado };
+  }, [proyectosEnriquecidos, proyectos, rutas, gastosPorProyecto]);
 
   const handleConfirmCliente = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -414,8 +500,7 @@ export const ProyectosView: React.FC<ProyectosViewProps> = ({
     e.preventDefault();
     if (!rutaParaServicio) return;
     setModalError(null);
-    const svcCat =
-      serviciosActivos.find((s) => s.codigo === srvTipoCodigo) ?? primerServicio;
+    const svcCat = serviciosActivos.find((s) => s.codigo === srvTipoCodigo) ?? primerServicio;
     const cotizacionCalc = calcularCotizacionServicioVigente({
       servicio: svcCat,
       areaM2: rutaParaServicio.totalAreaM2,
@@ -508,501 +593,1191 @@ export const ProyectosView: React.FC<ProyectosViewProps> = ({
     [bitacoras, bitacoraServicio]
   );
 
+  // Renderizador reutilizable de tarjeta completa de rutas & servicios (usado en Detalle y en Lista clásica)
+  const renderProyectoRutasServicios = (
+    item: (typeof proyectosEnriquecidos)[number]
+  ) => {
+    const { proyecto, rutasProy, srvsProy } = item;
+    if (rutasProy.length === 0) {
+      return (
+        <div className="px-5 py-6 text-xs text-[#43474D] flex flex-wrap items-center justify-between gap-3">
+          <span>Este proyecto aún no tiene rutas KMZ/GeoJSON cargadas.</span>
+          {canEdit && (
+            <button
+              type="button"
+              onClick={() => onAbrirNuevaRutaKmz(proyecto.id)}
+              className="inline-flex items-center gap-1.5 rounded-xl border border-[#0284C7] bg-white px-3.5 py-2 text-xs font-semibold text-[#0284C7] hover:bg-sky-50 whitespace-nowrap"
+            >
+              <Plus className="h-3.5 w-3.5" />
+              Cargar archivo KMZ
+            </button>
+          )}
+        </div>
+      );
+    }
+
+    return (
+      <div className="divide-y divide-slate-200">
+        {rutasProy.map((ruta) => {
+          const serviciosRuta = srvsProy.filter((s) => s.rutaId === ruta.id);
+          return (
+            <div key={ruta.id} className="p-5 space-y-4">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                <div className="min-w-0">
+                  <div className="flex flex-wrap items-center gap-2 text-xs">
+                    <span className="font-mono font-bold text-[#0F2942]">
+                      {ruta.codigoParcela}
+                    </span>
+                    <span className="text-slate-300">·</span>
+                    <span className="font-semibold text-[#0D1C2F]">{ruta.nombre}</span>
+                  </div>
+                  <div className="mt-1 flex flex-wrap items-center gap-2 text-[11px] text-[#43474D] font-mono tabular-nums">
+                    <span className="inline-flex items-center gap-1 font-sans">
+                      <MapPin className="h-3 w-3 text-[#0284C7]" />
+                      {ruta.ubicacion} ({ruta.provincia})
+                    </span>
+                    <span>·</span>
+                    <span>{formatArea(ruta.totalAreaM2, areaUnit)}</span>
+                    <span>·</span>
+                    <span>P: {formatPerimeter(ruta.totalPerimeterM)}</span>
+                    <span>·</span>
+                    <span>Prevista: {ruta.fechaPrevista}</span>
+                  </div>
+                </div>
+
+                <div className="flex flex-wrap items-center gap-2 shrink-0">
+                  <button
+                    type="button"
+                    onClick={() => onVerRutaEnMapa(ruta.id)}
+                    className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-[#0F2942] hover:bg-slate-50 whitespace-nowrap shrink-0 min-h-[36px]"
+                  >
+                    <Layers className="h-3.5 w-3.5" />
+                    Ver mapa
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => onCalcularRuta(ruta.id)}
+                    className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-[#334155] hover:bg-slate-50 whitespace-nowrap shrink-0 min-h-[36px]"
+                  >
+                    <RouteIcon className="h-3.5 w-3.5" />
+                    Cotizar ruta
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => onReportarViaticoEnRuta(ruta.id, proyecto.id)}
+                    className="inline-flex items-center gap-1.5 rounded-xl bg-[#0284C7] px-3 py-1.5 text-xs font-semibold text-white hover:bg-[#0369A1] whitespace-nowrap shrink-0 min-h-[36px] transition-colors"
+                  >
+                    <Camera className="h-3.5 w-3.5" />
+                    Registrar viático
+                  </button>
+                  {canEdit && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setModalError(null);
+                        setRutaParaServicio(ruta);
+                      }}
+                      className="inline-flex items-center gap-1 rounded-xl border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-[#0F2942] hover:bg-slate-50 whitespace-nowrap shrink-0 min-h-[36px]"
+                    >
+                      <Plus className="h-3.5 w-3.5" />
+                      Agregar servicio
+                    </button>
+                  )}
+                </div>
+              </div>
+
+              {serviciosRuta.length > 0 && (
+                <div className="rounded-xl border border-slate-200/80 overflow-x-auto">
+                  <table className="w-full text-left text-xs border-collapse">
+                    <thead>
+                      <tr className="bg-[#F8FAFC] border-b border-slate-200/80 text-[11px] font-semibold uppercase tracking-wider text-[#475569]">
+                        <th className="px-3.5 py-2.5">Servicio</th>
+                        <th className="px-3.5 py-2.5 text-right">Cotización</th>
+                        <th className="px-3.5 py-2.5">Fechas / Cobro</th>
+                        <th className="px-3.5 py-2.5">Estado</th>
+                        <th className="px-3.5 py-2.5 text-right">Acciones</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100">
+                      {serviciosRuta.map((srv) => {
+                        const siguientes = obtenerEstadosSiguientesPermitidos({
+                          rol,
+                          servicio: srv,
+                          rutasAsignadasIds,
+                        });
+                        const countBitacora = bitacoras.filter(
+                          (b) => b.servicioId === srv.id
+                        ).length;
+                        const puedeBitacora = puedeRegistrarBitacoraEnServicio({
+                          rol,
+                          servicio: srv,
+                          rutasAsignadasIds,
+                        });
+
+                        return (
+                          <tr key={srv.id} className="hover:bg-[#F8FAFC] transition-colors">
+                            <td className="px-3.5 py-2.5 font-medium text-[#0F2942]">
+                              {srv.nombre}
+                            </td>
+                            <td className="px-3.5 py-2.5 text-right font-mono tabular-nums">
+                              {formatRD(srv.cotizacionRD)}
+                            </td>
+                            <td className="px-3.5 py-2.5 font-mono text-[11px] text-[#475569]">
+                              <div>
+                                {srv.fechaRealInicio
+                                  ? `Inicio: ${srv.fechaRealInicio}`
+                                  : 'Sin inicio'}
+                                {srv.fechaRealFin ? ` · Fin: ${srv.fechaRealFin}` : ''}
+                              </div>
+                              {srv.estado === 'cobrado' &&
+                                typeof srv.montoCobradoRD === 'number' && (
+                                  <div className="mt-0.5 inline-flex items-center gap-1 text-[11px] font-semibold text-[#15803D] tabular-nums">
+                                    <DollarSign className="h-3 w-3 shrink-0" />
+                                    Cobrado {formatRD(srv.montoCobradoRD)} · Pago{' '}
+                                    {srv.fechaPago || 'N/D'}
+                                  </div>
+                                )}
+                            </td>
+                            <td className="px-3.5 py-2.5">
+                              <WorkflowBadge status={srv.estado} />
+                            </td>
+                            <td className="px-3.5 py-2.5 text-right whitespace-nowrap">
+                              <div className="inline-flex items-center gap-1.5">
+                                {siguientes.map((nextSt) => (
+                                  <button
+                                    key={nextSt}
+                                    type="button"
+                                    onClick={() => handleIniciarTransicion(srv, nextSt)}
+                                    className={`rounded-xl px-2.5 py-1.5 text-[11px] font-semibold transition-colors whitespace-nowrap shrink-0 ${
+                                      nextSt === 'cobrado'
+                                        ? 'bg-[#15803D] text-white hover:bg-[#166534]'
+                                        : 'border border-slate-200 bg-white text-[#0F2942] hover:bg-sky-50'
+                                    }`}
+                                  >
+                                    {ACCION_ESTADO_SERVICIO[nextSt]}
+                                  </button>
+                                ))}
+
+                                {puedeBitacora && (
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      setModalError(null);
+                                      setBitacoraServicio(srv);
+                                    }}
+                                    className="inline-flex items-center gap-1 rounded-xl border border-slate-200 bg-white px-2.5 py-1.5 text-[11px] font-semibold text-[#334155] hover:bg-slate-100 whitespace-nowrap shrink-0"
+                                  >
+                                    <ClipboardList className="h-3 w-3" />
+                                    Bitácora ({countBitacora})
+                                  </button>
+                                )}
+                              </div>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </div>
+    );
+  };
+
   if (isLoading && proyectos.length === 0) {
     return <ProyectosViewSkeleton />;
   }
 
   return (
     <section className="space-y-6">
-      <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-2">
-        <div>
-          <h2 className="text-2xl sm:text-[26px] font-bold tracking-tight text-[#0F2942]">
-            Proyectos y Contratos
-          </h2>
-          <p className="text-sm text-[#475569] mt-0.5">
-            Cartera de clientes, rutas KMZ/GeoJSON, estados de servicio y bitácoras de campo.
-          </p>
-        </div>
-      </div>
-
-      {/* KPI Strip + Recharts Budget vs Actual Chart */}
-      <div className="grid grid-cols-1 xl:grid-cols-12 gap-4 items-stretch">
-        <div className="xl:col-span-5 grid grid-cols-2 gap-4">
-          <div className="rounded-2xl bg-gradient-to-br from-[#0F2942] to-[#0284C7] p-5 text-white shadow-sm flex flex-col justify-between">
-            <div className="text-xs font-medium text-sky-100">Proyectos Activos</div>
-            <div className="mt-2 flex items-baseline justify-between gap-2">
-              <span className="font-mono text-2xl font-bold text-white tabular-nums">
-                {kpis.activos}
-              </span>
-              <span className="text-xs text-sky-100/90">{proyectos.length} totales</span>
-            </div>
-          </div>
-
-          <div className="rounded-2xl border border-slate-200/90 bg-white p-5 flex flex-col justify-between">
-            <div className="text-xs font-medium text-[#475569]">Superficie en Rutas</div>
-            <div className="mt-2 font-mono text-xl font-bold text-[#0284C7] tabular-nums">
-              {formatArea(kpis.totalAreaM2, areaUnit)}
-            </div>
-          </div>
-
-          {canViewFinances && (
-            <div className="rounded-2xl border border-slate-200/90 bg-white p-5 flex flex-col justify-between">
-              <div className="text-xs font-medium text-[#475569]">Viáticos Ejecutados</div>
-              <div>
-                <div className="mt-1 font-mono text-lg sm:text-xl font-bold text-[#0F2942] tabular-nums truncate">
-                  {formatRD(kpis.totalEjecutado)}
-                </div>
-                <div className="mt-0.5 font-mono text-[11px] text-[#475569] tabular-nums">
-                  Presup.: {formatRD(kpis.totalPresupViaticos)}
-                </div>
-              </div>
-            </div>
-          )}
-
-          <div className="rounded-2xl border border-slate-200/90 bg-white p-5 flex flex-col justify-between">
-            <div className="text-xs font-medium text-[#475569]">Cola Offline / Sync</div>
-            <div className="mt-2 flex items-baseline justify-between">
-              <span
-                className={`font-mono text-2xl font-bold tabular-nums ${
-                  pendingSyncCount > 0 ? 'text-[#B45309]' : 'text-[#15803D]'
-                }`}
-              >
-                {pendingSyncCount}
-              </span>
-              <span className="text-xs text-[#475569]">
-                {pendingSyncCount === 0 ? 'Al día' : 'Pendientes'}
-              </span>
-            </div>
-          </div>
-        </div>
-
-        {canViewFinances && (
-          <div className="xl:col-span-7 min-w-0">
-            <ViaticosComparisonChart
-              proyectos={proyectos}
-              viaticos={viaticos}
-              onSelectProyecto={(proyId) => {
-                const firstRuta = rutas.find((r) => r.proyectoId === proyId);
-                if (firstRuta) onVerRutaEnMapa(firstRuta.id);
-              }}
-            />
-          </div>
-        )}
-      </div>
-
       {actionError && (
         <div className="rounded-2xl border border-[#FCA5A5] bg-[#FEE2E2] px-4 py-3 text-xs font-medium text-[#93000A]">
           {actionError}
         </div>
       )}
 
-      {/* Toolbar & F2 Quick Create Actions */}
-      <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3 rounded-2xl border border-slate-200/90 bg-white p-4">
-        <div className="relative flex-1 min-w-[200px]">
-          <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
-          <input
-            type="text"
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder="Buscar cliente, contrato, ruta KMZ o provincia..."
-            className="w-full rounded-xl border border-slate-200 bg-[#F8FAFC] pl-10 pr-3 py-2 text-xs text-[#0F2942] focus:border-[#0284C7] focus:bg-white focus:outline-none min-h-[42px]"
-          />
-        </div>
+      {/* VISTA DEDICADA: DETALLE DE PROYECTO */}
+      {selectedProyectoItem ? (
+        (() => {
+          const {
+            proyecto,
+            cliente,
+            rutasProy,
+            srvsProy,
+            asigsProy,
+            estadoActual,
+            gastoReal,
+            comparacionPresupuesto,
+          } = selectedProyectoItem;
+          const overBudget = comparacionPresupuesto
+            ? comparacionPresupuesto.excedidoTotal
+            : gastoReal > proyecto.presupuestoViaticosRD;
+          const totalAreaM2 = rutasProy.reduce((acc, r) => acc + r.totalAreaM2, 0);
+          const totalCobrado = srvsProy.reduce(
+            (acc, s) =>
+              acc +
+              (s.estado === 'cobrado' && typeof s.montoCobradoRD === 'number'
+                ? s.montoCobradoRD
+                : 0),
+            0
+          );
+          const viaticosProyecto = viaticos.filter(
+            (v) =>
+              v.repartos.some((r) => r.proyectoId === proyecto.id) ||
+              rutasProy.some((r) => r.id === v.rutaId)
+          );
+          const coverIndex = Math.max(
+            0,
+            proyectos.findIndex((p) => p.id === proyecto.id)
+          ) % PROJECT_COVER_IMAGES.length;
+          const coverSrc = PROJECT_COVER_IMAGES[coverIndex];
 
-        <div className="flex flex-wrap items-center gap-2">
-          <select
-            value={estadoFiltro}
-            onChange={(e) => setEstadoFiltro(e.target.value as EstadoServicio | 'ALL')}
-            className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs text-[#334155] min-h-[42px] focus:border-[#0284C7] focus:outline-none"
-            aria-label="Filtrar por estado"
-          >
-            <option value="ALL">Todos los estados</option>
-            {ESTADOS_SERVICIO.map((st) => (
-              <option key={st} value={st}>
-                {ETIQUETA_ESTADO[st]}
-              </option>
-            ))}
-          </select>
+          return (
+            <div className="space-y-6">
+              {/* Breadcrumb / Regreso */}
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <button
+                  type="button"
+                  onClick={() => setSelectedProyectoId(null)}
+                  className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2 text-xs font-semibold text-[#0F2942] hover:bg-slate-50 min-h-[42px]"
+                >
+                  <ArrowLeft className="h-4 w-4" />
+                  Volver a proyectos
+                </button>
 
-          <div className="inline-flex rounded-2xl border border-slate-200/70 bg-[#F1F5F9] p-1">
-            {(
-              [
-                { id: 'm2', label: 'm²' },
-                { id: 'ha', label: 'ha' },
-                { id: 'tareas', label: 'Tareas' },
-              ] as const
-            ).map((u) => (
-              <button
-                key={u.id}
-                type="button"
-                onClick={() => onChangeAreaUnit(u.id)}
-                className={`rounded-xl px-3 py-1.5 text-xs font-semibold transition-colors whitespace-nowrap shrink-0 min-h-[34px] ${
-                  areaUnit === u.id
-                    ? 'bg-[#0F2942] text-white shadow-sm'
-                    : 'text-[#475569] hover:text-[#0F2942]'
-                }`}
-              >
-                {u.label}
-              </button>
-            ))}
-          </div>
+                <div className="flex flex-wrap items-center gap-2">
+                  {rutasProy[0] && (
+                    <button
+                      type="button"
+                      onClick={() => onVerRutaEnMapa(rutasProy[0].id)}
+                      className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3.5 py-2 text-xs font-semibold text-[#0F2942] hover:bg-slate-50 min-h-[42px]"
+                    >
+                      <Layers className="h-3.5 w-3.5 text-[#0284C7]" />
+                      Ver cartografía
+                    </button>
+                  )}
+                  {canViewFinances && (
+                    <button
+                      type="button"
+                      onClick={() => setPresupuestoModalProyectoId(proyecto.id)}
+                      className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3.5 py-2 text-xs font-semibold text-[#0F2942] hover:bg-slate-50 min-h-[42px]"
+                    >
+                      <Calculator className="h-3.5 w-3.5 text-[#0284C7]" />
+                      Ver presupuesto
+                    </button>
+                  )}
+                  {canEdit && (
+                    <button
+                      type="button"
+                      onClick={() => onAbrirNuevaRutaKmz(proyecto.id)}
+                      className="inline-flex items-center gap-1.5 rounded-xl bg-[#0F2942] px-4 py-2 text-xs font-semibold text-white hover:bg-[#0284C7] min-h-[42px] transition-colors"
+                    >
+                      <Plus className="h-3.5 w-3.5" />
+                      Agregar ruta KMZ
+                    </button>
+                  )}
+                </div>
+              </div>
 
-          {canViewFinances && onAbrirPanelPresupuestos && (
-            <button
-              type="button"
-              onClick={onAbrirPanelPresupuestos}
-              className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3.5 py-2 text-xs font-semibold text-[#0F2942] hover:bg-slate-50 whitespace-nowrap shrink-0 min-h-[42px]"
-            >
-              <Calculator className="h-3.5 w-3.5 text-[#0284C7]" />
-              Panel de presupuestos
-            </button>
-          )}
-
-          {canEdit && (
-            <>
-              <button
-                type="button"
-                onClick={() => {
-                  setModalError(null);
-                  setShowClienteModal(true);
-                }}
-                className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3.5 py-2 text-xs font-semibold text-[#0F2942] hover:bg-slate-50 whitespace-nowrap shrink-0 min-h-[42px]"
-              >
-                <UserPlus className="h-3.5 w-3.5" />
-                Nuevo cliente
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  setModalError(null);
-                  setProyClienteId(clientes[0]?.id || '');
-                  setShowProyectoModal(true);
-                }}
-                className="inline-flex items-center gap-1.5 rounded-xl bg-[#0F2942] px-4 py-2 text-xs font-semibold text-white hover:bg-[#0284C7] whitespace-nowrap shrink-0 min-h-[42px] transition-colors"
-              >
-                <FolderPlus className="h-3.5 w-3.5" />
-                Nuevo proyecto
-              </button>
-            </>
-          )}
-        </div>
-      </div>
-
-      {/* Hierarchy List: Cliente -> Proyecto -> Rutas -> Servicios -> Bitácora */}
-      {proyectosVisibles.length === 0 ? (
-        <div className="rounded-2xl border border-slate-200/90 bg-white p-10 text-center text-xs text-[#475569]">
-          {rol === 'tecnico'
-            ? 'No tienes rutas asignadas en tus cuadrillas activas todavía.'
-            : 'No hay proyectos que coincidan con los filtros seleccionados.'}
-        </div>
-      ) : (
-        <div className="space-y-5">
-          {proyectosVisibles.map(
-            ({
-              proyecto,
-              cliente,
-              rutasProy,
-              srvsProy,
-              estadoActual,
-              gastoReal,
-              comparacionPresupuesto,
-            }) => {
-            const overBudget = comparacionPresupuesto
-              ? comparacionPresupuesto.excedidoTotal
-              : gastoReal > proyecto.presupuestoViaticosRD;
-            return (
-              <div
-                key={proyecto.id}
-                className="rounded-2xl border border-slate-200/90 bg-white overflow-hidden"
-              >
-                {/* Project Header */}
-                <div className="border-b border-slate-200/80 bg-[#F8FAFC] px-5 py-4 space-y-3">
-                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                    <div className="min-w-0 space-y-1">
-                      <div className="flex flex-wrap items-center gap-2 text-xs">
-                        <span className="font-mono font-bold text-[#0284C7]">
-                          {proyecto.codigoContrato}
-                        </span>
-                        <span aria-hidden="true" className="text-slate-300">·</span>
-                        <WorkflowBadge status={estadoActual} />
-                        <span aria-hidden="true" className="text-slate-300">·</span>
-                        <span className="text-[#475569]">
-                          {cliente ? `${cliente.nombre} (RNC ${cliente.rnc})` : 'Cliente sin asignar'}
-                        </span>
+              {/* Hero del Proyecto */}
+              <div className="rounded-2xl border border-slate-200/90 bg-white overflow-hidden">
+                <div className="relative h-36 sm:h-44 bg-[#0F2942] overflow-hidden">
+                  {!failedCovers[coverSrc] && (
+                    <img
+                      src={coverSrc}
+                      alt={proyecto.nombre}
+                      referrerPolicy="no-referrer"
+                      onError={() =>
+                        setFailedCovers((prev) => ({ ...prev, [coverSrc]: true }))
+                      }
+                      className="h-full w-full object-cover"
+                    />
+                  )}
+                  <div
+                    aria-hidden="true"
+                    className="absolute inset-0 bg-gradient-to-t from-[#091A2C]/90 via-[#0F2942]/45 to-[#091A2C]/25"
+                  />
+                  <div className="absolute inset-x-0 bottom-0 p-5 sm:p-6 flex flex-col sm:flex-row sm:items-end justify-between gap-3 text-white">
+                    <div className="space-y-1 min-w-0">
+                      <div className="flex flex-wrap items-center gap-2 text-xs text-sky-200 font-mono">
+                        <span>{proyecto.codigoContrato}</span>
+                        <span aria-hidden="true">·</span>
+                        <span>Creado {proyecto.fechaCreacion}</span>
+                        <span aria-hidden="true">·</span>
+                        <span>{rutasProy.length} ruta(s) KMZ</span>
                       </div>
-                      <h3 className="text-base font-bold tracking-tight text-[#0F2942] text-balance">
+                      <h2 className="text-xl sm:text-2xl font-bold tracking-tight text-white">
                         {proyecto.nombre}
-                      </h3>
+                      </h2>
                     </div>
+                    <WorkflowBadge status={estadoActual} />
+                  </div>
+                </div>
 
-                    <div className="flex flex-wrap items-center gap-2 shrink-0">
-                      {canViewFinances && (
-                        <button
-                          type="button"
-                          onClick={() => setPresupuestoModalProyectoId(proyecto.id)}
-                          className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3.5 py-2 text-xs font-semibold text-[#0F2942] hover:bg-slate-50 whitespace-nowrap shrink-0 min-h-[40px]"
-                        >
-                          <Calculator className="h-3.5 w-3.5 text-[#0284C7]" />
-                          Ver presupuesto
-                        </button>
-                      )}
-                      {canEdit && (
-                        <button
-                          type="button"
-                          onClick={() => onAbrirNuevaRutaKmz(proyecto.id)}
-                          className="inline-flex items-center gap-1.5 rounded-xl border border-[#0284C7] bg-white px-3.5 py-2 text-xs font-semibold text-[#0284C7] hover:bg-sky-50 whitespace-nowrap shrink-0 min-h-[40px]"
-                        >
-                          <Plus className="h-3.5 w-3.5" />
-                          Agregar ruta KMZ
-                        </button>
+                {/* Info del cliente + notas + KPIs */}
+                <div className="p-5 sm:p-6 space-y-5">
+                  <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 border-b border-slate-100 pb-4 text-xs">
+                    <div className="space-y-0.5">
+                      <div className="text-[11px] font-semibold text-[#475569]">Cliente contratante</div>
+                      <div className="text-sm font-bold text-[#0F2942]">
+                        {cliente ? cliente.nombre : 'Cliente sin asignar'}
+                      </div>
+                      {cliente && (
+                        <div className="text-[#475569]">
+                          RNC {cliente.rnc} · Contacto: {cliente.contacto}
+                          {cliente.telefono ? ` · ${cliente.telefono}` : ''}
+                        </div>
                       )}
                     </div>
+                    {proyecto.notas && (
+                      <div className="rounded-xl border border-slate-200/80 bg-[#F8FAFC] px-3.5 py-2.5 max-w-md text-[#334155]">
+                        {proyecto.notas}
+                      </div>
+                    )}
                   </div>
 
-                  {canViewFinances && comparacionPresupuesto && (
-                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 pt-3 border-t border-slate-200/80 text-xs">
-                      <div>
-                        <div className="text-[11px] text-[#43474D]">Valor de contrato</div>
-                        <div className="font-mono font-bold text-[#0D1C2F] tabular-nums">
+                  {canViewFinances && comparacionPresupuesto ? (
+                    <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+                      <div className="rounded-xl border border-slate-200/80 bg-[#F8FAFC] p-4">
+                        <div className="text-[11px] text-[#475569]">Valor de contrato</div>
+                        <div className="mt-1 font-mono text-lg font-bold text-[#0F2942] tabular-nums">
                           {formatRD(proyecto.valorContratoRD, moneda)}
                         </div>
                       </div>
-                      <div>
-                        <div className="text-[11px] text-[#43474D]">Costo ejecutado / planificado</div>
+                      <div className="rounded-xl border border-slate-200/80 bg-[#F8FAFC] p-4">
+                        <div className="text-[11px] text-[#475569]">Ejecutado / Planificado</div>
                         <div
-                          className={`font-mono font-bold tabular-nums ${
+                          className={`mt-1 font-mono text-lg font-bold tabular-nums ${
                             overBudget ? 'text-[#DC2626]' : 'text-[#0F2942]'
                           }`}
                         >
-                          {formatRD(comparacionPresupuesto.totalEjecutadoRD, moneda)}{' '}
-                          <span className="font-normal text-[#43474D]">
-                            / {formatRD(comparacionPresupuesto.totalPlanificadoRD, moneda)}
-                          </span>
+                          {formatRD(comparacionPresupuesto.totalEjecutadoRD, moneda)}
+                        </div>
+                        <div className="text-[11px] font-mono text-[#475569]">
+                          de {formatRD(comparacionPresupuesto.totalPlanificadoRD, moneda)}
                         </div>
                       </div>
-                      <div>
-                        <div className="text-[11px] text-[#43474D]">Margen real</div>
+                      <div className="rounded-xl border border-slate-200/80 bg-[#F8FAFC] p-4">
+                        <div className="text-[11px] text-[#475569]">Margen real</div>
                         <div
-                          className={`font-mono font-bold tabular-nums ${
+                          className={`mt-1 font-mono text-lg font-bold tabular-nums ${
                             comparacionPresupuesto.margenRealRD < 0
                               ? 'text-[#DC2626]'
                               : 'text-[#15803D]'
                           }`}
                         >
                           {formatRD(comparacionPresupuesto.margenRealRD, moneda)}
-                          {comparacionPresupuesto.margenRealPct !== null
-                            ? ` (${comparacionPresupuesto.margenRealPct}%)`
-                            : ''}
+                        </div>
+                        {comparacionPresupuesto.margenRealPct !== null && (
+                          <div className="text-[11px] font-mono text-[#475569]">
+                            {comparacionPresupuesto.margenRealPct}% margen
+                          </div>
+                        )}
+                      </div>
+                      <div className="rounded-xl border border-slate-200/80 bg-[#F8FAFC] p-4">
+                        <div className="text-[11px] text-[#475569]">Total cobrado & Área</div>
+                        <div className="mt-1 font-mono text-lg font-bold text-[#15803D] tabular-nums">
+                          {formatRD(totalCobrado, moneda)}
+                        </div>
+                        <div className="text-[11px] font-mono text-[#475569]">
+                          {formatArea(totalAreaM2, areaUnit)}
                         </div>
                       </div>
-                      <div>
-                        <div className="text-[11px] text-[#43474D]">Total cobrado</div>
-                        <div className="font-mono font-bold text-[#15803D] tabular-nums">
-                          {formatRD(
-                            srvsProy.reduce(
-                              (acc, s) =>
-                                acc +
-                                (s.estado === 'cobrado' && typeof s.montoCobradoRD === 'number'
-                                  ? s.montoCobradoRD
-                                  : 0),
-                              0
-                            ),
-                            moneda
-                          )}
+                    </div>
+                  ) : (
+                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
+                      <div className="rounded-xl border border-slate-200/80 bg-[#F8FAFC] p-4">
+                        <div className="text-[11px] text-[#475569]">Rutas asignadas</div>
+                        <div className="mt-1 font-mono text-lg font-bold text-[#0F2942] tabular-nums">
+                          {rutasProy.length}
+                        </div>
+                      </div>
+                      <div className="rounded-xl border border-slate-200/80 bg-[#F8FAFC] p-4">
+                        <div className="text-[11px] text-[#475569]">Superficie total</div>
+                        <div className="mt-1 font-mono text-lg font-bold text-[#0284C7] tabular-nums">
+                          {formatArea(totalAreaM2, areaUnit)}
+                        </div>
+                      </div>
+                      <div className="rounded-xl border border-slate-200/80 bg-[#F8FAFC] p-4">
+                        <div className="text-[11px] text-[#475569]">Servicios activos</div>
+                        <div className="mt-1 font-mono text-lg font-bold text-[#0F2942] tabular-nums">
+                          {srvsProy.length}
                         </div>
                       </div>
                     </div>
                   )}
                 </div>
+              </div>
 
-                {/* Rutas inside Proyecto */}
-                {rutasProy.length === 0 ? (
-                  <div className="px-5 py-5 text-xs text-[#43474D] flex items-center justify-between gap-3">
-                    <span>Este proyecto aún no tiene rutas KMZ/GeoJSON cargadas.</span>
-                    {canEdit && (
+              {/* Rutas y Servicios dentro del Proyecto */}
+              <div className="rounded-2xl border border-slate-200/90 bg-white overflow-hidden">
+                <div className="border-b border-slate-200/80 bg-[#F8FAFC] px-5 py-3.5 flex items-center justify-between gap-2">
+                  <h3 className="text-sm font-bold text-[#0F2942]">
+                    Rutas KMZ y Servicios ({rutasProy.length})
+                  </h3>
+                  <div className="inline-flex rounded-xl border border-slate-200 bg-white p-0.5">
+                    {(['m2', 'ha', 'tareas'] as const).map((u) => (
+                      <button
+                        key={u}
+                        type="button"
+                        onClick={() => onChangeAreaUnit(u)}
+                        className={`rounded-lg px-2.5 py-1 text-[11px] font-semibold ${
+                          areaUnit === u
+                            ? 'bg-[#0F2942] text-white'
+                            : 'text-[#475569] hover:text-[#0F2942]'
+                        }`}
+                      >
+                        {u === 'm2' ? 'm²' : u === 'ha' ? 'ha' : 'Tareas'}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                {renderProyectoRutasServicios(selectedProyectoItem)}
+              </div>
+
+              {/* Cuadrillas programadas y Viáticos del Proyecto */}
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
+                <div className="rounded-2xl border border-slate-200/90 bg-white p-5 space-y-3">
+                  <div className="flex items-center gap-2 text-sm font-bold text-[#0F2942]">
+                    <Users className="h-4 w-4 text-[#0284C7]" />
+                    Cuadrillas asignadas ({asigsProy.length})
+                  </div>
+                  {asigsProy.length === 0 ? (
+                    <p className="text-xs text-[#475569]">
+                      Sin asignaciones de cuadrilla programadas todavía para las rutas de este proyecto.
+                    </p>
+                  ) : (
+                    <div className="space-y-2.5 text-xs">
+                      {asigsProy.map((asig) => {
+                        const cuad = cuadrillas.find((c) => c.id === asig.cuadrillaId);
+                        const ruta = rutasProy.find((r) => r.id === asig.rutaId);
+                        return (
+                          <div
+                            key={asig.id}
+                            className="rounded-xl border border-slate-200/70 bg-[#F8FAFC] p-3 flex items-center justify-between gap-2"
+                          >
+                            <div className="min-w-0">
+                              <div className="font-bold text-[#0F2942] truncate">
+                                {cuad?.nombre || asig.cuadrillaId}
+                              </div>
+                              <div className="text-[11px] text-[#475569] truncate">
+                                {ruta?.codigoParcela || asig.rutaId} · {ruta?.provincia || ''}
+                              </div>
+                            </div>
+                            <div className="font-mono text-[11px] font-semibold text-[#0284C7] shrink-0 tabular-nums">
+                              {asig.fechaInicio} → {asig.fechaFin}
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+
+                <div className="rounded-2xl border border-slate-200/90 bg-white p-5 space-y-3">
+                  <div className="flex items-center gap-2 text-sm font-bold text-[#0F2942]">
+                    <Receipt className="h-4 w-4 text-[#0284C7]" />
+                    Viáticos vinculados ({viaticosProyecto.length})
+                  </div>
+                  {viaticosProyecto.length === 0 ? (
+                    <p className="text-xs text-[#475569]">
+                      No hay viáticos registrados aún para este proyecto.
+                    </p>
+                  ) : (
+                    <div className="space-y-2.5 text-xs max-h-60 overflow-y-auto pr-1">
+                      {viaticosProyecto.slice(0, 6).map((v) => (
+                        <div
+                          key={v.id}
+                          className="rounded-xl border border-slate-200/70 bg-[#F8FAFC] p-3 flex items-center justify-between gap-2"
+                        >
+                          <div className="min-w-0">
+                            <div className="font-bold text-[#0F2942] truncate">{v.comercio}</div>
+                            <div className="font-mono text-[11px] text-[#475569]">
+                              {v.fechaIso} · {v.categoria} · {v.estadoAprobacion}
+                            </div>
+                          </div>
+                          <div className="font-mono font-bold text-[#0F2942] shrink-0 tabular-nums">
+                            {formatRD(v.montoRD, moneda)}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+          );
+        })()
+      ) : (
+        <>
+          {/* Encabezado Principal + Selector de Modo de Vista */}
+          <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-3">
+            <div>
+              <h2 className="text-2xl sm:text-[26px] font-bold tracking-tight text-[#0F2942]">
+                Proyectos y Contratos
+              </h2>
+              <p className="text-sm text-[#475569] mt-0.5">
+                Cartera por cliente, ubicación geográfica de parcelas, detalle operativo y bitácoras.
+              </p>
+            </div>
+
+            <div className="inline-flex rounded-2xl border border-slate-200/80 bg-white p-1 shadow-xs self-start sm:self-auto">
+              <button
+                type="button"
+                onClick={() => setViewMode('tarjetas')}
+                className={`inline-flex items-center gap-1.5 rounded-xl px-3.5 py-2 text-xs font-semibold transition-colors whitespace-nowrap shrink-0 ${
+                  viewMode === 'tarjetas'
+                    ? 'bg-[#0F2942] text-white shadow-sm'
+                    : 'text-[#475569] hover:text-[#0F2942]'
+                }`}
+              >
+                <LayoutGrid className="h-3.5 w-3.5" />
+                Tarjetas
+              </button>
+              <button
+                type="button"
+                onClick={() => setViewMode('mapa')}
+                className={`inline-flex items-center gap-1.5 rounded-xl px-3.5 py-2 text-xs font-semibold transition-colors whitespace-nowrap shrink-0 ${
+                  viewMode === 'mapa'
+                    ? 'bg-[#0F2942] text-white shadow-sm'
+                    : 'text-[#475569] hover:text-[#0F2942]'
+                }`}
+              >
+                <MapIcon className="h-3.5 w-3.5" />
+                Mapa de ubicación
+              </button>
+              <button
+                type="button"
+                onClick={() => setViewMode('lista')}
+                className={`inline-flex items-center gap-1.5 rounded-xl px-3.5 py-2 text-xs font-semibold transition-colors whitespace-nowrap shrink-0 ${
+                  viewMode === 'lista'
+                    ? 'bg-[#0F2942] text-white shadow-sm'
+                    : 'text-[#475569] hover:text-[#0F2942]'
+                }`}
+              >
+                <List className="h-3.5 w-3.5" />
+                Lista detallada
+              </button>
+            </div>
+          </div>
+
+          {/* KPI Strip + Recharts Chart */}
+          <div className="grid grid-cols-1 xl:grid-cols-12 gap-4 items-stretch">
+            <div className="xl:col-span-5 grid grid-cols-2 gap-4">
+              <div className="rounded-2xl bg-gradient-to-br from-[#0F2942] to-[#0284C7] p-5 text-white shadow-sm flex flex-col justify-between">
+                <div className="text-xs font-medium text-sky-100">Proyectos Activos</div>
+                <div className="mt-2 flex items-baseline justify-between gap-2">
+                  <span className="font-mono text-2xl font-bold text-white tabular-nums">
+                    {kpis.activos}
+                  </span>
+                  <span className="text-xs text-sky-100/90">{proyectos.length} totales</span>
+                </div>
+              </div>
+
+              <div className="rounded-2xl border border-slate-200/90 bg-white p-5 flex flex-col justify-between">
+                <div className="text-xs font-medium text-[#475569]">Superficie en Rutas</div>
+                <div className="mt-2 font-mono text-xl font-bold text-[#0284C7] tabular-nums">
+                  {formatArea(kpis.totalAreaM2, areaUnit)}
+                </div>
+              </div>
+
+              {canViewFinances && (
+                <div className="rounded-2xl border border-slate-200/90 bg-white p-5 flex flex-col justify-between">
+                  <div className="text-xs font-medium text-[#475569]">Viáticos Ejecutados</div>
+                  <div>
+                    <div className="mt-1 font-mono text-lg sm:text-xl font-bold text-[#0F2942] tabular-nums truncate">
+                      {formatRD(kpis.totalEjecutado)}
+                    </div>
+                    <div className="mt-0.5 font-mono text-[11px] text-[#475569] tabular-nums">
+                      Presup.: {formatRD(kpis.totalPresupViaticos)}
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              <div className="rounded-2xl border border-slate-200/90 bg-white p-5 flex flex-col justify-between">
+                <div className="text-xs font-medium text-[#475569]">
+                  {canViewFinances ? 'Valor en Contratos' : 'Cola Offline / Sync'}
+                </div>
+                {canViewFinances ? (
+                  <div>
+                    <div className="mt-1 font-mono text-lg sm:text-xl font-bold text-[#0F2942] tabular-nums truncate">
+                      {formatRD(kpis.totalContratoRD, moneda)}
+                    </div>
+                    <div className="mt-0.5 font-mono text-[11px] text-[#475569] tabular-nums">
+                      {rutas.length} ruta(s) · {pendingSyncCount === 0 ? 'Sync al día' : `${pendingSyncCount} pend.`}
+                    </div>
+                  </div>
+                ) : (
+                  <div className="mt-2 flex items-baseline justify-between">
+                    <span
+                      className={`font-mono text-2xl font-bold tabular-nums ${
+                        pendingSyncCount > 0 ? 'text-[#B45309]' : 'text-[#15803D]'
+                      }`}
+                    >
+                      {pendingSyncCount}
+                    </span>
+                    <span className="text-xs text-[#475569]">
+                      {pendingSyncCount === 0 ? 'Al día' : 'Pendientes'}
+                    </span>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {canViewFinances && (
+              <div className="xl:col-span-7 min-w-0">
+                <ViaticosComparisonChart
+                  proyectos={proyectos}
+                  viaticos={viaticos}
+                  onSelectProyecto={(proyId) => setSelectedProyectoId(proyId)}
+                />
+              </div>
+            )}
+          </div>
+
+          {/* Barra de búsqueda y acciones rápidas */}
+          <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3 rounded-2xl border border-slate-200/90 bg-white p-4">
+            <div className="relative flex-1 min-w-[200px]">
+              <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
+              <input
+                type="text"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                placeholder="Buscar cliente, contrato, ruta KMZ o provincia..."
+                className="w-full rounded-xl border border-slate-200 bg-[#F8FAFC] pl-10 pr-3 py-2 text-xs text-[#0F2942] focus:border-[#0284C7] focus:bg-white focus:outline-none min-h-[42px]"
+              />
+            </div>
+
+            <div className="flex flex-wrap items-center gap-2">
+              <select
+                value={estadoFiltro}
+                onChange={(e) => setEstadoFiltro(e.target.value as EstadoServicio | 'ALL')}
+                className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs text-[#334155] min-h-[42px] focus:border-[#0284C7] focus:outline-none"
+                aria-label="Filtrar por estado"
+              >
+                <option value="ALL">Todos los estados</option>
+                {ESTADOS_SERVICIO.map((st) => (
+                  <option key={st} value={st}>
+                    {ETIQUETA_ESTADO[st]}
+                  </option>
+                ))}
+              </select>
+
+              <div className="inline-flex rounded-2xl border border-slate-200/70 bg-[#F1F5F9] p-1">
+                {(
+                  [
+                    { id: 'm2', label: 'm²' },
+                    { id: 'ha', label: 'ha' },
+                    { id: 'tareas', label: 'Tareas' },
+                  ] as const
+                ).map((u) => (
+                  <button
+                    key={u.id}
+                    type="button"
+                    onClick={() => onChangeAreaUnit(u.id)}
+                    className={`rounded-xl px-3 py-1.5 text-xs font-semibold transition-colors whitespace-nowrap shrink-0 min-h-[34px] ${
+                      areaUnit === u.id
+                        ? 'bg-[#0F2942] text-white shadow-sm'
+                        : 'text-[#475569] hover:text-[#0F2942]'
+                    }`}
+                  >
+                    {u.label}
+                  </button>
+                ))}
+              </div>
+
+              {canViewFinances && onAbrirPanelPresupuestos && (
+                <button
+                  type="button"
+                  onClick={onAbrirPanelPresupuestos}
+                  className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3.5 py-2 text-xs font-semibold text-[#0F2942] hover:bg-slate-50 whitespace-nowrap shrink-0 min-h-[42px]"
+                >
+                  <Calculator className="h-3.5 w-3.5 text-[#0284C7]" />
+                  Presupuestos
+                </button>
+              )}
+
+              {canEdit && (
+                <>
+                  <button
+                    type="button"
+                    onClick={() => onAbrirNuevaRutaKmz(proyectosVisibles[0]?.proyecto.id)}
+                    className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3.5 py-2 text-xs font-semibold text-[#0F2942] hover:bg-slate-50 whitespace-nowrap shrink-0 min-h-[42px]"
+                  >
+                    <Plus className="h-3.5 w-3.5 text-[#0284C7]" />
+                    Importar KMZ
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setModalError(null);
+                      setShowClienteModal(true);
+                    }}
+                    className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3.5 py-2 text-xs font-semibold text-[#0F2942] hover:bg-slate-50 whitespace-nowrap shrink-0 min-h-[42px]"
+                  >
+                    <UserPlus className="h-3.5 w-3.5" />
+                    Nuevo cliente
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setModalError(null);
+                      setProyClienteId(clientes[0]?.id || '');
+                      setShowProyectoModal(true);
+                    }}
+                    className="inline-flex items-center gap-1.5 rounded-xl bg-[#0F2942] px-4 py-2 text-xs font-semibold text-white hover:bg-[#0284C7] whitespace-nowrap shrink-0 min-h-[42px] transition-colors"
+                  >
+                    <FolderPlus className="h-3.5 w-3.5" />
+                    Nuevo proyecto
+                  </button>
+                </>
+              )}
+            </div>
+          </div>
+
+          {/* MODO MAPA DE UBICACIÓN (inspirado en foto 2) */}
+          {viewMode === 'mapa' ? (
+            <ProyectosLocationMap
+              rol={rol}
+              items={proyectosVisibles}
+              areaUnit={areaUnit}
+              moneda={moneda}
+              onSelectProyectoDetalle={(proyId) => setSelectedProyectoId(proyId)}
+              onVerRutaEnMapa={onVerRutaEnMapa}
+              onCalcularRuta={onCalcularRuta}
+            />
+          ) : viewMode === 'tarjetas' ? (
+            /* MODO TARJETAS (inspirado en foto 1: Carpetas por Cliente + Cuadrícula de Proyectos) */
+            <div className="space-y-6">
+              {/* Sección Carpetas por Cliente */}
+              {carpetasClientes.length > 0 && (
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between gap-2">
+                    <div className="flex items-center gap-2">
+                      <h3 className="text-sm font-bold text-[#0F2942]">
+                        Carpetas por Cliente
+                      </h3>
+                      <span className="font-mono text-xs text-[#475569]">
+                        ({carpetasClientes.length})
+                      </span>
+                    </div>
+                    {clienteFolderFiltro !== 'ALL' && (
                       <button
                         type="button"
-                        onClick={() => onAbrirNuevaRutaKmz(proyecto.id)}
-                        className="font-semibold text-[#0284C7] hover:underline whitespace-nowrap shrink-0"
+                        onClick={() => setClienteFolderFiltro('ALL')}
+                        className="text-xs font-semibold text-[#0284C7] hover:underline"
                       >
-                        Cargar archivo KMZ
+                        Ver todos los clientes
                       </button>
                     )}
                   </div>
-                ) : (
-                  <div className="divide-y divide-slate-200">
-                    {rutasProy.map((ruta) => {
-                      const serviciosRuta = srvsProy.filter((s) => s.rutaId === ruta.id);
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                    {carpetasClientes.map((carpeta, idx) => {
+                      const style = FOLDER_SURFACES[idx % FOLDER_SURFACES.length];
+                      const isActive = clienteFolderFiltro === carpeta.cliente.id;
                       return (
-                        <div key={ruta.id} className="p-5 space-y-4">
-                          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                            <div className="min-w-0">
-                              <div className="flex flex-wrap items-center gap-2 text-xs">
-                                <span className="font-mono font-bold text-[#0F2942]">
-                                  {ruta.codigoParcela}
-                                </span>
-                                <span className="text-slate-300">·</span>
-                                <span className="font-semibold text-[#0D1C2F]">{ruta.nombre}</span>
+                        <button
+                          key={carpeta.cliente.id}
+                          type="button"
+                          onClick={() =>
+                            setClienteFolderFiltro(
+                              isActive ? 'ALL' : carpeta.cliente.id
+                            )
+                          }
+                          className="group text-left focus:outline-none"
+                        >
+                          {/* Pestaña superior de carpeta */}
+                          <div
+                            className={`ml-3 h-3 w-24 rounded-t-xl transition-colors ${
+                              isActive ? 'bg-[#0284C7]' : style.tab
+                            }`}
+                          />
+                          <div
+                            className={`rounded-2xl rounded-tl-none border p-4 space-y-4 transition-all ${
+                              isActive
+                                ? 'border-[#0284C7] bg-[#0F2942] text-white shadow-sm'
+                                : `${style.body} text-[#0F2942] group-hover:border-[#0284C7]`
+                            }`}
+                          >
+                            <div className="flex items-start justify-between gap-2">
+                              <div className="min-w-0">
+                                <div className="text-sm font-bold truncate">
+                                  {carpeta.cliente.nombre}
+                                </div>
+                                <div
+                                  className={`font-mono text-[11px] truncate ${
+                                    isActive ? 'text-sky-200' : 'text-[#475569]'
+                                  }`}
+                                >
+                                  RNC {carpeta.cliente.rnc}
+                                </div>
                               </div>
-                              <div className="mt-1 flex flex-wrap items-center gap-2 text-[11px] text-[#43474D] font-mono tabular-nums">
-                                <span className="inline-flex items-center gap-1 font-sans">
-                                  <MapPin className="h-3 w-3 text-[#0284C7]" />
-                                  {ruta.ubicacion} ({ruta.provincia})
-                                </span>
-                                <span>·</span>
-                                <span>{formatArea(ruta.totalAreaM2, areaUnit)}</span>
-                                <span>·</span>
-                                <span>P: {formatPerimeter(ruta.totalPerimeterM)}</span>
-                                <span>·</span>
-                                <span>Prevista: {ruta.fechaPrevista}</span>
-                              </div>
+                              <FolderKanban
+                                className={`h-4 w-4 shrink-0 ${
+                                  isActive ? 'text-[#38BDF8]' : 'text-[#0284C7]'
+                                }`}
+                              />
                             </div>
 
-                            <div className="flex flex-wrap items-center gap-2 shrink-0">
-                              <button
-                                type="button"
-                                onClick={() => onVerRutaEnMapa(ruta.id)}
-                                className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-[#0F2942] hover:bg-slate-50 whitespace-nowrap shrink-0 min-h-[36px]"
+                            <div className="flex items-center justify-between gap-2">
+                              <div className="flex -space-x-1.5">
+                                {carpeta.inicialesEquipo.length > 0 ? (
+                                  carpeta.inicialesEquipo.slice(0, 3).map((ini) => (
+                                    <span
+                                      key={ini}
+                                      className={`inline-flex h-6 w-6 items-center justify-center rounded-full border text-[10px] font-bold ${
+                                        isActive
+                                          ? 'border-[#0F2942] bg-[#0284C7] text-white'
+                                          : 'border-white bg-[#0F2942] text-white'
+                                      }`}
+                                    >
+                                      {ini}
+                                    </span>
+                                  ))
+                                ) : (
+                                  <span
+                                    className={`inline-flex h-6 w-6 items-center justify-center rounded-full border text-[10px] font-bold ${
+                                      isActive
+                                        ? 'border-[#0F2942] bg-white/15 text-white'
+                                        : 'border-white bg-slate-200 text-[#0F2942]'
+                                    }`}
+                                  >
+                                    {getInitials(carpeta.cliente.nombre)}
+                                  </span>
+                                )}
+                              </div>
+                              <span
+                                className={`text-[11px] font-semibold tabular-nums ${
+                                  isActive ? 'text-sky-100' : 'text-[#475569]'
+                                }`}
                               >
-                                <Layers className="h-3.5 w-3.5" />
-                                Ver mapa
-                              </button>
-                              <button
-                                type="button"
-                                onClick={() => onCalcularRuta(ruta.id)}
-                                className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-[#334155] hover:bg-slate-50 whitespace-nowrap shrink-0 min-h-[36px]"
-                              >
-                                <RouteIcon className="h-3.5 w-3.5" />
-                                Cotizar ruta
-                              </button>
-                              <button
-                                type="button"
-                                onClick={() => onReportarViaticoEnRuta(ruta.id, proyecto.id)}
-                                className="inline-flex items-center gap-1.5 rounded-xl bg-[#0284C7] px-3 py-1.5 text-xs font-semibold text-white hover:bg-[#0369A1] whitespace-nowrap shrink-0 min-h-[36px] transition-colors"
-                              >
-                                <Camera className="h-3.5 w-3.5" />
-                                Registrar viático
-                              </button>
+                                {carpeta.proyectosCount} proy. · {carpeta.rutasCount} ruta(s)
+                              </span>
+                            </div>
+                          </div>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+
+              {/* Sección Proyectos (inspirada en "Workflows" de la foto 1) */}
+              <div className="space-y-3">
+                <div className="flex items-center justify-between gap-2">
+                  <div className="flex items-center gap-2">
+                    <h3 className="text-sm font-bold text-[#0F2942]">Proyectos</h3>
+                    <span className="font-mono text-xs text-[#475569]">
+                      ({proyectosVisibles.length})
+                    </span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setViewMode('mapa')}
+                    className="inline-flex items-center gap-1 text-xs font-semibold text-[#0284C7] hover:underline"
+                  >
+                    <MapPin className="h-3.5 w-3.5" />
+                    Ver ubicación en mapa
+                  </button>
+                </div>
+
+                {proyectosVisibles.length === 0 ? (
+                  <div className="rounded-2xl border border-slate-200/90 bg-white p-10 text-center text-xs text-[#475569]">
+                    {rol === 'tecnico'
+                      ? 'No tienes rutas asignadas en tus cuadrillas activas todavía.'
+                      : 'No hay proyectos que coincidan con los filtros seleccionados.'}
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5">
+                    {proyectosVisibles.map((item, idx) => {
+                      const {
+                        proyecto,
+                        cliente,
+                        rutasProy,
+                        cuadrillasProy,
+                        estadoActual,
+                      } = item;
+                      const coverSrc =
+                        PROJECT_COVER_IMAGES[idx % PROJECT_COVER_IMAGES.length];
+                      const totalAreaM2 = rutasProy.reduce(
+                        (acc, r) => acc + r.totalAreaM2,
+                        0
+                      );
+                      const provPrincipal =
+                        rutasProy[0]?.provincia || 'Sin rutas KMZ';
+
+                      return (
+                        <div
+                          key={proyecto.id}
+                          onClick={() => setSelectedProyectoId(proyecto.id)}
+                          role="button"
+                          tabIndex={0}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter' || e.key === ' ') {
+                              e.preventDefault();
+                              setSelectedProyectoId(proyecto.id);
+                            }
+                          }}
+                          className="group rounded-2xl border border-slate-200/90 bg-white overflow-hidden cursor-pointer hover:border-[#0284C7] hover:shadow-md transition-all flex flex-col justify-between"
+                        >
+                          {/* Cabecera visual fotográfica */}
+                          <div className="relative h-28 bg-[#0F2942] overflow-hidden">
+                            {!failedCovers[coverSrc] && (
+                              <img
+                                src={coverSrc}
+                                alt={proyecto.nombre}
+                                referrerPolicy="no-referrer"
+                                onError={() =>
+                                  setFailedCovers((prev) => ({
+                                    ...prev,
+                                    [coverSrc]: true,
+                                  }))
+                                }
+                                className="h-full w-full object-cover group-hover:scale-105 transition-transform duration-300"
+                              />
+                            )}
+                            <div
+                              aria-hidden="true"
+                              className="absolute inset-0 bg-gradient-to-t from-[#091A2C]/65 via-[#0F2942]/20 to-transparent"
+                            />
+                            <div className="absolute top-3 right-3 flex items-center gap-1.5">
                               {canEdit && (
                                 <button
                                   type="button"
-                                  onClick={() => {
-                                    setModalError(null);
-                                    setRutaParaServicio(ruta);
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    onAbrirNuevaRutaKmz(proyecto.id);
                                   }}
-                                  className="inline-flex items-center gap-1 rounded-xl border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-[#0F2942] hover:bg-slate-50 whitespace-nowrap shrink-0 min-h-[36px]"
+                                  title="Agregar ruta KMZ"
+                                  className="inline-flex h-8 items-center gap-1 rounded-full bg-white/95 px-2.5 text-[11px] font-semibold text-[#0F2942] shadow-sm hover:bg-[#0284C7] hover:text-white transition-colors"
                                 >
-                                  <Plus className="h-3.5 w-3.5" />
-                                  Agregar servicio
+                                  <Plus className="h-3 w-3" />
+                                  KMZ
                                 </button>
                               )}
+                              <span className="inline-flex h-8 w-8 items-center justify-center rounded-full bg-white/95 text-[#0F2942] shadow-sm group-hover:bg-[#0284C7] group-hover:text-white transition-colors">
+                                <ArrowUpRight className="h-3.5 w-3.5" />
+                              </span>
                             </div>
                           </div>
 
-                          {/* Servicios de la Ruta */}
-                          {serviciosRuta.length > 0 && (
-                            <div className="rounded-xl border border-slate-200/80 overflow-x-auto">
-                              <table className="w-full text-left text-xs border-collapse">
-                                <thead>
-                                  <tr className="bg-[#F8FAFC] border-b border-slate-200/80 text-[11px] font-semibold uppercase tracking-wider text-[#475569]">
-                                    <th className="px-3.5 py-2.5">Servicio</th>
-                                    <th className="px-3.5 py-2.5 text-right">Cotización</th>
-                                    <th className="px-3.5 py-2.5">Fechas / Cobro</th>
-                                    <th className="px-3.5 py-2.5">Estado</th>
-                                    <th className="px-3.5 py-2.5 text-right">Acciones</th>
-                                  </tr>
-                                </thead>
-                                <tbody className="divide-y divide-slate-100">
-                                  {serviciosRuta.map((srv) => {
-                                    const siguientes = obtenerEstadosSiguientesPermitidos({
-                                      rol,
-                                      servicio: srv,
-                                      rutasAsignadasIds,
-                                    });
-                                    const countBitacora = bitacoras.filter(
-                                      (b) => b.servicioId === srv.id
-                                    ).length;
-                                    const puedeBitacora = puedeRegistrarBitacoraEnServicio({
-                                      rol,
-                                      servicio: srv,
-                                      rutasAsignadasIds,
-                                    });
-
-                                    return (
-                                      <tr key={srv.id} className="hover:bg-[#F8FAFC] transition-colors">
-                                        <td className="px-3.5 py-2.5 font-medium text-[#0F2942]">
-                                          {srv.nombre}
-                                        </td>
-                                        <td className="px-3.5 py-2.5 text-right font-mono tabular-nums">
-                                          {formatRD(srv.cotizacionRD)}
-                                        </td>
-                                        <td className="px-3.5 py-2.5 font-mono text-[11px] text-[#475569]">
-                                          <div>
-                                            {srv.fechaRealInicio
-                                              ? `Inicio: ${srv.fechaRealInicio}`
-                                              : 'Sin inicio'}
-                                            {srv.fechaRealFin ? ` · Fin: ${srv.fechaRealFin}` : ''}
-                                          </div>
-                                          {srv.estado === 'cobrado' &&
-                                            typeof srv.montoCobradoRD === 'number' && (
-                                              <div className="mt-0.5 inline-flex items-center gap-1 text-[11px] font-semibold text-[#15803D] tabular-nums">
-                                                <DollarSign className="h-3 w-3 shrink-0" />
-                                                Cobrado {formatRD(srv.montoCobradoRD)} · Pago{' '}
-                                                {srv.fechaPago || 'N/D'}
-                                              </div>
-                                            )}
-                                        </td>
-                                        <td className="px-3.5 py-2.5">
-                                          <WorkflowBadge status={srv.estado} />
-                                        </td>
-                                        <td className="px-3.5 py-2.5 text-right whitespace-nowrap">
-                                          <div className="inline-flex items-center gap-1.5">
-                                            {siguientes.map((nextSt) => (
-                                              <button
-                                                key={nextSt}
-                                                type="button"
-                                                onClick={() => handleIniciarTransicion(srv, nextSt)}
-                                                className={`rounded-xl px-2.5 py-1.5 text-[11px] font-semibold transition-colors whitespace-nowrap shrink-0 ${
-                                                  nextSt === 'cobrado'
-                                                    ? 'bg-[#15803D] text-white hover:bg-[#166534]'
-                                                    : 'border border-slate-200 bg-white text-[#0F2942] hover:bg-sky-50'
-                                                }`}
-                                              >
-                                                {ACCION_ESTADO_SERVICIO[nextSt]}
-                                              </button>
-                                            ))}
-
-                                            {puedeBitacora && (
-                                              <button
-                                                type="button"
-                                                onClick={() => {
-                                                  setModalError(null);
-                                                  setBitacoraServicio(srv);
-                                                }}
-                                                className="inline-flex items-center gap-1 rounded-xl border border-slate-200 bg-white px-2.5 py-1.5 text-[11px] font-semibold text-[#334155] hover:bg-slate-100 whitespace-nowrap shrink-0"
-                                              >
-                                                <ClipboardList className="h-3 w-3" />
-                                                Bitácora ({countBitacora})
-                                              </button>
-                                            )}
-                                          </div>
-                                        </td>
-                                      </tr>
-                                    );
-                                  })}
-                                </tbody>
-                              </table>
+                          {/* Cuerpo superpuesto limpio estilo tarjeta de flujo */}
+                          <div className="-mt-4 relative rounded-t-2xl bg-white p-5 flex-1 flex flex-col justify-between space-y-3">
+                            <div className="space-y-1.5">
+                              <div className="flex items-center gap-1.5 text-[11px] text-[#475569] truncate">
+                                <span className="font-mono font-bold text-[#0284C7]">
+                                  {proyecto.codigoContrato}
+                                </span>
+                                <span aria-hidden="true">·</span>
+                                <span className="font-semibold text-[#0F2942]">
+                                  {ETIQUETA_ESTADO[estadoActual]}
+                                </span>
+                                <span aria-hidden="true">·</span>
+                                <span className="truncate">{provPrincipal}</span>
+                              </div>
+                              <h4 className="text-base font-bold tracking-tight text-[#0F2942] line-clamp-1 group-hover:text-[#0284C7] transition-colors">
+                                {proyecto.nombre}
+                              </h4>
+                              <p className="text-xs text-[#475569] truncate">
+                                {cliente ? cliente.nombre : 'Cliente sin asignar'}
+                              </p>
                             </div>
-                          )}
+
+                            <div className="flex items-center justify-between gap-2 border-t border-slate-100 pt-3">
+                              <div className="flex items-center gap-2 min-w-0">
+                                <div className="flex -space-x-1.5">
+                                  {cuadrillasProy.length > 0 ? (
+                                    cuadrillasProy.slice(0, 3).map((c) => {
+                                      const jefe = personal.find((p) => p.id === c.jefeId);
+                                      return (
+                                        <span
+                                          key={c.id}
+                                          title={c.nombre}
+                                          className="inline-flex h-6 w-6 items-center justify-center rounded-full border border-white bg-[#0F2942] text-[10px] font-bold text-white"
+                                        >
+                                          {getInitials(jefe?.nombre || c.nombre)}
+                                        </span>
+                                      );
+                                    })
+                                  ) : (
+                                    <span className="inline-flex h-6 w-6 items-center justify-center rounded-full border border-white bg-slate-100 text-[10px] font-bold text-[#475569]">
+                                      {rutasProy.length}R
+                                    </span>
+                                  )}
+                                </div>
+                                <span className="text-[11px] font-mono text-[#475569] tabular-nums truncate">
+                                  {rutasProy.length} ruta(s) ·{' '}
+                                  {formatArea(totalAreaM2, areaUnit)}
+                                </span>
+                              </div>
+
+                              {canViewFinances && (
+                                <span className="font-mono text-xs font-bold text-[#0F2942] tabular-nums shrink-0">
+                                  {formatRD(proyecto.valorContratoRD, moneda).replace('.00', '')}
+                                </span>
+                              )}
+                            </div>
+                          </div>
                         </div>
                       );
                     })}
                   </div>
                 )}
               </div>
-            );
-          })}
-        </div>
+            </div>
+          ) : proyectosVisibles.length === 0 ? (
+            <div className="rounded-2xl border border-slate-200/90 bg-white p-10 text-center text-xs text-[#475569]">
+              {rol === 'tecnico'
+                ? 'No tienes rutas asignadas en tus cuadrillas activas todavía.'
+                : 'No hay proyectos que coincidan con los filtros seleccionados.'}
+            </div>
+          ) : (
+            /* MODO LISTA DETALLADA */
+            <div className="space-y-5">
+              {proyectosVisibles.map((item) => {
+                const {
+                  proyecto,
+                  cliente,
+                  srvsProy,
+                  estadoActual,
+                  gastoReal,
+                  comparacionPresupuesto,
+                } = item;
+                const overBudget = comparacionPresupuesto
+                  ? comparacionPresupuesto.excedidoTotal
+                  : gastoReal > proyecto.presupuestoViaticosRD;
+                return (
+                  <div
+                    key={proyecto.id}
+                    className="rounded-2xl border border-slate-200/90 bg-white overflow-hidden"
+                  >
+                    <div className="border-b border-slate-200/80 bg-[#F8FAFC] px-5 py-4 space-y-3">
+                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                        <div className="min-w-0 space-y-1">
+                          <div className="flex flex-wrap items-center gap-2 text-xs">
+                            <span className="font-mono font-bold text-[#0284C7]">
+                              {proyecto.codigoContrato}
+                            </span>
+                            <span aria-hidden="true" className="text-slate-300">
+                              ·
+                            </span>
+                            <WorkflowBadge status={estadoActual} />
+                            <span aria-hidden="true" className="text-slate-300">
+                              ·
+                            </span>
+                            <span className="text-[#475569]">
+                              {cliente
+                                ? `${cliente.nombre} (RNC ${cliente.rnc})`
+                                : 'Cliente sin asignar'}
+                            </span>
+                          </div>
+                          <h3 className="text-base font-bold tracking-tight text-[#0F2942] text-balance">
+                            {proyecto.nombre}
+                          </h3>
+                        </div>
+
+                        <div className="flex flex-wrap items-center gap-2 shrink-0">
+                          <button
+                            type="button"
+                            onClick={() => setSelectedProyectoId(proyecto.id)}
+                            className="inline-flex items-center gap-1.5 rounded-xl bg-[#0F2942] px-3.5 py-2 text-xs font-semibold text-white hover:bg-[#0284C7] whitespace-nowrap shrink-0 min-h-[40px] transition-colors"
+                          >
+                            Ver detalle
+                            <ArrowUpRight className="h-3.5 w-3.5" />
+                          </button>
+                          {canViewFinances && (
+                            <button
+                              type="button"
+                              onClick={() => setPresupuestoModalProyectoId(proyecto.id)}
+                              className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3.5 py-2 text-xs font-semibold text-[#0F2942] hover:bg-slate-50 whitespace-nowrap shrink-0 min-h-[40px]"
+                            >
+                              <Calculator className="h-3.5 w-3.5 text-[#0284C7]" />
+                              Presupuesto
+                            </button>
+                          )}
+                          {canEdit && (
+                            <button
+                              type="button"
+                              onClick={() => onAbrirNuevaRutaKmz(proyecto.id)}
+                              className="inline-flex items-center gap-1.5 rounded-xl border border-[#0284C7] bg-white px-3.5 py-2 text-xs font-semibold text-[#0284C7] hover:bg-sky-50 whitespace-nowrap shrink-0 min-h-[40px]"
+                            >
+                              <Plus className="h-3.5 w-3.5" />
+                              Agregar ruta KMZ
+                            </button>
+                          )}
+                        </div>
+                      </div>
+
+                      {canViewFinances && comparacionPresupuesto && (
+                        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 pt-3 border-t border-slate-200/80 text-xs">
+                          <div>
+                            <div className="text-[11px] text-[#43474D]">Valor de contrato</div>
+                            <div className="font-mono font-bold text-[#0D1C2F] tabular-nums">
+                              {formatRD(proyecto.valorContratoRD, moneda)}
+                            </div>
+                          </div>
+                          <div>
+                            <div className="text-[11px] text-[#43474D]">
+                              Costo ejecutado / planificado
+                            </div>
+                            <div
+                              className={`font-mono font-bold tabular-nums ${
+                                overBudget ? 'text-[#DC2626]' : 'text-[#0F2942]'
+                              }`}
+                            >
+                              {formatRD(comparacionPresupuesto.totalEjecutadoRD, moneda)}{' '}
+                              <span className="font-normal text-[#43474D]">
+                                / {formatRD(comparacionPresupuesto.totalPlanificadoRD, moneda)}
+                              </span>
+                            </div>
+                          </div>
+                          <div>
+                            <div className="text-[11px] text-[#43474D]">Margen real</div>
+                            <div
+                              className={`font-mono font-bold tabular-nums ${
+                                comparacionPresupuesto.margenRealRD < 0
+                                  ? 'text-[#DC2626]'
+                                  : 'text-[#15803D]'
+                              }`}
+                            >
+                              {formatRD(comparacionPresupuesto.margenRealRD, moneda)}
+                              {comparacionPresupuesto.margenRealPct !== null
+                                ? ` (${comparacionPresupuesto.margenRealPct}%)`
+                                : ''}
+                            </div>
+                          </div>
+                          <div>
+                            <div className="text-[11px] text-[#43474D]">Total cobrado</div>
+                            <div className="font-mono font-bold text-[#15803D] tabular-nums">
+                              {formatRD(
+                                srvsProy.reduce(
+                                  (acc, s) =>
+                                    acc +
+                                    (s.estado === 'cobrado' &&
+                                    typeof s.montoCobradoRD === 'number'
+                                      ? s.montoCobradoRD
+                                      : 0),
+                                  0
+                                ),
+                                moneda
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                    {renderProyectoRutasServicios(item)}
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </>
       )}
 
       {/* MODAL F2: NUEVO CLIENTE */}
@@ -1088,7 +1863,7 @@ export const ProyectosView: React.FC<ProyectosViewProps> = ({
         </div>
       )}
 
-      {/* MODAL NUEVO PROYECTO (INICIA EN COTIZADO) */}
+      {/* MODAL NUEVO PROYECTO */}
       {showProyectoModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-[#0F2942]/65 backdrop-blur-[2px] p-4">
           <div className="w-full max-w-md rounded-2xl border border-slate-200 bg-white p-5 space-y-4 shadow-xl">
@@ -1293,7 +2068,7 @@ export const ProyectosView: React.FC<ProyectosViewProps> = ({
         </div>
       )}
 
-      {/* MODAL TRANSICIÓN DE ESTADO (FECHAS REALES / COBRO F9) */}
+      {/* MODAL TRANSICIÓN DE ESTADO */}
       {transicionTarget && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-[#0F2942]/65 backdrop-blur-[2px] p-4">
           <div className="w-full max-w-md rounded-2xl border border-slate-200 bg-white p-5 space-y-4 shadow-xl">
@@ -1377,7 +2152,7 @@ export const ProyectosView: React.FC<ProyectosViewProps> = ({
         </div>
       )}
 
-      {/* MODAL BITÁCORA (NOTAS Y FOTOS) */}
+      {/* MODAL BITÁCORA */}
       {bitacoraServicio && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-[#0F2942]/65 backdrop-blur-[2px] p-4">
           <div className="w-full max-w-lg rounded-2xl border border-slate-200 bg-white shadow-2xl max-h-[90vh] flex flex-col">
