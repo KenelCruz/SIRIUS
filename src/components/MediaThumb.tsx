@@ -24,7 +24,7 @@ export const MediaThumb: React.FC<MediaThumbProps> = ({
   return (
     <>
       <div
-        className={`group relative shrink-0 overflow-hidden rounded-lg border border-slate-200 bg-slate-900 ${sizeClass}`}
+        className={`group relative shrink-0 overflow-hidden rounded-xl border border-slate-200 bg-slate-900 ${sizeClass}`}
       >
         {hasError || !src ? (
           <div className="flex h-full w-full flex-col items-center justify-center gap-1 bg-gradient-to-br from-slate-800 to-slate-900 p-2 text-center text-slate-300">
@@ -65,7 +65,7 @@ export const MediaThumb: React.FC<MediaThumbProps> = ({
             type="button"
             onClick={onRemove}
             aria-label={removeLabel}
-            className="absolute right-1 top-1 z-10 flex h-6 w-6 items-center justify-center rounded-md bg-[#091A2C]/85 text-white backdrop-blur-sm transition-colors hover:bg-[#DC2626]"
+            className="absolute right-1 top-1 z-10 flex h-6 w-6 items-center justify-center rounded-lg bg-[#091A2C]/85 text-white backdrop-blur-sm transition-colors hover:bg-[#DC2626]"
           >
             <X className="h-3.5 w-3.5" />
           </button>
@@ -81,7 +81,7 @@ export const MediaThumb: React.FC<MediaThumbProps> = ({
           onClick={() => setIsLightboxOpen(false)}
         >
           <div
-            className="relative w-full max-w-2xl overflow-hidden rounded-xl border border-white/15 bg-[#0F2942] shadow-2xl"
+            className="relative w-full max-w-2xl overflow-hidden rounded-2xl border border-white/15 bg-[#0F2942] shadow-2xl"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="relative flex max-h-[78vh] items-center justify-center bg-slate-950">
@@ -103,7 +103,7 @@ export const MediaThumb: React.FC<MediaThumbProps> = ({
                 <button
                   type="button"
                   onClick={() => setIsLightboxOpen(false)}
-                  className="inline-flex min-h-[40px] shrink-0 items-center gap-1.5 rounded-md border border-white/20 bg-white/10 px-3 py-1.5 text-xs font-semibold text-white hover:bg-white/20 whitespace-nowrap"
+                  className="inline-flex min-h-[40px] shrink-0 items-center gap-1.5 rounded-xl border border-white/20 bg-white/10 px-3 py-1.5 text-xs font-semibold text-white hover:bg-white/20 whitespace-nowrap transition-colors"
                 >
                   <X className="h-3.5 w-3.5" />
                   Cerrar

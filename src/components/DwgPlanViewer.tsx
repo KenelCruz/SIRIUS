@@ -561,16 +561,16 @@ export const DwgPlanViewer: React.FC<DwgPlanViewerProps> = ({
   }, [zoom, pan]);
 
   return (
-    <div className="rounded-lg border border-slate-200 bg-white overflow-hidden">
+    <div className="rounded-2xl border border-slate-200/90 bg-white overflow-hidden">
       {/* Header Toolbar */}
-      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 bg-slate-50 px-4 py-3">
+      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 bg-[#F8FAFC] px-4 py-3.5">
         <div className="flex items-center gap-2.5 min-w-0">
-          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-[#0F2942] text-white">
+          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-[#0F2942] text-white">
             <Compass className="h-4 w-4" />
           </div>
           <div className="min-w-0">
             <h3 className="text-xs sm:text-sm font-bold text-[#0F2942] truncate">{title}</h3>
-            <p className="text-[11px] text-[#43474D] truncate">{subtitle}</p>
+            <p className="text-[11px] text-[#475569] truncate">{subtitle}</p>
           </div>
         </div>
 
@@ -591,7 +591,7 @@ export const DwgPlanViewer: React.FC<DwgPlanViewerProps> = ({
             type="button"
             onClick={() => fileInputRef.current?.click()}
             disabled={isLoading}
-            className="inline-flex items-center gap-1.5 rounded-md bg-[#0F2942] px-3.5 py-2 text-xs font-semibold text-white hover:bg-[#0284C7] disabled:opacity-60 transition-colors min-h-[38px] whitespace-nowrap shrink-0"
+            className="inline-flex items-center gap-1.5 rounded-xl bg-[#0F2942] px-3.5 py-2 text-xs font-semibold text-white hover:bg-[#0284C7] disabled:opacity-60 transition-colors min-h-[38px] whitespace-nowrap shrink-0"
           >
             <UploadCloud className="h-3.5 w-3.5" />
             {activePlan ? 'Abrir otro .DWG / .DXF' : 'Cargar plano .DWG / .DXF'}
@@ -601,7 +601,7 @@ export const DwgPlanViewer: React.FC<DwgPlanViewerProps> = ({
             <button
               type="button"
               onClick={handleLoadSample}
-              className="inline-flex items-center gap-1.5 rounded-md border border-slate-300 bg-white px-3 py-2 text-xs font-semibold text-[#0F2942] hover:bg-[#EFF4FF] transition-colors min-h-[38px] whitespace-nowrap shrink-0"
+              className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-[#0F2942] hover:bg-[#EFF4FF] transition-colors min-h-[38px] whitespace-nowrap shrink-0"
             >
               <FileCode2 className="h-3.5 w-3.5 text-[#0284C7]" />
               Plano de ejemplo
@@ -612,7 +612,7 @@ export const DwgPlanViewer: React.FC<DwgPlanViewerProps> = ({
             <button
               type="button"
               onClick={handleCancelLoading}
-              className="inline-flex items-center gap-1 rounded-md border border-[#FCA5A5] bg-[#FEF2F2] px-3 py-2 text-xs font-semibold text-[#991B1B] hover:bg-[#FEE2E2] min-h-[38px] whitespace-nowrap shrink-0"
+              className="inline-flex items-center gap-1 rounded-xl border border-[#FCA5A5] bg-[#FEF2F2] px-3 py-2 text-xs font-semibold text-[#991B1B] hover:bg-[#FEE2E2] min-h-[38px] whitespace-nowrap shrink-0"
             >
               <X className="h-3.5 w-3.5" />
               Cancelar carga
@@ -626,7 +626,7 @@ export const DwgPlanViewer: React.FC<DwgPlanViewerProps> = ({
                 setActivePlan(null);
                 setErrorMsg(null);
               }}
-              className="inline-flex items-center gap-1 rounded-md border border-slate-300 bg-white px-3 py-2 text-xs font-semibold text-[#64748B] hover:text-[#DC2626] hover:border-[#FCA5A5] min-h-[38px] whitespace-nowrap shrink-0"
+              className="inline-flex items-center gap-1 rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-[#64748B] hover:text-[#DC2626] hover:border-[#FCA5A5] min-h-[38px] whitespace-nowrap shrink-0 transition-colors"
               title="Quitar plano actual"
             >
               <Trash2 className="h-3.5 w-3.5" />
@@ -676,7 +676,7 @@ export const DwgPlanViewer: React.FC<DwgPlanViewerProps> = ({
             if (f) handleFile(f);
           }}
           onClick={() => fileInputRef.current?.click()}
-          className="m-5 cursor-pointer rounded-lg border-2 border-dashed border-[#0284C7]/60 bg-slate-50 p-8 text-center hover:bg-[#EFF4FF] transition-colors"
+          className="m-5 cursor-pointer rounded-2xl border-2 border-dashed border-[#0284C7]/60 bg-[#F8FAFC] p-8 text-center hover:bg-[#EFF4FF] transition-colors"
         >
           <UploadCloud className="mx-auto h-9 w-9 text-[#0284C7]" />
           <div className="mt-2.5 text-sm font-bold text-[#0F2942]">
@@ -748,13 +748,13 @@ export const DwgPlanViewer: React.FC<DwgPlanViewerProps> = ({
           <div className="flex flex-wrap items-center justify-between gap-2 border-b border-[#1E3A5F] bg-[#0F2942] px-3 py-2 text-white text-xs">
             <div className="flex flex-wrap items-center gap-1.5">
               {/* Theme Switcher */}
-              <div className="inline-flex rounded-md bg-[#091A2C] p-0.5">
+              <div className="inline-flex rounded-xl bg-[#091A2C] p-0.5">
                 {(['dark', 'blueprint', 'light'] as CadTheme[]).map((t) => (
                   <button
                     key={t}
                     type="button"
                     onClick={() => setTheme(t)}
-                    className={`rounded-md px-2.5 py-1 text-[11px] font-semibold transition-colors whitespace-nowrap shrink-0 ${
+                    className={`rounded-lg px-2.5 py-1 text-[11px] font-semibold transition-colors whitespace-nowrap shrink-0 ${
                       theme === t ? 'bg-[#0284C7] text-white' : 'text-[#94A3B8] hover:text-white'
                     }`}
                   >
@@ -764,7 +764,7 @@ export const DwgPlanViewer: React.FC<DwgPlanViewerProps> = ({
               </div>
 
               {/* Stroke Weight */}
-              <div className="inline-flex rounded-md bg-[#091A2C] p-0.5">
+              <div className="inline-flex rounded-xl bg-[#091A2C] p-0.5">
                 {(
                   [
                     { id: 'thin', label: 'Trazo fino' },
@@ -776,7 +776,7 @@ export const DwgPlanViewer: React.FC<DwgPlanViewerProps> = ({
                     key={s.id}
                     type="button"
                     onClick={() => setStrokeMode(s.id)}
-                    className={`rounded-md px-2.5 py-1 text-[11px] font-semibold transition-colors whitespace-nowrap shrink-0 ${
+                    className={`rounded-lg px-2.5 py-1 text-[11px] font-semibold transition-colors whitespace-nowrap shrink-0 ${
                       strokeMode === s.id
                         ? 'bg-[#D97706] text-white'
                         : 'text-[#94A3B8] hover:text-white'
@@ -790,7 +790,7 @@ export const DwgPlanViewer: React.FC<DwgPlanViewerProps> = ({
               <button
                 type="button"
                 onClick={() => setShowGrid((prev) => !prev)}
-                className={`inline-flex items-center gap-1 rounded-md border px-2.5 py-1 text-[11px] font-semibold transition-colors whitespace-nowrap shrink-0 ${
+                className={`inline-flex items-center gap-1 rounded-xl border px-2.5 py-1 text-[11px] font-semibold transition-colors whitespace-nowrap shrink-0 ${
                   showGrid
                     ? 'border-[#38BDF8] bg-[#0284C7]/25 text-[#E0F2FE]'
                     : 'border-[#334155] bg-[#091A2C] text-[#94A3B8]'
@@ -804,7 +804,7 @@ export const DwgPlanViewer: React.FC<DwgPlanViewerProps> = ({
 
             <div className="flex flex-wrap items-center gap-1.5">
               {/* Zoom & Fit Controls */}
-              <div className="inline-flex items-center rounded-md bg-[#091A2C] border border-[#1E3A5F]">
+              <div className="inline-flex items-center rounded-xl bg-[#091A2C] border border-[#1E3A5F]">
                 <button
                   type="button"
                   onClick={() => handleZoomBy(0.75)}
@@ -862,7 +862,7 @@ export const DwgPlanViewer: React.FC<DwgPlanViewerProps> = ({
                     setFitToVisibleLayers((prev) => !prev);
                     handleResetView();
                   }}
-                  className={`inline-flex items-center gap-1 rounded-md border px-2.5 py-1 text-[11px] font-semibold transition-colors whitespace-nowrap shrink-0 ${
+                  className={`inline-flex items-center gap-1 rounded-xl border px-2.5 py-1 text-[11px] font-semibold transition-colors whitespace-nowrap shrink-0 ${
                     fitToVisibleLayers
                       ? 'border-[#38BDF8] bg-[#0284C7]/25 text-[#E0F2FE]'
                       : 'border-[#334155] bg-[#091A2C] text-[#CBD5E1] hover:text-white'
@@ -878,7 +878,7 @@ export const DwgPlanViewer: React.FC<DwgPlanViewerProps> = ({
                 <button
                   type="button"
                   onClick={() => setShowLayersPanel((prev) => !prev)}
-                  className={`inline-flex items-center gap-1 rounded-md border px-2.5 py-1 text-[11px] font-semibold transition-colors whitespace-nowrap shrink-0 ${
+                  className={`inline-flex items-center gap-1 rounded-xl border px-2.5 py-1 text-[11px] font-semibold transition-colors whitespace-nowrap shrink-0 ${
                     showLayersPanel
                       ? 'border-[#38BDF8] bg-[#0284C7] text-white'
                       : 'border-[#334155] bg-[#091A2C] text-[#CBD5E1] hover:text-white'
@@ -892,7 +892,7 @@ export const DwgPlanViewer: React.FC<DwgPlanViewerProps> = ({
               <button
                 type="button"
                 onClick={() => setShowMinimap((prev) => !prev)}
-                className={`inline-flex items-center gap-1 rounded-md border px-2 py-1 text-[11px] font-semibold transition-colors ${
+                className={`inline-flex items-center gap-1 rounded-xl border px-2 py-1 text-[11px] font-semibold transition-colors ${
                   showMinimap
                     ? 'border-[#38BDF8] bg-[#0284C7]/25 text-[#E0F2FE]'
                     : 'border-[#334155] bg-[#091A2C] text-[#94A3B8]'
@@ -905,7 +905,7 @@ export const DwgPlanViewer: React.FC<DwgPlanViewerProps> = ({
               <button
                 type="button"
                 onClick={() => setIsExpanded((prev) => !prev)}
-                className="inline-flex items-center gap-1 rounded-md border border-[#334155] bg-[#091A2C] px-2 py-1 text-[11px] font-semibold text-[#CBD5E1] hover:text-white"
+                className="inline-flex items-center gap-1 rounded-xl border border-[#334155] bg-[#091A2C] px-2 py-1 text-[11px] font-semibold text-[#CBD5E1] hover:text-white"
                 title={isExpanded ? 'Reducir altura del visor' : 'Ampliar altura del visor'}
               >
                 {isExpanded ? <Minimize2 className="h-3.5 w-3.5" /> : <Maximize2 className="h-3.5 w-3.5" />}
@@ -917,7 +917,7 @@ export const DwgPlanViewer: React.FC<DwgPlanViewerProps> = ({
                     type="button"
                     onClick={handleExportSvg}
                     disabled={!hasGeometry || isLoading}
-                    className="inline-flex items-center gap-1 rounded-md border border-[#334155] bg-[#091A2C] px-2.5 py-1 text-[11px] font-semibold text-[#CBD5E1] hover:text-white disabled:opacity-40 whitespace-nowrap shrink-0"
+                    className="inline-flex items-center gap-1 rounded-xl border border-[#334155] bg-[#091A2C] px-2.5 py-1 text-[11px] font-semibold text-[#CBD5E1] hover:text-white disabled:opacity-40 whitespace-nowrap shrink-0"
                     title="Descargar SVG vectorial con capas visibles"
                   >
                     <Download className="h-3.5 w-3.5" />
@@ -928,7 +928,7 @@ export const DwgPlanViewer: React.FC<DwgPlanViewerProps> = ({
                     type="button"
                     onClick={handleExportPng}
                     disabled={!hasGeometry || isLoading}
-                    className="inline-flex items-center gap-1 rounded-md border border-[#334155] bg-[#091A2C] px-2.5 py-1 text-[11px] font-semibold text-[#CBD5E1] hover:text-white disabled:opacity-40 whitespace-nowrap shrink-0"
+                    className="inline-flex items-center gap-1 rounded-xl border border-[#334155] bg-[#091A2C] px-2.5 py-1 text-[11px] font-semibold text-[#CBD5E1] hover:text-white disabled:opacity-40 whitespace-nowrap shrink-0"
                     title="Descargar imagen PNG con capas visibles"
                   >
                     <ImageIcon className="h-3.5 w-3.5" />
@@ -1046,13 +1046,13 @@ export const DwgPlanViewer: React.FC<DwgPlanViewerProps> = ({
               )}
 
               {/* Corner CAD Hint (High-contrast dark frosted HUD) */}
-              <div className="pointer-events-none absolute bottom-3 left-3 rounded-md bg-[#091A2C]/92 backdrop-blur-md border border-white/15 px-3 py-1.5 font-mono text-[10px] text-slate-100 shadow-lg">
+              <div className="pointer-events-none absolute bottom-3 left-3 rounded-xl bg-[#091A2C]/92 backdrop-blur-md border border-white/15 px-3 py-1.5 font-mono text-[10px] text-slate-100 shadow-lg">
                 Arrastra / pellizca para mover · Rueda para zoom al cursor · Doble clic para ampliar/ajustar
               </div>
             </div>
 
             {showLayersPanel && activePlan && (
-              <aside className="lg:col-span-3 border-t lg:border-t-0 lg:border-l border-slate-200 bg-slate-50 flex flex-col max-h-[520px]">
+              <aside className="lg:col-span-3 border-t lg:border-t-0 lg:border-l border-slate-200 bg-[#F8FAFC] flex flex-col max-h-[520px]">
                 <div className="border-b border-slate-200 px-3 py-2.5 bg-white space-y-2">
                   <div className="flex items-center justify-between gap-2">
                     <span className="text-xs font-bold text-[#0F2942]">
@@ -1094,7 +1094,7 @@ export const DwgPlanViewer: React.FC<DwgPlanViewerProps> = ({
                         onChange={(e) => setLayerSearch(e.target.value)}
                         placeholder="Filtrar capa..."
                         aria-label="Filtrar capa del plano"
-                        className="w-full rounded-md border border-slate-300 bg-slate-50 pl-7 pr-6 py-1.5 text-[11px] text-[#0D1C2F] placeholder:text-[#94A3B8]"
+                        className="w-full rounded-xl border border-slate-200 bg-[#F8FAFC] pl-7 pr-6 py-1.5 text-[11px] text-[#0D1C2F] placeholder:text-[#94A3B8] focus:border-[#0284C7] focus:outline-none"
                       />
                       {layerSearch && (
                         <button
@@ -1177,14 +1177,14 @@ export const DwgPlanViewer: React.FC<DwgPlanViewerProps> = ({
 
           {/* Footer Entity Summary */}
           {activePlan && (
-            <div className="flex flex-wrap items-center justify-between gap-2 border-t border-slate-200 bg-slate-50 px-4 py-2.5 text-[11px] text-[#43474D]">
+            <div className="flex flex-wrap items-center justify-between gap-2 border-t border-slate-200 bg-[#F8FAFC] px-4 py-2.5 text-[11px] text-[#43474D]">
               <div className="flex flex-wrap items-center gap-1.5">
                 <span className="font-semibold text-[#0F2942]">Entidades:</span>
                 {entityChips.length > 0 ? (
                   entityChips.map(([type, count]) => (
                     <span
                       key={type}
-                      className="rounded-md border border-slate-200 bg-white px-1.5 py-0.5 font-mono text-[10px] text-[#334155] tabular-nums"
+                      className="rounded-lg border border-slate-200 bg-white px-2 py-0.5 font-mono text-[10px] text-[#334155] tabular-nums"
                     >
                       {type}: {count}
                     </span>

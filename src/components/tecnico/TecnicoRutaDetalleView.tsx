@@ -103,15 +103,15 @@ export const TecnicoRutaDetalleView: React.FC<TecnicoRutaDetalleViewProps> = ({
 
   if (!ruta) {
     return (
-      <div className="rounded-lg border border-slate-200 bg-white p-8 text-center space-y-3">
+      <div className="rounded-2xl border border-slate-200/90 bg-white p-8 text-center space-y-3">
         <AlertTriangle className="h-8 w-8 text-[#B45309] mx-auto" />
-        <div className="text-sm font-bold text-slate-900">
+        <div className="text-sm font-bold text-[#0F2942]">
           Ruta no encontrada o fuera de tu asignación
         </div>
         <button
           type="button"
           onClick={onVolver}
-          className="inline-flex items-center gap-1.5 rounded-md bg-[#0F2942] px-4 py-2 text-xs font-semibold text-white min-h-[42px]"
+          className="inline-flex items-center gap-1.5 rounded-xl bg-[#0F2942] px-4 py-2 text-xs font-semibold text-white min-h-[42px]"
         >
           <ArrowLeft className="h-4 w-4" />
           Volver a mis rutas
@@ -121,14 +121,14 @@ export const TecnicoRutaDetalleView: React.FC<TecnicoRutaDetalleViewProps> = ({
   }
 
   return (
-    <section className="space-y-5">
+    <section className="space-y-6">
       {/* Encabezado detalle de ruta (solo lectura) */}
-      <div className="rounded-lg border border-slate-200 bg-white p-5 space-y-4">
+      <div className="rounded-2xl border border-slate-200/90 bg-white p-5 space-y-4">
         <div className="flex flex-wrap items-center justify-between gap-2.5">
           <button
             type="button"
             onClick={onVolver}
-            className="inline-flex items-center gap-1.5 rounded-md border border-slate-300 bg-white px-3.5 py-2 text-xs font-semibold text-[#0F2942] hover:bg-slate-50 min-h-[40px] whitespace-nowrap"
+            className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 bg-[#F8FAFC] px-3.5 py-2 text-xs font-semibold text-[#0F2942] hover:bg-slate-100 min-h-[40px] whitespace-nowrap"
           >
             <ArrowLeft className="h-3.5 w-3.5" />
             Volver a rutas
@@ -137,7 +137,7 @@ export const TecnicoRutaDetalleView: React.FC<TecnicoRutaDetalleViewProps> = ({
           <button
             type="button"
             onClick={() => onReportarViatico(ruta.id, ruta.proyectoId)}
-            className="inline-flex items-center gap-1.5 rounded-md bg-[#0284C7] px-4 py-2 text-xs font-semibold text-white hover:bg-[#0369A1] min-h-[40px] whitespace-nowrap transition-colors"
+            className="inline-flex items-center gap-1.5 rounded-xl bg-[#0F2942] px-4 py-2 text-xs font-semibold text-white hover:bg-[#0284C7] min-h-[40px] whitespace-nowrap transition-colors"
           >
             <Camera className="h-4 w-4" />
             Registrar viático
@@ -148,10 +148,10 @@ export const TecnicoRutaDetalleView: React.FC<TecnicoRutaDetalleViewProps> = ({
           <div className="flex flex-wrap items-center gap-2 text-xs">
             <span className="font-mono font-bold text-[#0284C7]">{ruta.codigoParcela}</span>
             <span aria-hidden="true" className="text-slate-300">·</span>
-            <span className="text-slate-600">{ruta.provincia}</span>
+            <span className="text-[#475569]">{ruta.provincia}</span>
           </div>
-          <h2 className="mt-1 text-base sm:text-lg font-bold text-slate-900">{ruta.nombre}</h2>
-          <p className="text-xs text-slate-500 mt-0.5">
+          <h2 className="mt-1 text-xl font-bold tracking-tight text-[#0F2942]">{ruta.nombre}</h2>
+          <p className="text-xs text-[#475569] mt-0.5">
             {cliente?.nombre || 'Cliente'} · {proyecto?.nombre || 'Proyecto'}{' '}
             {proyecto?.codigoContrato && (
               <span className="font-mono text-[11px]">({proyecto.codigoContrato})</span>
@@ -170,7 +170,7 @@ export const TecnicoRutaDetalleView: React.FC<TecnicoRutaDetalleViewProps> = ({
               Fecha prevista:{' '}
               <strong className="font-mono">{ruta.fechaPrevista}</strong>
               {ruta.routeSummary && (
-                <span className="ml-2 text-slate-500">
+                <span className="ml-2 text-[#475569]">
                   · {ruta.routeSummary.distanceOneWayKm} km ({ruta.routeSummary.durationMin} min)
                 </span>
               )}
@@ -180,7 +180,7 @@ export const TecnicoRutaDetalleView: React.FC<TecnicoRutaDetalleViewProps> = ({
       </div>
 
       {!isOnline && (
-        <div className="flex items-center gap-2.5 rounded-lg border border-amber-300 bg-amber-50 px-4 py-2.5 text-xs text-amber-900">
+        <div className="flex items-center gap-2.5 rounded-2xl border border-amber-300 bg-amber-50 px-4 py-3 text-xs text-amber-900">
           <WifiOff className="h-4 w-4 shrink-0 text-[#B45309]" />
           <span>
             Sin conexión: la capa base OSM puede requerir señal, pero la vista Vector y los vértices UTM funcionan offline.
@@ -189,7 +189,7 @@ export const TecnicoRutaDetalleView: React.FC<TecnicoRutaDetalleViewProps> = ({
       )}
 
       {successBanner && (
-        <div className="flex items-center gap-2.5 rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-xs font-medium text-[#15803D]">
+        <div className="flex items-center gap-2.5 rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-xs font-medium text-[#15803D]">
           <CheckCircle2 className="h-4 w-4 shrink-0" />
           <span>{successBanner}</span>
         </div>
@@ -211,15 +211,15 @@ export const TecnicoRutaDetalleView: React.FC<TecnicoRutaDetalleViewProps> = ({
       />
 
       {/* Cuadrilla, vehículos y equipos GNSS en grid balanceado */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 items-stretch">
-        <div className="rounded-lg border border-slate-200 bg-white p-5 space-y-3">
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-5 items-stretch">
+        <div className="rounded-2xl border border-slate-200/90 bg-white p-5 space-y-3">
           <div className="flex items-center gap-2 text-xs font-bold text-[#0F2942]">
             <Users className="h-4 w-4 text-[#0284C7]" />
             <span>Mi Cuadrilla y Asignación</span>
           </div>
           {asignacionesRuta.map((a) => (
-            <div key={a.id} className="rounded-md bg-slate-50 px-3 py-2 text-xs">
-              <span className="text-slate-500">Rango asignado: </span>
+            <div key={a.id} className="rounded-xl border border-slate-200/70 bg-[#F8FAFC] px-3 py-2 text-xs">
+              <span className="text-[#475569]">Rango asignado: </span>
               <span className="font-mono font-semibold text-[#0F2942]">
                 {a.fechaInicio} al {a.fechaFin}
               </span>
@@ -229,7 +229,7 @@ export const TecnicoRutaDetalleView: React.FC<TecnicoRutaDetalleViewProps> = ({
             const integrantes = snapshot.personal.filter((p) => cua.miembroIds.includes(p.id));
             return (
               <div key={cua.id} className="space-y-1.5 text-xs">
-                <div className="font-bold text-slate-900">{cua.nombre}</div>
+                <div className="font-bold text-[#0F2942]">{cua.nombre}</div>
                 <ul className="space-y-1.5">
                   {integrantes.map((p) => (
                     <li
@@ -238,7 +238,7 @@ export const TecnicoRutaDetalleView: React.FC<TecnicoRutaDetalleViewProps> = ({
                     >
                       <span>
                         {p.nombre}{' '}
-                        <span className="text-[11px] text-slate-500">
+                        <span className="text-[11px] text-[#475569]">
                           ({resolverEtiquetaCargo(p.cargo, snapshot.cargos)})
                         </span>
                       </span>
@@ -256,21 +256,21 @@ export const TecnicoRutaDetalleView: React.FC<TecnicoRutaDetalleViewProps> = ({
           })}
         </div>
 
-        <div className="rounded-lg border border-slate-200 bg-white p-5 space-y-3">
+        <div className="rounded-2xl border border-slate-200/90 bg-white p-5 space-y-3">
           <div className="flex items-center gap-2 text-xs font-bold text-[#0F2942]">
             <Truck className="h-4 w-4 text-[#0284C7]" />
             <span>Vehículos y Equipos GNSS</span>
           </div>
           <div className="space-y-2 text-xs">
             {vehiculosRuta.length === 0 ? (
-              <p className="text-slate-500">Sin vehículos asignados.</p>
+              <p className="text-[#475569]">Sin vehículos asignados.</p>
             ) : (
               vehiculosRuta.map((v) => (
                 <div
                   key={v.id}
-                  className="flex items-center justify-between rounded-md bg-slate-50 px-3 py-2.5"
+                  className="flex items-center justify-between rounded-xl border border-slate-200/70 bg-[#F8FAFC] px-3 py-2.5"
                 >
-                  <span className="font-medium text-slate-900">{v.etiqueta}</span>
+                  <span className="font-medium text-[#0F2942]">{v.etiqueta}</span>
                   <span className="font-mono text-[11px] font-semibold text-[#0F2942]">
                     {v.placa}
                   </span>
@@ -280,13 +280,13 @@ export const TecnicoRutaDetalleView: React.FC<TecnicoRutaDetalleViewProps> = ({
             {equiposRuta.map((eq) => (
               <div
                 key={eq.id}
-                className="flex items-center justify-between rounded-md bg-slate-50 px-3 py-2.5"
+                className="flex items-center justify-between rounded-xl border border-slate-200/70 bg-[#F8FAFC] px-3 py-2.5"
               >
-                <span className="inline-flex items-center gap-1.5 font-medium text-slate-900">
+                <span className="inline-flex items-center gap-1.5 font-medium text-[#0F2942]">
                   <Cpu className="h-3.5 w-3.5 text-[#0284C7]" />
                   {eq.nombre}
                 </span>
-                <span className="font-mono text-[11px] text-slate-500">{eq.serial}</span>
+                <span className="font-mono text-[11px] text-[#475569]">{eq.serial}</span>
               </div>
             ))}
           </div>
@@ -294,15 +294,15 @@ export const TecnicoRutaDetalleView: React.FC<TecnicoRutaDetalleViewProps> = ({
       </div>
 
       {/* Servicios en la ruta */}
-      <div className="rounded-lg border border-slate-200 bg-white p-5 space-y-3">
-        <h3 className="text-sm font-bold text-slate-900">
+      <div className="rounded-2xl border border-slate-200/90 bg-white p-5 space-y-3">
+        <h3 className="text-sm font-bold text-[#0F2942]">
           Servicios de la Ruta ({serviciosRuta.length})
         </h3>
 
         {serviciosRuta.length === 0 ? (
-          <p className="text-xs text-slate-500">No hay servicios registrados en esta ruta.</p>
+          <p className="text-xs text-[#475569]">No hay servicios registrados en esta ruta.</p>
         ) : (
-          <div className="divide-y divide-slate-200">
+          <div className="divide-y divide-slate-100">
             {serviciosRuta.map((srv) => {
               const bitacoraSrvCount = bitacorasRuta.filter((b) => b.servicioId === srv.id).length;
               const puedeIniciar = srv.estado === 'programado';
@@ -315,7 +315,7 @@ export const TecnicoRutaDetalleView: React.FC<TecnicoRutaDetalleViewProps> = ({
                 >
                   <div className="space-y-1">
                     <div className="flex flex-wrap items-center gap-2">
-                      <span className="text-sm font-bold text-slate-900">{srv.nombre}</span>
+                      <span className="text-sm font-bold text-[#0F2942]">{srv.nombre}</span>
                       <WorkflowBadge status={srv.estado} />
                       {srv.syncStatus !== 'synced' && (
                         <span className="text-[11px] font-medium text-[#B45309]">
@@ -323,7 +323,7 @@ export const TecnicoRutaDetalleView: React.FC<TecnicoRutaDetalleViewProps> = ({
                         </span>
                       )}
                     </div>
-                    <div className="text-xs text-slate-500 flex flex-wrap gap-3">
+                    <div className="text-xs text-[#475569] flex flex-wrap gap-3">
                       {srv.fechaRealInicio && (
                         <span>
                           Inicio real: <strong className="font-mono">{srv.fechaRealInicio}</strong>
@@ -343,7 +343,7 @@ export const TecnicoRutaDetalleView: React.FC<TecnicoRutaDetalleViewProps> = ({
                       <button
                         type="button"
                         onClick={() => onAbrirTransicion(srv.id)}
-                        className={`inline-flex items-center gap-1.5 rounded-md px-3.5 py-2 text-xs font-semibold text-white min-h-[42px] whitespace-nowrap ${
+                        className={`inline-flex items-center gap-1.5 rounded-xl px-3.5 py-2 text-xs font-semibold text-white min-h-[42px] whitespace-nowrap ${
                           puedeIniciar
                             ? 'bg-[#0284C7] hover:bg-[#0369A1]'
                             : 'bg-[#15803D] hover:bg-emerald-800'
@@ -366,7 +366,7 @@ export const TecnicoRutaDetalleView: React.FC<TecnicoRutaDetalleViewProps> = ({
                     <button
                       type="button"
                       onClick={() => onAbrirBitacora(srv.id)}
-                      className="inline-flex items-center gap-1.5 rounded-md border border-slate-300 bg-white px-3.5 py-2 text-xs font-semibold text-[#0F2942] hover:bg-slate-50 min-h-[42px] whitespace-nowrap"
+                      className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3.5 py-2 text-xs font-semibold text-[#0F2942] hover:bg-slate-50 min-h-[42px] whitespace-nowrap"
                     >
                       <ClipboardList className="h-3.5 w-3.5 text-[#0284C7]" />
                       Agregar bitácora
@@ -380,16 +380,16 @@ export const TecnicoRutaDetalleView: React.FC<TecnicoRutaDetalleViewProps> = ({
       </div>
 
       {/* Historial de bitácora de campo */}
-      <div className="rounded-lg border border-slate-200 bg-white p-5 space-y-4">
+      <div className="rounded-2xl border border-slate-200/90 bg-white p-5 space-y-4">
         <div className="flex flex-wrap items-center justify-between gap-2">
-          <h3 className="text-sm font-bold text-slate-900">
+          <h3 className="text-sm font-bold text-[#0F2942]">
             Bitácora de Campo ({bitacorasRuta.length})
           </h3>
           {serviciosRuta[0] && (
             <button
               type="button"
               onClick={() => onAbrirBitacora(serviciosRuta[0].id)}
-              className="inline-flex items-center gap-1.5 rounded-md bg-[#0F2942] px-3.5 py-2 text-xs font-semibold text-white hover:bg-[#0284C7] min-h-[40px] whitespace-nowrap"
+              className="inline-flex items-center gap-1.5 rounded-xl bg-[#0F2942] px-3.5 py-2 text-xs font-semibold text-white hover:bg-[#0284C7] min-h-[40px] whitespace-nowrap"
             >
               <ClipboardList className="h-3.5 w-3.5" />
               Agregar nota de bitácora
@@ -398,11 +398,11 @@ export const TecnicoRutaDetalleView: React.FC<TecnicoRutaDetalleViewProps> = ({
         </div>
 
         {bitacorasRuta.length === 0 ? (
-          <p className="text-xs text-slate-500">
+          <p className="text-xs text-[#475569]">
             Aún no hay entradas registradas en la bitácora de esta ruta.
           </p>
         ) : (
-          <div className="divide-y divide-slate-200">
+          <div className="divide-y divide-slate-100">
             {bitacorasRuta.map((b) => {
               const srv = serviciosRuta.find((s) => s.id === b.servicioId);
               return (
@@ -410,10 +410,10 @@ export const TecnicoRutaDetalleView: React.FC<TecnicoRutaDetalleViewProps> = ({
                   <div className="flex flex-wrap items-center justify-between gap-2">
                     <div className="font-semibold text-[#0F2942]">
                       {b.autorNombre}
-                      {srv && <span className="ml-2 font-normal text-slate-500">· {srv.nombre}</span>}
+                      {srv && <span className="ml-2 font-normal text-[#475569]">· {srv.nombre}</span>}
                     </div>
                     <div className="flex items-center gap-2 text-[11px]">
-                      <span className="inline-flex items-center gap-1 font-mono text-slate-500">
+                      <span className="inline-flex items-center gap-1 font-mono text-[#475569]">
                         <Clock className="h-3 w-3" />
                         {b.fechaAST}
                       </span>

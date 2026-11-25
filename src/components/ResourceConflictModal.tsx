@@ -72,7 +72,7 @@ export const ResourceConflictModal: React.FC<ResourceConflictModalProps> = ({
       aria-labelledby="titulo-conflicto-recursos"
     >
       <div
-        className={`w-full max-w-lg overflow-hidden rounded-xl border bg-white shadow-2xl ${
+        className={`w-full max-w-lg overflow-hidden rounded-2xl border bg-white shadow-2xl ${
           tieneBloqueoDuro || tieneBloqueoConExcepcion
             ? 'border-rose-300'
             : 'border-amber-300'
@@ -86,7 +86,7 @@ export const ResourceConflictModal: React.FC<ResourceConflictModalProps> = ({
         <div className="p-6 space-y-4">
           <div className="flex items-start gap-3">
             <div
-              className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-lg ${
+              className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl ${
                 tieneBloqueoDuro || tieneBloqueoConExcepcion
                   ? 'bg-rose-50 text-[#DC2626]'
                   : 'bg-amber-50 text-[#B45309]'
@@ -101,14 +101,14 @@ export const ResourceConflictModal: React.FC<ResourceConflictModalProps> = ({
               )}
             </div>
             <div>
-              <h3 id="titulo-conflicto-recursos" className="text-base font-bold text-slate-900">
+              <h3 id="titulo-conflicto-recursos" className="text-base font-bold tracking-tight text-[#0F2942]">
                 {tieneBloqueoDuro
                   ? 'Asignación o Renta Bloqueada'
                   : tieneBloqueoConExcepcion
                   ? 'Conflicto de Agenda / Renta en Rango de Fechas'
                   : 'Advertencia Espacial de Ruta'}
               </h3>
-              <p className="mt-1 text-xs text-slate-600 leading-relaxed">
+              <p className="mt-1 text-xs text-[#475569] leading-relaxed">
                 {tieneBloqueoDuro
                   ? 'Uno o más recursos no están disponibles (mantenimiento, cuadrilla de baja o renta incompatible). Reemplázalos o ajusta las fechas antes de continuar.'
                   : tieneBloqueoConExcepcion
@@ -124,7 +124,7 @@ export const ResourceConflictModal: React.FC<ResourceConflictModalProps> = ({
               return (
                 <div
                   key={`${conflict.type}-${index}`}
-                  className={`rounded-lg border p-3.5 text-xs text-slate-900 ${
+                  className={`rounded-xl border p-3.5 text-xs text-[#0F2942] ${
                     isWarning
                       ? 'border-amber-200 bg-amber-50/70'
                       : 'border-rose-200 bg-rose-50/70'
@@ -139,7 +139,7 @@ export const ResourceConflictModal: React.FC<ResourceConflictModalProps> = ({
                       <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
                       {labelForType(conflict.type)}
                     </span>
-                    <span className="font-mono text-[11px] font-medium text-slate-500">
+                    <span className="font-mono text-[11px] font-medium text-[#475569]">
                       {conflict.conflictingRutaCode}
                     </span>
                   </div>
@@ -153,7 +153,7 @@ export const ResourceConflictModal: React.FC<ResourceConflictModalProps> = ({
 
           {!tieneBloqueoDuro && tieneBloqueoConExcepcion && (
             <div className="space-y-1.5 text-xs">
-              <label className="block font-semibold text-slate-800">
+              <label className="block font-semibold text-[#0F2942]">
                 Motivo de la excepción (requerido para auditoría)
               </label>
               <textarea
@@ -161,7 +161,7 @@ export const ResourceConflictModal: React.FC<ResourceConflictModalProps> = ({
                 value={motivo}
                 onChange={(e) => setMotivo(e.target.value)}
                 placeholder="Ej. Brigada apoya solo 2 horas en la mañana y se traslada luego al sector norte..."
-                className="w-full rounded-md border border-slate-300 px-3 py-2 text-xs text-slate-900 focus:border-[#0284C7] focus:outline-none"
+                className="w-full rounded-xl border border-slate-200 px-3 py-2 text-xs text-[#0F2942] focus:border-[#0284C7] focus:outline-none"
               />
               {error && <p className="text-[11px] font-medium text-[#DC2626]">{error}</p>}
             </div>
@@ -171,7 +171,7 @@ export const ResourceConflictModal: React.FC<ResourceConflictModalProps> = ({
             <button
               type="button"
               onClick={onCancel}
-              className="rounded-md border border-slate-300 bg-white px-4 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50 transition-colors min-h-[40px]"
+              className="rounded-xl border border-slate-200 bg-white px-4 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50 transition-colors min-h-[40px]"
             >
               {tieneBloqueoDuro ? 'Corregir recursos' : 'Cancelar y reasignar'}
             </button>
@@ -179,7 +179,7 @@ export const ResourceConflictModal: React.FC<ResourceConflictModalProps> = ({
               <button
                 type="button"
                 onClick={handleConfirm}
-                className={`rounded-md px-4 py-2 text-xs font-semibold text-white transition-colors min-h-[40px] ${
+                className={`rounded-xl px-4 py-2 text-xs font-semibold text-white transition-colors min-h-[40px] shadow-sm ${
                   soloAdvertencias
                     ? 'bg-[#0F2942] hover:bg-[#0284C7]'
                     : 'bg-[#DC2626] hover:bg-red-700'

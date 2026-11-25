@@ -337,11 +337,11 @@ export const PresupuestoProyectoModal: React.FC<PresupuestoProyectoModalProps> =
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-[#0F2942]/65 backdrop-blur-[2px] p-4">
-      <div className="w-full max-w-4xl rounded-xl border border-slate-200 bg-white shadow-2xl max-h-[92vh] flex flex-col overflow-hidden">
+      <div className="w-full max-w-4xl rounded-2xl border border-slate-200/90 bg-white shadow-2xl max-h-[92vh] flex flex-col overflow-hidden">
         {/* Header */}
-        <div className="flex items-start justify-between gap-4 border-b border-slate-200 bg-[#F8FAFC] px-6 py-4">
+        <div className="flex items-start justify-between gap-4 border-b border-slate-200/80 bg-[#F8FAFC] px-6 py-4">
           <div className="min-w-0 space-y-1">
-            <div className="flex flex-wrap items-center gap-2 text-xs text-[#43474D]">
+            <div className="flex flex-wrap items-center gap-2 text-xs text-[#475569]">
               <span className="font-mono font-bold text-[#0284C7]">{proyecto.codigoContrato}</span>
               <span aria-hidden="true">·</span>
               <span>
@@ -362,7 +362,7 @@ export const PresupuestoProyectoModal: React.FC<PresupuestoProyectoModalProps> =
                 </>
               )}
             </div>
-            <h3 className="text-base font-bold tracking-tight text-[#0D1C2F] text-balance">
+            <h3 className="text-base font-bold tracking-tight text-[#0F2942] text-balance">
               Presupuesto y Margen — {proyecto.nombre}
             </h3>
           </div>
@@ -371,22 +371,22 @@ export const PresupuestoProyectoModal: React.FC<PresupuestoProyectoModalProps> =
             type="button"
             onClick={onClose}
             aria-label="Cerrar modal de presupuesto"
-            className="rounded-md p-2 text-[#43474D] hover:bg-slate-200/70 min-h-[40px] min-w-[40px] flex items-center justify-center shrink-0"
+            className="rounded-xl p-2 text-[#475569] hover:bg-slate-200/70 min-h-[40px] min-w-[40px] flex items-center justify-center shrink-0 transition-colors"
           >
             <X className="h-4 w-4" />
           </button>
         </div>
 
         {/* Navigation Segmented Tabs */}
-        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 px-6 py-3 bg-white">
-          <div className="inline-flex rounded-lg bg-slate-100 p-1">
+        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200/80 px-6 py-3 bg-white">
+          <div className="inline-flex rounded-2xl border border-slate-200/70 bg-[#F1F5F9] p-1">
             <button
               type="button"
               onClick={() => setTab('comparacion')}
-              className={`rounded-md px-3.5 py-2 text-xs font-semibold transition-colors whitespace-nowrap shrink-0 min-h-[36px] ${
+              className={`rounded-xl px-3.5 py-2 text-xs font-semibold transition-all whitespace-nowrap shrink-0 min-h-[36px] ${
                 tab === 'comparacion'
-                  ? 'bg-white text-[#0F2942] shadow-sm'
-                  : 'text-[#43474D] hover:text-[#0F2942]'
+                  ? 'bg-[#0F2942] text-white shadow-sm'
+                  : 'text-[#475569] hover:text-[#0F2942]'
               }`}
             >
               Plan vs. ejecutado
@@ -394,10 +394,10 @@ export const PresupuestoProyectoModal: React.FC<PresupuestoProyectoModalProps> =
             <button
               type="button"
               onClick={() => setTab('versiones')}
-              className={`rounded-md px-3.5 py-2 text-xs font-semibold transition-colors whitespace-nowrap shrink-0 min-h-[36px] ${
+              className={`rounded-xl px-3.5 py-2 text-xs font-semibold transition-all whitespace-nowrap shrink-0 min-h-[36px] ${
                 tab === 'versiones'
-                  ? 'bg-white text-[#0F2942] shadow-sm'
-                  : 'text-[#43474D] hover:text-[#0F2942]'
+                  ? 'bg-[#0F2942] text-white shadow-sm'
+                  : 'text-[#475569] hover:text-[#0F2942]'
               }`}
             >
               Versiones ({historial.length})
@@ -408,7 +408,7 @@ export const PresupuestoProyectoModal: React.FC<PresupuestoProyectoModalProps> =
             <button
               type="button"
               onClick={iniciarNuevaVersion}
-              className="inline-flex items-center gap-1.5 rounded-md bg-[#0F2942] px-4 py-2 text-xs font-semibold text-white hover:bg-[#0284C7] whitespace-nowrap shrink-0 min-h-[40px]"
+              className="inline-flex items-center gap-1.5 rounded-xl bg-[#0F2942] px-4 py-2 text-xs font-semibold text-white hover:bg-[#0284C7] whitespace-nowrap shrink-0 min-h-[40px] transition-colors shadow-sm"
             >
               <Plus className="h-3.5 w-3.5" />
               Nueva versión
@@ -419,7 +419,7 @@ export const PresupuestoProyectoModal: React.FC<PresupuestoProyectoModalProps> =
         {/* Body */}
         <div className="overflow-y-auto p-6 space-y-6 flex-1">
           {errorMsg && (
-            <div className="rounded-lg border border-[#FCA5A5] bg-[#FEE2E2] px-4 py-3 text-xs font-medium text-[#93000A]">
+            <div className="rounded-xl border border-[#FCA5A5] bg-[#FEE2E2] px-4 py-3 text-xs font-medium text-[#93000A]">
               {errorMsg}
             </div>
           )}
@@ -428,20 +428,20 @@ export const PresupuestoProyectoModal: React.FC<PresupuestoProyectoModalProps> =
             <div className="space-y-6">
               {/* 4-column KPI strip */}
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-                <div className="rounded-lg border border-slate-200 bg-[#F8FAFC] p-4">
-                  <div className="text-xs font-medium text-[#43474D]">Valor de Contrato</div>
-                  <div className="mt-1.5 font-mono text-lg font-bold text-[#0D1C2F] tabular-nums">
+                <div className="rounded-2xl border border-slate-200/70 bg-[#F8FAFC] p-4">
+                  <div className="text-xs font-medium text-[#475569]">Valor de Contrato</div>
+                  <div className="mt-1.5 font-mono text-lg font-bold text-[#0F2942] tabular-nums">
                     {formatRD(comparacion.valorContratoRD, moneda)}
                   </div>
-                  <div className="mt-0.5 text-[11px] text-[#43474D]">Ingreso acordado con cliente</div>
+                  <div className="mt-0.5 text-[11px] text-[#475569]">Ingreso acordado con cliente</div>
                 </div>
 
-                <div className="rounded-lg border border-slate-200 bg-[#F8FAFC] p-4">
-                  <div className="text-xs font-medium text-[#43474D]">Costo Planificado</div>
+                <div className="rounded-2xl border border-slate-200/70 bg-[#F8FAFC] p-4">
+                  <div className="text-xs font-medium text-[#475569]">Costo Planificado</div>
                   <div className="mt-1.5 font-mono text-lg font-bold text-[#0F2942] tabular-nums">
                     {formatRD(comparacion.totalPlanificadoRD, moneda)}
                   </div>
-                  <div className="mt-0.5 font-mono text-[11px] text-[#43474D] tabular-nums">
+                  <div className="mt-0.5 font-mono text-[11px] text-[#475569] tabular-nums">
                     Margen plan:{' '}
                     {comparacion.margenPlanificadoPct !== null
                       ? `${comparacion.margenPlanificadoPct}%`
@@ -449,8 +449,8 @@ export const PresupuestoProyectoModal: React.FC<PresupuestoProyectoModalProps> =
                   </div>
                 </div>
 
-                <div className="rounded-lg border border-slate-200 bg-[#F8FAFC] p-4">
-                  <div className="text-xs font-medium text-[#43474D]">Costo Ejecutado (Live)</div>
+                <div className="rounded-2xl border border-slate-200/70 bg-[#F8FAFC] p-4">
+                  <div className="text-xs font-medium text-[#475569]">Costo Ejecutado (Live)</div>
                   <div
                     className={`mt-1.5 font-mono text-lg font-bold tabular-nums ${
                       comparacion.excedidoTotal ? 'text-[#DC2626]' : 'text-[#0284C7]'
@@ -458,21 +458,21 @@ export const PresupuestoProyectoModal: React.FC<PresupuestoProyectoModalProps> =
                   >
                     {formatRD(comparacion.totalEjecutadoRD, moneda)}
                   </div>
-                  <div className="mt-0.5 font-mono text-[11px] text-[#43474D] tabular-nums">
+                  <div className="mt-0.5 font-mono text-[11px] text-[#475569] tabular-nums">
                     Dif. vs plan: {formatRD(comparacion.diferenciaTotalRD, moneda)}
                   </div>
                 </div>
 
-                <div className="rounded-lg border border-slate-200 bg-[#F8FAFC] p-4">
-                  <div className="text-xs font-medium text-[#43474D]">Margen real actual</div>
+                <div className="rounded-2xl bg-gradient-to-br from-[#0F2942] to-[#0284C7] p-4 text-white shadow-sm">
+                  <div className="text-xs font-medium text-sky-100">Margen real actual</div>
                   <div
                     className={`mt-1.5 font-mono text-lg font-bold tabular-nums ${
-                      comparacion.margenRealRD < 0 ? 'text-[#DC2626]' : 'text-[#15803D]'
+                      comparacion.margenRealRD < 0 ? 'text-rose-200' : 'text-white'
                     }`}
                   >
                     {formatRD(comparacion.margenRealRD, moneda)}
                   </div>
-                  <div className="mt-0.5 font-mono text-[11px] text-[#43474D] tabular-nums">
+                  <div className="mt-0.5 font-mono text-[11px] text-sky-100/90 tabular-nums">
                     {comparacion.margenRealPct !== null
                       ? `${comparacion.margenRealPct}% del contrato`
                       : 'Sin valor de contrato'}
@@ -481,12 +481,12 @@ export const PresupuestoProyectoModal: React.FC<PresupuestoProyectoModalProps> =
               </div>
 
               {/* Category Comparison Recharts Bar Chart */}
-              <div className="rounded-lg border border-slate-200 bg-white p-4">
+              <div className="rounded-2xl border border-slate-200/90 bg-white p-4">
                 <div className="flex items-center justify-between gap-2 mb-3">
-                  <div className="text-xs font-bold text-[#0D1C2F]">
+                  <div className="text-xs font-bold text-[#0F2942]">
                     Comparación gráfica por categoría ({moneda})
                   </div>
-                  <div className="text-[11px] text-[#43474D]">
+                  <div className="text-[11px] text-[#475569]">
                     Barras en rojo indican excedente sobre el plan
                   </div>
                 </div>
@@ -564,10 +564,10 @@ export const PresupuestoProyectoModal: React.FC<PresupuestoProyectoModalProps> =
               </div>
 
               {/* 6-Category Comparison Table */}
-              <div className="rounded-lg border border-slate-200 overflow-x-auto">
+              <div className="rounded-2xl border border-slate-200/90 overflow-x-auto">
                 <table className="w-full text-left text-xs border-collapse">
                   <thead>
-                    <tr className="bg-[#F8FAFC] border-b border-slate-200 text-[11px] font-semibold text-[#43474D]">
+                    <tr className="bg-[#F8FAFC] border-b border-slate-200 text-[11px] font-semibold text-[#475569]">
                       <th className="px-4 py-3">Categoría de Costo</th>
                       <th className="px-4 py-3 text-right">Planificado</th>
                       <th className="px-4 py-3 text-right">Ejecutado (Real / Est.)</th>
@@ -641,7 +641,7 @@ export const PresupuestoProyectoModal: React.FC<PresupuestoProyectoModalProps> =
               </div>
 
               {/* Fuente de cálculo live */}
-              <div className="rounded-lg border border-slate-200 bg-[#F8FAFC] px-4 py-3 text-[11px] text-[#43474D] space-y-1">
+              <div className="rounded-xl border border-slate-200/70 bg-[#F8FAFC] px-4 py-3 text-[11px] text-[#475569] space-y-1">
                 <div>
                   Los costos ejecutados no se duplican: se calculan en vivo desde viáticos aprobados
                   ({formatRD(comparacion.viaticosPendientesRD, moneda)} en viáticos pendientes por aprobar),
@@ -657,7 +657,7 @@ export const PresupuestoProyectoModal: React.FC<PresupuestoProyectoModalProps> =
           {tab === 'versiones' && (
             <div className="space-y-6">
               {hayCerrado && (
-                <div className="flex items-center gap-2.5 rounded-lg border border-slate-200 bg-[#F8FAFC] px-4 py-3 text-xs text-[#334155]">
+                <div className="flex items-center gap-2.5 rounded-xl border border-slate-200/70 bg-[#F8FAFC] px-4 py-3 text-xs text-[#334155]">
                   <Lock className="h-4 w-4 text-[#0F2942] shrink-0" />
                   <span>
                     Este proyecto tiene una versión de presupuesto cerrada. Es definitiva y de solo lectura.
@@ -666,7 +666,7 @@ export const PresupuestoProyectoModal: React.FC<PresupuestoProyectoModalProps> =
               )}
 
               {!hayCerrado && borradorAbierto && !modoFormulario && (
-                <div className="flex items-center justify-between gap-3 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-xs text-amber-900">
+                <div className="flex items-center justify-between gap-3 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-xs text-amber-900">
                   <span>
                     Existe un borrador abierto (v{borradorAbierto.version}) vigente desde {borradorAbierto.vigenciaDesde}.
                   </span>
@@ -680,7 +680,7 @@ export const PresupuestoProyectoModal: React.FC<PresupuestoProyectoModalProps> =
                         setNotas(borradorAbierto.notas ?? '');
                         cargarMontosDesdeLineas(borradorAbierto.lineas);
                       }}
-                      className="rounded-md bg-[#0F2942] px-3 py-1.5 font-semibold text-white whitespace-nowrap shrink-0"
+                      className="rounded-xl bg-[#0F2942] px-3.5 py-1.5 font-semibold text-white whitespace-nowrap shrink-0 hover:bg-[#0284C7] transition-colors"
                     >
                       Editar borrador
                     </button>
@@ -692,23 +692,23 @@ export const PresupuestoProyectoModal: React.FC<PresupuestoProyectoModalProps> =
               {canManage && modoFormulario && !hayCerrado && (
                 <form
                   onSubmit={handleGuardarBorrador}
-                  className="rounded-lg border border-slate-200 bg-white p-5 space-y-5"
+                  className="rounded-2xl border border-slate-200/90 bg-white p-5 space-y-5"
                 >
-                  <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 pb-3">
+                  <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200/80 pb-3">
                     <div>
-                      <h4 className="text-sm font-bold text-[#0D1C2F]">
+                      <h4 className="text-sm font-bold text-[#0F2942]">
                         {modoFormulario === 'editar_borrador' && borradorAbierto
                           ? `Editando borrador v${borradorAbierto.version}`
                           : 'Nueva versión de presupuesto'}
                       </h4>
-                      <p className="text-xs text-[#43474D]">
+                      <p className="text-xs text-[#475569]">
                         Los presupuestos aprobados son inmutables; cada cambio genera una nueva versión con vigencia.
                       </p>
                     </div>
                     <button
                       type="button"
                       onClick={() => setShowEstimador((prev) => !prev)}
-                      className="inline-flex items-center gap-1.5 rounded-md border border-[#0284C7] bg-white px-3.5 py-2 text-xs font-semibold text-[#0284C7] hover:bg-sky-50 whitespace-nowrap shrink-0 min-h-[38px]"
+                      className="inline-flex items-center gap-1.5 rounded-xl border border-[#0284C7] bg-white px-3.5 py-2 text-xs font-semibold text-[#0284C7] hover:bg-sky-50 whitespace-nowrap shrink-0 min-h-[38px] transition-colors"
                     >
                       <Calculator className="h-3.5 w-3.5" />
                       {showEstimador ? 'Ocultar estimador' : 'Calcular por puesto'}
@@ -717,13 +717,13 @@ export const PresupuestoProyectoModal: React.FC<PresupuestoProyectoModalProps> =
 
                   {/* Estimador provisional de viáticos por puesto (tabla de referencia) */}
                   {showEstimador && (
-                    <div className="rounded-lg border border-slate-200 bg-[#F8FAFC] p-4 space-y-3">
+                    <div className="rounded-xl border border-slate-200/70 bg-[#F8FAFC] p-4 space-y-3">
                       <div className="flex flex-wrap items-center justify-between gap-2">
                         <div>
                           <div className="text-xs font-bold text-[#0F2942]">
                             Estimador de Viáticos por Puesto ({ETIQUETA_EJEMPLO_CONFIRMAR})
                           </div>
-                          <div className="text-[11px] text-[#43474D]">
+                          <div className="text-[11px] text-[#475569]">
                             Basado en dieta (desayuno + almuerzo + cena) y alojamiento por día de misión.
                           </div>
                         </div>
@@ -735,7 +735,7 @@ export const PresupuestoProyectoModal: React.FC<PresupuestoProyectoModalProps> =
                               min={1}
                               value={diasEstimados}
                               onChange={(e) => setDiasEstimados(e.target.value)}
-                              className="w-16 rounded-md border border-slate-200 bg-white px-2 py-1 font-mono text-right min-h-[34px]"
+                              className="w-16 rounded-xl border border-slate-200 bg-white px-2.5 py-1 font-mono text-right min-h-[34px] focus:border-[#0284C7] focus:outline-none"
                             />
                           </label>
                           <label className="inline-flex items-center gap-1.5 cursor-pointer">
@@ -750,10 +750,10 @@ export const PresupuestoProyectoModal: React.FC<PresupuestoProyectoModalProps> =
                         </div>
                       </div>
 
-                      <div className="overflow-x-auto rounded-md border border-slate-200 bg-white">
+                      <div className="overflow-x-auto rounded-xl border border-slate-200/90 bg-white">
                         <table className="w-full text-left text-[11px] border-collapse">
                           <thead>
-                            <tr className="border-b border-slate-200 bg-slate-50 text-[#43474D]">
+                            <tr className="border-b border-slate-200 bg-[#F8FAFC] text-[#475569]">
                               <th className="px-3 py-2">Puesto</th>
                               <th className="px-3 py-2 text-right">Dieta</th>
                               <th className="px-3 py-2 text-right">Alojamiento</th>
@@ -789,7 +789,7 @@ export const PresupuestoProyectoModal: React.FC<PresupuestoProyectoModalProps> =
                                       }))
                                     }
                                     aria-label={`Cantidad de ${tar.puesto}`}
-                                    className="w-16 rounded-md border border-slate-200 px-2 py-1 text-right font-mono min-h-[32px]"
+                                    className="w-16 rounded-xl border border-slate-200 px-2 py-1 text-right font-mono min-h-[32px] focus:border-[#0284C7] focus:outline-none"
                                   />
                                 </td>
                               </tr>
@@ -810,7 +810,7 @@ export const PresupuestoProyectoModal: React.FC<PresupuestoProyectoModalProps> =
                               viaticos: String(estimadoPuestos.totalEstimadoRD),
                             }))
                           }
-                          className="rounded-md bg-[#0284C7] px-3.5 py-2 text-xs font-semibold text-white hover:bg-[#006398] whitespace-nowrap shrink-0 min-h-[36px]"
+                          className="rounded-xl bg-[#0284C7] px-3.5 py-2 text-xs font-semibold text-white hover:bg-[#006398] whitespace-nowrap shrink-0 min-h-[36px] transition-colors"
                         >
                           Aplicar a viáticos
                         </button>
@@ -828,7 +828,7 @@ export const PresupuestoProyectoModal: React.FC<PresupuestoProyectoModalProps> =
                         required
                         value={vigenciaDesde}
                         onChange={(e) => setVigenciaDesde(e.target.value)}
-                        className="w-full rounded-md border border-slate-200 px-3 py-2 font-mono min-h-[40px]"
+                        className="w-full rounded-xl border border-slate-200 px-3 py-2 font-mono min-h-[40px] focus:border-[#0284C7] focus:outline-none"
                       />
                     </div>
                     <div>
@@ -840,7 +840,7 @@ export const PresupuestoProyectoModal: React.FC<PresupuestoProyectoModalProps> =
                         value={motivoCambio}
                         onChange={(e) => setMotivoCambio(e.target.value)}
                         placeholder="Ej. Ajuste por ampliación de polígono o renta extra"
-                        className="w-full rounded-md border border-slate-200 px-3 py-2 min-h-[40px]"
+                        className="w-full rounded-xl border border-slate-200 px-3 py-2 min-h-[40px] focus:border-[#0284C7] focus:outline-none"
                       />
                     </div>
                   </div>
@@ -863,7 +863,7 @@ export const PresupuestoProyectoModal: React.FC<PresupuestoProyectoModalProps> =
                               [cat]: e.target.value,
                             }))
                           }
-                          className="w-full rounded-md border border-slate-200 px-3 py-2 font-mono text-right min-h-[40px] tabular-nums"
+                          className="w-full rounded-xl border border-slate-200 px-3 py-2 font-mono text-right min-h-[40px] tabular-nums focus:border-[#0284C7] focus:outline-none"
                         />
                       </div>
                     ))}
@@ -876,11 +876,11 @@ export const PresupuestoProyectoModal: React.FC<PresupuestoProyectoModalProps> =
                       value={notas}
                       onChange={(e) => setNotas(e.target.value)}
                       placeholder="Supuestos de brigada, días estimados o equipo GNSS..."
-                      className="w-full rounded-md border border-slate-200 px-3 py-2 min-h-[40px]"
+                      className="w-full rounded-xl border border-slate-200 px-3 py-2 min-h-[40px] focus:border-[#0284C7] focus:outline-none"
                     />
                   </div>
 
-                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-t border-slate-200 pt-4">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-t border-slate-200/80 pt-4">
                     <div className="text-xs space-y-0.5 font-mono tabular-nums">
                       <div className="font-bold text-[#0F2942]">
                         Total Planificado: {formatRD(totalFormularioRD, moneda)}
@@ -900,7 +900,7 @@ export const PresupuestoProyectoModal: React.FC<PresupuestoProyectoModalProps> =
                         <button
                           type="button"
                           onClick={() => setModoFormulario(null)}
-                          className="rounded-md border border-slate-200 px-3.5 py-2 text-xs font-semibold text-[#334155] min-h-[40px] whitespace-nowrap shrink-0"
+                          className="rounded-xl border border-slate-200 px-3.5 py-2 text-xs font-semibold text-[#334155] hover:bg-slate-50 min-h-[40px] whitespace-nowrap shrink-0 transition-colors"
                         >
                           Cancelar
                         </button>
@@ -908,7 +908,7 @@ export const PresupuestoProyectoModal: React.FC<PresupuestoProyectoModalProps> =
                       <button
                         type="submit"
                         disabled={isSaving}
-                        className="rounded-md border border-[#0F2942] bg-white px-4 py-2 text-xs font-semibold text-[#0F2942] hover:bg-slate-50 disabled:opacity-60 min-h-[40px] whitespace-nowrap shrink-0"
+                        className="rounded-xl border border-[#0F2942] bg-white px-4 py-2 text-xs font-semibold text-[#0F2942] hover:bg-slate-50 disabled:opacity-60 min-h-[40px] whitespace-nowrap shrink-0 transition-colors"
                       >
                         {modoFormulario === 'editar_borrador'
                           ? 'Actualizar borrador'
@@ -946,7 +946,7 @@ export const PresupuestoProyectoModal: React.FC<PresupuestoProyectoModalProps> =
                               setIsSaving(false);
                             }
                           }}
-                          className="inline-flex items-center gap-1.5 rounded-md bg-[#15803D] px-4 py-2 text-xs font-semibold text-white hover:bg-[#166534] disabled:opacity-60 min-h-[40px] whitespace-nowrap shrink-0"
+                          className="inline-flex items-center gap-1.5 rounded-xl bg-[#15803D] px-4 py-2 text-xs font-semibold text-white hover:bg-[#166534] disabled:opacity-60 min-h-[40px] whitespace-nowrap shrink-0 transition-colors"
                         >
                           <CheckCircle2 className="h-3.5 w-3.5" />
                           Actualizar y aprobar
@@ -956,7 +956,7 @@ export const PresupuestoProyectoModal: React.FC<PresupuestoProyectoModalProps> =
                           type="button"
                           disabled={isSaving}
                           onClick={handleCrearYAprobar}
-                          className="inline-flex items-center gap-1.5 rounded-md bg-[#15803D] px-4 py-2 text-xs font-semibold text-white hover:bg-[#166534] disabled:opacity-60 min-h-[40px] whitespace-nowrap shrink-0"
+                          className="inline-flex items-center gap-1.5 rounded-xl bg-[#15803D] px-4 py-2 text-xs font-semibold text-white hover:bg-[#166534] disabled:opacity-60 min-h-[40px] whitespace-nowrap shrink-0 transition-colors"
                         >
                           <CheckCircle2 className="h-3.5 w-3.5" />
                           Crear y aprobar
@@ -970,7 +970,7 @@ export const PresupuestoProyectoModal: React.FC<PresupuestoProyectoModalProps> =
               {/* Historial de versiones */}
               <div className="space-y-3">
                 <div className="flex items-center justify-between">
-                  <h4 className="text-xs font-bold uppercase tracking-wide text-[#43474D]">
+                  <h4 className="text-xs font-bold uppercase tracking-wide text-[#475569]">
                     Historial de versiones ({historial.length})
                   </h4>
                   {canManage && vigente?.estado === 'aprobado' && !borradorAbierto && !hayCerrado && (
@@ -978,7 +978,7 @@ export const PresupuestoProyectoModal: React.FC<PresupuestoProyectoModalProps> =
                       type="button"
                       disabled={isSaving}
                       onClick={() => handleTransicionar(vigente.id, 'cerrado')}
-                      className="inline-flex items-center gap-1.5 rounded-md border border-slate-300 bg-white px-3 py-1.5 text-xs font-semibold text-[#334155] hover:bg-slate-50 min-h-[36px] whitespace-nowrap shrink-0"
+                      className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-[#334155] hover:bg-slate-50 min-h-[36px] whitespace-nowrap shrink-0 transition-colors"
                     >
                       <Lock className="h-3.5 w-3.5" />
                       Cerrar versión v{vigente.version}
@@ -987,14 +987,14 @@ export const PresupuestoProyectoModal: React.FC<PresupuestoProyectoModalProps> =
                 </div>
 
                 {historial.length === 0 ? (
-                  <div className="rounded-lg border border-slate-200 bg-[#F8FAFC] p-6 text-center text-xs text-[#43474D]">
+                  <div className="rounded-2xl border border-slate-200/70 bg-[#F8FAFC] p-6 text-center text-xs text-[#475569]">
                     Este proyecto aún no tiene versiones de presupuesto registradas.
                   </div>
                 ) : (
-                  <div className="rounded-lg border border-slate-200 overflow-x-auto">
+                  <div className="rounded-2xl border border-slate-200/90 overflow-x-auto">
                     <table className="w-full text-left text-xs border-collapse">
                       <thead>
-                        <tr className="bg-[#F8FAFC] border-b border-slate-200 text-[11px] font-semibold text-[#43474D]">
+                        <tr className="bg-[#F8FAFC] border-b border-slate-200 text-[11px] font-semibold text-[#475569]">
                           <th className="px-4 py-2.5">Versión</th>
                           <th className="px-4 py-2.5">Vigencia Desde</th>
                           <th className="px-4 py-2.5">Estado</th>

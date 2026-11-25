@@ -292,9 +292,9 @@ export const KmzOsmViewer: React.FC<KmzOsmViewerProps> = ({
   };
 
   return (
-    <div className="rounded-lg border border-slate-200 bg-white overflow-hidden">
+    <div className="rounded-2xl border border-slate-200/90 bg-white overflow-hidden">
       {/* Header Toolbar */}
-      <div className="flex flex-wrap items-center justify-between gap-2.5 border-b border-slate-200 bg-slate-50 px-4 py-3">
+      <div className="flex flex-wrap items-center justify-between gap-2.5 border-b border-slate-200 bg-[#F8FAFC] px-4 py-3.5">
         <div className="min-w-0">
           <div className="flex items-center gap-2">
             <Compass className="h-4 w-4 text-[#0284C7] shrink-0" />
@@ -311,12 +311,12 @@ export const KmzOsmViewer: React.FC<KmzOsmViewerProps> = ({
 
         <div className="flex flex-wrap items-center gap-2">
           {/* Base Map Switcher: OpenStreetMap / Topo / Offline Grid */}
-          <div className="inline-flex rounded-md border border-slate-200 bg-white p-0.5" role="group" aria-label="Capa base del mapa">
+          <div className="inline-flex rounded-2xl border border-slate-200/70 bg-[#F1F5F9] p-1" role="group" aria-label="Capa base del mapa">
             <button
               type="button"
               onClick={() => setBaseLayer('osm')}
-              className={`inline-flex items-center gap-1 rounded-md px-2.5 py-1.5 text-[11px] font-semibold transition-colors whitespace-nowrap shrink-0 ${
-                baseLayer === 'osm' ? 'bg-[#0284C7] text-white' : 'text-[#43474D] hover:bg-slate-100'
+              className={`inline-flex items-center gap-1 rounded-xl px-2.5 py-1.5 text-[11px] font-semibold transition-colors whitespace-nowrap shrink-0 ${
+                baseLayer === 'osm' ? 'bg-[#0F2942] text-white shadow-sm' : 'text-[#475569] hover:text-[#0F2942]'
               }`}
             >
               <MapIcon className="h-3 w-3" />
@@ -325,8 +325,8 @@ export const KmzOsmViewer: React.FC<KmzOsmViewerProps> = ({
             <button
               type="button"
               onClick={() => setBaseLayer('topo')}
-              className={`inline-flex items-center gap-1 rounded-md px-2.5 py-1.5 text-[11px] font-semibold transition-colors whitespace-nowrap shrink-0 ${
-                baseLayer === 'topo' ? 'bg-[#0284C7] text-white' : 'text-[#43474D] hover:bg-slate-100'
+              className={`inline-flex items-center gap-1 rounded-xl px-2.5 py-1.5 text-[11px] font-semibold transition-colors whitespace-nowrap shrink-0 ${
+                baseLayer === 'topo' ? 'bg-[#0F2942] text-white shadow-sm' : 'text-[#475569] hover:text-[#0F2942]'
               }`}
             >
               <Mountain className="h-3 w-3" />
@@ -335,8 +335,8 @@ export const KmzOsmViewer: React.FC<KmzOsmViewerProps> = ({
             <button
               type="button"
               onClick={() => setBaseLayer('grid')}
-              className={`inline-flex items-center gap-1 rounded-md px-2.5 py-1.5 text-[11px] font-semibold transition-colors whitespace-nowrap shrink-0 ${
-                baseLayer === 'grid' ? 'bg-[#0F2942] text-white' : 'text-[#43474D] hover:bg-slate-100'
+              className={`inline-flex items-center gap-1 rounded-xl px-2.5 py-1.5 text-[11px] font-semibold transition-colors whitespace-nowrap shrink-0 ${
+                baseLayer === 'grid' ? 'bg-[#0F2942] text-white shadow-sm' : 'text-[#475569] hover:text-[#0F2942]'
               }`}
               title="Solo polígono vectorial sin tiles externos"
             >
@@ -346,7 +346,7 @@ export const KmzOsmViewer: React.FC<KmzOsmViewerProps> = ({
           </div>
 
           {/* Dynamic Cadastral Unit Switcher */}
-          <div className="inline-flex rounded-md border border-slate-200 bg-white p-0.5" role="group" aria-label="Unidad catastral">
+          <div className="inline-flex rounded-2xl border border-slate-200/70 bg-[#F1F5F9] p-1" role="group" aria-label="Unidad catastral">
             {(
               [
                 { id: 'm2', label: 'm²' },
@@ -358,10 +358,10 @@ export const KmzOsmViewer: React.FC<KmzOsmViewerProps> = ({
                 key={unit.id}
                 type="button"
                 onClick={() => onChangeAreaUnit(unit.id)}
-                className={`rounded-md px-2.5 py-1.5 text-[11px] font-semibold transition-colors whitespace-nowrap shrink-0 ${
+                className={`rounded-xl px-2.5 py-1.5 text-[11px] font-semibold transition-colors whitespace-nowrap shrink-0 ${
                   areaUnit === unit.id
-                    ? 'bg-[#0F2942] text-white'
-                    : 'text-[#43474D] hover:bg-slate-100'
+                    ? 'bg-[#0F2942] text-white shadow-sm'
+                    : 'text-[#475569] hover:text-[#0F2942]'
                 }`}
               >
                 {unit.label}
@@ -373,7 +373,7 @@ export const KmzOsmViewer: React.FC<KmzOsmViewerProps> = ({
             <button
               type="button"
               onClick={handleExportCsvVertices}
-              className="inline-flex items-center gap-1.5 rounded-md border border-slate-300 bg-white px-3 py-1.5 text-xs font-semibold text-[#334155] hover:bg-slate-100 min-h-[36px] whitespace-nowrap shrink-0"
+              className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-[#0F2942] hover:bg-slate-50 min-h-[38px] whitespace-nowrap shrink-0 transition-colors"
             >
               <Download className="h-3.5 w-3.5" />
               Exportar vértices CSV
@@ -407,8 +407,8 @@ export const KmzOsmViewer: React.FC<KmzOsmViewerProps> = ({
           } z-0`}
         />
         {isDragOver && onDropFile && (
-          <div className="pointer-events-none absolute inset-0 z-[500] flex items-center justify-center bg-[#091A2C]/75 backdrop-blur-[2px] border-2 border-dashed border-[#5BB8FE] m-2 rounded-lg">
-            <div className="rounded-md bg-white px-4 py-2 text-xs font-bold text-[#0F2942] shadow-lg">
+          <div className="pointer-events-none absolute inset-0 z-[500] flex items-center justify-center bg-[#091A2C]/75 backdrop-blur-[2px] border-2 border-dashed border-[#5BB8FE] m-2 rounded-2xl">
+            <div className="rounded-xl bg-white px-4 py-2 text-xs font-bold text-[#0F2942] shadow-lg">
               Suelta aquí tu archivo .KMZ, .KML o .GeoJSON para visualizarlo
             </div>
           </div>
@@ -419,7 +419,7 @@ export const KmzOsmViewer: React.FC<KmzOsmViewerProps> = ({
           <button
             type="button"
             onClick={handleFitBounds}
-            className="flex h-9 w-9 items-center justify-center rounded-md bg-[#091A2C]/92 backdrop-blur-md text-white border border-white/15 shadow-lg hover:bg-[#0284C7] transition-colors"
+            className="flex h-9 w-9 items-center justify-center rounded-xl bg-[#091A2C]/92 backdrop-blur-md text-white border border-white/15 shadow-lg hover:bg-[#0284C7] transition-colors"
             title="Centrar en polígono KMZ"
             aria-label="Centrar en polígono KMZ"
           >
@@ -433,7 +433,7 @@ export const KmzOsmViewer: React.FC<KmzOsmViewerProps> = ({
               type="button"
               onClick={onCaptureLiveGps}
               disabled={isCapturingGps}
-              className="inline-flex items-center gap-1.5 rounded-md bg-[#091A2C]/92 backdrop-blur-md border border-white/15 px-3.5 py-2 text-xs font-semibold text-white shadow-lg hover:bg-[#0284C7] disabled:opacity-60 transition-colors min-h-[40px] whitespace-nowrap shrink-0"
+              className="inline-flex items-center gap-1.5 rounded-xl bg-[#091A2C]/92 backdrop-blur-md border border-white/15 px-3.5 py-2 text-xs font-semibold text-white shadow-lg hover:bg-[#0284C7] disabled:opacity-60 transition-colors min-h-[40px] whitespace-nowrap shrink-0"
             >
               <LocateFixed className="h-3.5 w-3.5 text-[#5BB8FE]" />
               {isCapturingGps ? 'Fijando GPS...' : 'Fijar posición GPS'}

@@ -73,18 +73,18 @@ export const OnboardingWizardModal: React.FC<OnboardingWizardModalProps> = ({
       aria-modal="true"
       aria-labelledby="titulo-onboarding-wizard"
     >
-      <div className="bg-white border border-slate-200 rounded-xl w-full max-w-3xl overflow-hidden flex flex-col max-h-[90vh] shadow-2xl">
+      <div className="bg-white border border-slate-200/90 rounded-2xl w-full max-w-3xl overflow-hidden flex flex-col max-h-[90vh] shadow-2xl">
         {/* Header */}
-        <div className="px-6 py-4 border-b border-slate-200 flex items-center justify-between gap-4">
+        <div className="px-6 py-4 border-b border-slate-200/80 bg-[#F8FAFC] flex items-center justify-between gap-4">
           <div className="flex items-center gap-3 min-w-0">
-            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-sky-50 text-[#0284C7]">
+            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-sky-50 text-[#0284C7] border border-sky-200/70">
               <Sparkles className="w-4 h-4" />
             </div>
             <div className="min-w-0">
-              <h3 id="titulo-onboarding-wizard" className="text-base font-bold text-slate-900 truncate">
+              <h3 id="titulo-onboarding-wizard" className="text-base font-bold tracking-tight text-[#0F2942] truncate">
                 Asistente de configuración · {empresaNombre}
               </h3>
-              <p className="text-xs text-slate-500">
+              <p className="text-xs text-[#475569]">
                 {resumen.pasosCompletados.length} de {resumen.totalPasos} completos reales
                 {resumen.pasosCompletadosManuales.length > 0
                   ? ` · ${resumen.pasosCompletadosManuales.length} completado(s) manualmente`
@@ -95,7 +95,7 @@ export const OnboardingWizardModal: React.FC<OnboardingWizardModalProps> = ({
           <button
             type="button"
             onClick={handleFinishLater}
-            className="min-h-[40px] min-w-[40px] flex items-center justify-center text-slate-500 hover:text-slate-900 rounded-md hover:bg-slate-100 shrink-0"
+            className="min-h-[40px] min-w-[40px] flex items-center justify-center text-[#475569] hover:text-[#0F2942] rounded-xl hover:bg-slate-200/70 shrink-0 transition-colors"
             aria-label="Cerrar asistente"
           >
             <X className="w-5 h-5" />
@@ -105,7 +105,7 @@ export const OnboardingWizardModal: React.FC<OnboardingWizardModalProps> = ({
         {/* Body */}
         <div className="grid grid-cols-1 md:grid-cols-12 flex-1 overflow-y-auto">
           {/* Lista de pasos */}
-          <div className="md:col-span-5 border-b md:border-b-0 md:border-r border-slate-200 bg-slate-50 p-4 space-y-2">
+          <div className="md:col-span-5 border-b md:border-b-0 md:border-r border-slate-200/80 bg-[#F8FAFC] p-4 space-y-2">
             {resumen.detallePasos.map(({ paso, estado: stepStatus, etiquetaEstado }) => {
               const isActive = paso.id === pasoActivo.id;
               return (
@@ -113,10 +113,10 @@ export const OnboardingWizardModal: React.FC<OnboardingWizardModalProps> = ({
                   key={paso.id}
                   type="button"
                   onClick={() => handleSelectStep(paso.id)}
-                  className={`w-full flex items-center justify-between gap-2 px-3.5 py-2.5 rounded-md border text-left text-xs transition-colors min-h-[44px] ${
+                  className={`w-full flex items-center justify-between gap-2 px-3.5 py-2.5 rounded-xl border text-left text-xs transition-all min-h-[44px] ${
                     isActive
-                      ? 'bg-[#0F2942] border-[#0F2942] text-white font-semibold'
-                      : 'bg-white border-slate-200 text-slate-800 hover:bg-slate-100'
+                      ? 'bg-[#0F2942] border-[#0F2942] text-white font-semibold shadow-sm'
+                      : 'bg-white border-slate-200 text-[#0F2942] hover:bg-slate-100/80'
                   }`}
                 >
                   <div className="flex items-center gap-2.5 min-w-0">
@@ -164,24 +164,24 @@ export const OnboardingWizardModal: React.FC<OnboardingWizardModalProps> = ({
                 Paso {pasoActivo.numero} de {pasos.length}
                 {pasoActivo.soloEnDemo ? ' · Disponible solo en modo demo' : ''}
               </div>
-              <h4 className="text-lg font-bold text-slate-900 text-balance">{pasoActivo.titulo}</h4>
-              <p className="text-sm text-slate-600 leading-relaxed">{pasoActivo.descripcion}</p>
+              <h4 className="text-lg font-bold tracking-tight text-[#0F2942] text-balance">{pasoActivo.titulo}</h4>
+              <p className="text-sm text-[#475569] leading-relaxed">{pasoActivo.descripcion}</p>
 
               {detalleActivo?.estado === 'completo' && (
-                <div className="bg-emerald-50 border border-emerald-200 rounded-lg p-3.5 text-xs text-emerald-900">
+                <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-3.5 text-xs text-emerald-900">
                   Completado con datos reales registrados en la empresa.
                 </div>
               )}
 
               {detalleActivo?.estado === 'completo_manual' && (
-                <div className="bg-amber-50 border border-amber-200 rounded-lg p-3.5 text-xs text-amber-900">
+                <div className="bg-amber-50 border border-amber-200 rounded-xl p-3.5 text-xs text-amber-900">
                   Marcado como completado manualmente (excepción): aún faltan datos mínimos en este
                   módulo para considerarse completo real.
                 </div>
               )}
 
               {(!detalleActivo || detalleActivo.estado === 'pendiente' || detalleActivo.estado === 'saltado') && (
-                <div className="bg-slate-50 border border-slate-200 rounded-lg p-3.5 text-xs text-slate-600">
+                <div className="bg-[#F8FAFC] border border-slate-200/70 rounded-xl p-3.5 text-xs text-[#475569]">
                   {isDemo
                     ? 'En modo demo puedes explorar los datos precargados o probar el asistente KMZ sin afectar otros entornos.'
                     : 'Este asistente solo te guía hacia cada módulo para que cargues los datos reales de tu empresa cuando lo necesites.'}
@@ -192,7 +192,7 @@ export const OnboardingWizardModal: React.FC<OnboardingWizardModalProps> = ({
                 <button
                   type="button"
                   onClick={() => onNavegarAPaso(pasoActivo)}
-                  className="inline-flex items-center gap-2 px-4 py-2.5 bg-[#0284C7] hover:bg-[#0369A1] text-white text-xs sm:text-sm font-semibold rounded-md whitespace-nowrap min-h-[42px] transition-colors"
+                  className="inline-flex items-center gap-2 px-4 py-2.5 bg-[#0284C7] hover:bg-[#0369A1] text-white text-xs sm:text-sm font-semibold rounded-xl whitespace-nowrap min-h-[42px] transition-colors shadow-sm"
                 >
                   <span>Ir a {pasoActivo.titulo}</span>
                   <ArrowRight className="w-4 h-4" />
@@ -201,7 +201,7 @@ export const OnboardingWizardModal: React.FC<OnboardingWizardModalProps> = ({
             </div>
 
             {resumen.estaFinalizado && (
-              <div className="bg-emerald-50 border border-emerald-200 rounded-lg p-3.5 text-xs text-emerald-900 flex items-center justify-between gap-3">
+              <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-3.5 text-xs text-emerald-900 flex items-center justify-between gap-3">
                 <span>
                   Todos los pasos fueron revisados ({resumen.pasosCompletados.length} completos reales
                   {resumen.pasosCompletadosManuales.length > 0
@@ -222,11 +222,11 @@ export const OnboardingWizardModal: React.FC<OnboardingWizardModalProps> = ({
         </div>
 
         {/* Footer */}
-        <div className="px-6 py-4 border-t border-slate-200 bg-slate-50 flex flex-wrap items-center justify-between gap-3">
+        <div className="px-6 py-4 border-t border-slate-200/80 bg-[#F8FAFC] flex flex-wrap items-center justify-between gap-3">
           <button
             type="button"
             onClick={handleFinishLater}
-            className="min-h-[40px] px-4 py-2 text-xs font-semibold text-slate-700 hover:text-slate-900 border border-slate-300 bg-white hover:bg-slate-100 rounded-md whitespace-nowrap"
+            className="min-h-[40px] px-4 py-2 text-xs font-semibold text-slate-700 hover:text-[#0F2942] border border-slate-200 bg-white hover:bg-slate-100 rounded-xl whitespace-nowrap transition-colors"
           >
             Terminar después
           </button>
@@ -234,7 +234,7 @@ export const OnboardingWizardModal: React.FC<OnboardingWizardModalProps> = ({
             <button
               type="button"
               onClick={handleSkipStep}
-              className="min-h-[40px] px-4 py-2 text-xs font-semibold text-slate-700 border border-slate-300 bg-white hover:bg-slate-100 rounded-md whitespace-nowrap"
+              className="min-h-[40px] px-4 py-2 text-xs font-semibold text-slate-700 border border-slate-200 bg-white hover:bg-slate-100 rounded-xl whitespace-nowrap transition-colors"
             >
               Saltar paso
             </button>
@@ -242,7 +242,7 @@ export const OnboardingWizardModal: React.FC<OnboardingWizardModalProps> = ({
               type="button"
               onClick={handleCompleteStep}
               disabled={detalleActivo?.estado === 'completo'}
-              className="min-h-[40px] px-4 py-2 text-xs font-semibold text-white bg-[#0F2942] hover:bg-[#0284C7] disabled:bg-[#15803D] disabled:opacity-90 rounded-md whitespace-nowrap transition-colors"
+              className="min-h-[40px] px-4 py-2 text-xs font-semibold text-white bg-[#0F2942] hover:bg-[#0284C7] disabled:bg-[#15803D] disabled:opacity-90 rounded-xl whitespace-nowrap transition-colors shadow-sm"
             >
               {detalleActivo?.estado === 'completo'
                 ? 'Completado con datos'

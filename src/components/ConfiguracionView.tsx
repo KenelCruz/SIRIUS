@@ -375,37 +375,38 @@ export const ConfiguracionView: React.FC<ConfiguracionViewProps> = ({
 
   return (
     <div className="space-y-6">
-      <div className="bg-white border border-slate-200 rounded-xl p-5 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+      <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4">
         <div>
-          <h2 className="text-xl font-bold text-slate-900">Configuración de Empresa y Tarifas</h2>
-          <p className="text-sm text-slate-600 mt-1">
-            Parámetros versionados por fecha de vigencia. Los registros históricos conservan su tarifa
-            original y no se recalculan al crear una nueva vigencia.
+          <h2 className="text-2xl sm:text-[26px] font-bold tracking-tight text-[#0F2942]">
+            Configuración de Empresa y Tarifas
+          </h2>
+          <p className="text-sm text-[#475569] mt-0.5">
+            Parámetros versionados por fecha de vigencia. Los registros históricos conservan su tarifa original.
           </p>
         </div>
-        <div className="flex items-center gap-3 shrink-0">
-          <div className="text-right text-xs text-slate-500">
-            <div>Versión global: v{configuracion.versionGlobal}</div>
-            <div>{canEdit ? 'Modo: Edición Administrador' : 'Modo: Solo lectura (Coordinador)'}</div>
+        <div className="flex flex-wrap items-center gap-3 shrink-0">
+          <div className="rounded-xl border border-slate-200/90 bg-white px-3.5 py-2 text-right text-xs text-[#475569]">
+            <div className="font-mono font-semibold text-[#0F2942]">Versión global v{configuracion.versionGlobal}</div>
+            <div>{canEdit ? 'Edición Administrador' : 'Solo lectura (Coordinador)'}</div>
           </div>
           <button
             type="button"
             onClick={onAbrirTutorial}
-            className="inline-flex items-center gap-1.5 px-3 py-2 text-xs font-semibold text-slate-700 bg-slate-100 hover:bg-slate-200 border border-slate-200 rounded-lg whitespace-nowrap"
+            className="inline-flex items-center gap-1.5 px-3.5 py-2 text-xs font-semibold text-[#0F2942] bg-white hover:bg-slate-50 border border-slate-200 rounded-xl whitespace-nowrap min-h-[42px]"
           >
-            <BookOpen className="w-3.5 h-3.5" />
+            <BookOpen className="w-3.5 h-3.5 text-[#0284C7]" />
             Ver tutorial
           </button>
         </div>
       </div>
 
       {error && (
-        <div className="bg-rose-50 border border-rose-200 text-rose-800 rounded-xl px-4 py-3 text-sm font-medium">
+        <div className="bg-rose-50 border border-rose-200 text-rose-800 rounded-2xl px-4 py-3 text-sm font-medium">
           {error}
         </div>
       )}
       {okMsg && (
-        <div className="bg-emerald-50 border border-emerald-200 text-emerald-800 rounded-xl px-4 py-3 text-sm font-medium flex items-center gap-2">
+        <div className="bg-emerald-50 border border-emerald-200 text-emerald-800 rounded-2xl px-4 py-3 text-sm font-medium flex items-center gap-2">
           <CheckCircle2 className="w-4 h-4 shrink-0" />
           <span>{okMsg}</span>
         </div>
@@ -413,7 +414,7 @@ export const ConfiguracionView: React.FC<ConfiguracionViewProps> = ({
 
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
         {/* Navegación interna de secciones */}
-        <nav className="lg:col-span-3 bg-white border border-slate-200 rounded-xl p-2 space-y-1">
+        <nav className="lg:col-span-3 bg-white border border-slate-200/90 rounded-2xl p-2.5 space-y-1">
           {visibles.map((item) => {
             const Icon = item.icon;
             const active = seccion === item.id;
@@ -425,10 +426,10 @@ export const ConfiguracionView: React.FC<ConfiguracionViewProps> = ({
                   setSeccion(item.id);
                   setError(null);
                 }}
-                className={`w-full flex items-center gap-2.5 px-3 py-2.5 rounded-lg text-sm font-medium text-left transition-colors ${
+                className={`w-full flex items-center gap-2.5 px-3.5 py-2.5 rounded-xl text-sm font-semibold text-left transition-colors ${
                   active
-                    ? 'bg-slate-900 text-white'
-                    : 'text-slate-700 hover:bg-slate-100'
+                    ? 'bg-[#0F2942] text-white shadow-sm'
+                    : 'text-[#475569] hover:bg-[#F1F5F9] hover:text-[#0F2942]'
                 }`}
               >
                 <Icon className="w-4 h-4 shrink-0" />
@@ -442,7 +443,7 @@ export const ConfiguracionView: React.FC<ConfiguracionViewProps> = ({
         <div className="lg:col-span-9 space-y-6">
           {/* 1. EMPRESA */}
           {seccion === 'empresa' && canEdit && (
-            <div className="bg-white border border-slate-200 rounded-xl p-5 space-y-5">
+            <div className="bg-white border border-slate-200/90 rounded-2xl p-5 space-y-5">
               <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 border-b border-slate-100 pb-4">
                 <div>
                   <h3 className="text-base font-bold text-slate-900">Datos de la Empresa</h3>
@@ -450,9 +451,9 @@ export const ConfiguracionView: React.FC<ConfiguracionViewProps> = ({
                     Información fiscal, ubicación operativa, zona horaria y moneda predeterminada.
                   </p>
                 </div>
-                <div className="bg-slate-50 border border-slate-200 rounded-lg px-3.5 py-2 text-xs">
-                  <div className="text-slate-500">Plan de suscripción (solo lectura)</div>
-                  <div className="font-bold text-slate-900 tabular-nums mt-0.5">
+                <div className="bg-[#F8FAFC] border border-slate-200/70 rounded-xl px-3.5 py-2.5 text-xs">
+                  <div className="text-[#475569]">Plan de suscripción (solo lectura)</div>
+                  <div className="font-bold text-[#0F2942] tabular-nums mt-0.5">
                     {formatRD(empresa.planMensualRD, moneda)} / mes · {empresa.estadoSuscripcion.toUpperCase()}
                   </div>
                 </div>
@@ -467,7 +468,7 @@ export const ConfiguracionView: React.FC<ConfiguracionViewProps> = ({
                     type="text"
                     value={empNombre}
                     onChange={(e) => setEmpNombre(e.target.value)}
-                    className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm"
+                    className="w-full px-3 py-2 border border-slate-200 rounded-xl text-sm"
                   />
                 </div>
                 <div>
@@ -476,7 +477,7 @@ export const ConfiguracionView: React.FC<ConfiguracionViewProps> = ({
                     type="text"
                     value={empRnc}
                     onChange={(e) => setEmpRnc(e.target.value)}
-                    className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm"
+                    className="w-full px-3 py-2 border border-slate-200 rounded-xl text-sm"
                   />
                 </div>
                 <div>
@@ -485,7 +486,7 @@ export const ConfiguracionView: React.FC<ConfiguracionViewProps> = ({
                     type="text"
                     value={empTelefono}
                     onChange={(e) => setEmpTelefono(e.target.value)}
-                    className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm"
+                    className="w-full px-3 py-2 border border-slate-200 rounded-xl text-sm"
                   />
                 </div>
                 <div>
@@ -496,7 +497,7 @@ export const ConfiguracionView: React.FC<ConfiguracionViewProps> = ({
                     type="text"
                     value={empDireccion}
                     onChange={(e) => setEmpDireccion(e.target.value)}
-                    className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm"
+                    className="w-full px-3 py-2 border border-slate-200 rounded-xl text-sm"
                   />
                 </div>
                 <div>
@@ -506,7 +507,7 @@ export const ConfiguracionView: React.FC<ConfiguracionViewProps> = ({
                   <select
                     value={empZona}
                     onChange={(e) => setEmpZona(e.target.value)}
-                    className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm bg-white"
+                    className="w-full px-3 py-2 border border-slate-200 rounded-xl text-sm bg-white"
                   >
                     {ZONAS_HORARIAS_SUGERIDAS.map((z) => (
                       <option key={z} value={z}>
@@ -520,7 +521,7 @@ export const ConfiguracionView: React.FC<ConfiguracionViewProps> = ({
                   <select
                     value={empMoneda}
                     onChange={(e) => setEmpMoneda(e.target.value)}
-                    className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm bg-white"
+                    className="w-full px-3 py-2 border border-slate-200 rounded-xl text-sm bg-white"
                   >
                     {MONEDAS_SUGERIDAS.map((m) => (
                       <option key={m} value={m}>
@@ -549,7 +550,7 @@ export const ConfiguracionView: React.FC<ConfiguracionViewProps> = ({
                       'Datos de la empresa actualizados.'
                     )
                   }
-                  className="inline-flex items-center gap-2 px-4 py-2 bg-slate-900 hover:bg-slate-800 text-white text-sm font-semibold rounded-lg whitespace-nowrap"
+                  className="inline-flex items-center gap-2 px-4 py-2 bg-[#0F2942] hover:bg-[#0284C7] text-white text-sm font-semibold rounded-xl whitespace-nowrap"
                 >
                   <Save className="w-4 h-4" />
                   Actualizar empresa
@@ -561,7 +562,7 @@ export const ConfiguracionView: React.FC<ConfiguracionViewProps> = ({
           {/* 2. USUARIOS Y ROLES */}
           {seccion === 'usuarios' && canEdit && (
             <div className="space-y-6">
-              <div className="bg-white border border-slate-200 rounded-xl p-5 space-y-4">
+              <div className="bg-white border border-slate-200/90 rounded-2xl p-5 space-y-4">
                 <div className="flex items-center gap-2">
                   <Shield className="w-4 h-4 text-slate-700" />
                   <h3 className="text-base font-bold text-slate-900">
@@ -573,9 +574,9 @@ export const ConfiguracionView: React.FC<ConfiguracionViewProps> = ({
                   alterar las reglas base de permisos.
                 </p>
 
-                <div className="overflow-x-auto border border-slate-200 rounded-lg">
+                <div className="overflow-x-auto border border-slate-200/80 rounded-2xl">
                   <table className="w-full text-sm text-left">
-                    <thead className="bg-slate-50 text-xs text-slate-600 border-b border-slate-200">
+                    <thead className="bg-[#F8FAFC] text-xs text-[#475569] border-b border-slate-200">
                       <tr>
                         <th className="px-4 py-2.5 font-semibold">Usuario</th>
                         <th className="px-4 py-2.5 font-semibold">Correo</th>
@@ -610,7 +611,7 @@ export const ConfiguracionView: React.FC<ConfiguracionViewProps> = ({
                                     `Rol de ${u.nombre} actualizado.`
                                   )
                                 }
-                                className="px-2.5 py-1.5 border border-slate-300 rounded-lg text-xs bg-white disabled:bg-slate-100"
+                                className="px-2.5 py-1.5 border border-slate-200 rounded-xl text-xs bg-white disabled:bg-slate-100"
                               >
                                 <option value="admin">Administrador</option>
                                 <option value="coordinador">Coordinador</option>
@@ -639,7 +640,7 @@ export const ConfiguracionView: React.FC<ConfiguracionViewProps> = ({
                                       : `Acceso reactivado para ${u.nombre}.`
                                   )
                                 }
-                                className="px-3 py-1.5 text-xs font-semibold border border-slate-300 rounded-lg hover:bg-slate-50 disabled:opacity-40 whitespace-nowrap"
+                                className="px-3 py-1.5 text-xs font-semibold border border-slate-200 rounded-xl hover:bg-slate-50 disabled:opacity-40 whitespace-nowrap"
                               >
                                 {m.activo ? 'Desactivar' : 'Activar'}
                               </button>
@@ -652,7 +653,7 @@ export const ConfiguracionView: React.FC<ConfiguracionViewProps> = ({
                 </div>
               </div>
 
-              <div className="bg-white border border-slate-200 rounded-xl p-5 space-y-4">
+              <div className="bg-white border border-slate-200/90 rounded-2xl p-5 space-y-4">
                 <h4 className="text-sm font-bold text-slate-900">Agregar o vincular usuario</h4>
                 <div className="grid grid-cols-1 md:grid-cols-4 gap-3 text-sm">
                   <input
@@ -660,19 +661,19 @@ export const ConfiguracionView: React.FC<ConfiguracionViewProps> = ({
                     placeholder="Correo electrónico"
                     value={usrEmail}
                     onChange={(e) => setUsrEmail(e.target.value)}
-                    className="px-3 py-2 border border-slate-300 rounded-lg text-sm"
+                    className="px-3 py-2 border border-slate-200 rounded-xl text-sm"
                   />
                   <input
                     type="text"
                     placeholder="Nombre completo"
                     value={usrNombre}
                     onChange={(e) => setUsrNombre(e.target.value)}
-                    className="px-3 py-2 border border-slate-300 rounded-lg text-sm"
+                    className="px-3 py-2 border border-slate-200 rounded-xl text-sm"
                   />
                   <select
                     value={usrRol}
                     onChange={(e) => setUsrRol(e.target.value as RolEmpresa)}
-                    className="px-3 py-2 border border-slate-300 rounded-lg text-sm bg-white"
+                    className="px-3 py-2 border border-slate-200 rounded-xl text-sm bg-white"
                   >
                     <option value="tecnico">Técnico</option>
                     <option value="coordinador">Coordinador</option>
@@ -681,7 +682,7 @@ export const ConfiguracionView: React.FC<ConfiguracionViewProps> = ({
                   <select
                     value={usrPersonalId}
                     onChange={(e) => setUsrPersonalId(e.target.value)}
-                    className="px-3 py-2 border border-slate-300 rounded-lg text-sm bg-white"
+                    className="px-3 py-2 border border-slate-200 rounded-xl text-sm bg-white"
                   >
                     <option value="">Sin vincular a ficha personal</option>
                     {personal.map((p) => (
@@ -708,7 +709,7 @@ export const ConfiguracionView: React.FC<ConfiguracionViewProps> = ({
                         setUsrPersonalId('');
                       }, 'Usuario agregado o actualizado en la empresa.')
                     }
-                    className="inline-flex items-center gap-1.5 px-4 py-2 bg-slate-900 hover:bg-slate-800 text-white text-xs font-semibold rounded-lg whitespace-nowrap"
+                    className="inline-flex items-center gap-1.5 px-4 py-2 bg-[#0F2942] hover:bg-[#0284C7] text-white text-xs font-semibold rounded-xl whitespace-nowrap"
                   >
                     <Plus className="w-3.5 h-3.5" />
                     Asignar acceso
@@ -721,7 +722,7 @@ export const ConfiguracionView: React.FC<ConfiguracionViewProps> = ({
           {/* 3. PERSONAL Y CARGOS */}
           {seccion === 'cargos' && canEdit && (
             <div className="space-y-6">
-              <div className="bg-white border border-slate-200 rounded-xl p-5 space-y-4">
+              <div className="bg-white border border-slate-200/90 rounded-2xl p-5 space-y-4">
                 <div>
                   <h3 className="text-base font-bold text-slate-900">Catálogo de Cargos</h3>
                   <p className="text-xs text-slate-500 mt-0.5">
@@ -730,9 +731,9 @@ export const ConfiguracionView: React.FC<ConfiguracionViewProps> = ({
                   </p>
                 </div>
 
-                <div className="overflow-x-auto border border-slate-200 rounded-lg">
+                <div className="overflow-x-auto border border-slate-200/80 rounded-2xl">
                   <table className="w-full text-sm text-left">
-                    <thead className="bg-slate-50 text-xs text-slate-600 border-b border-slate-200">
+                    <thead className="bg-[#F8FAFC] text-xs text-[#475569] border-b border-slate-200">
                       <tr>
                         <th className="px-4 py-2.5 font-semibold">Código estable</th>
                         <th className="px-4 py-2.5 font-semibold">Etiqueta visible</th>
@@ -854,14 +855,14 @@ export const ConfiguracionView: React.FC<ConfiguracionViewProps> = ({
                       placeholder="Código estable (ej. piloto_dron)"
                       value={cargoCodigo}
                       onChange={(e) => setCargoCodigo(e.target.value)}
-                      className="px-3 py-2 border border-slate-300 rounded-lg text-sm font-mono"
+                      className="px-3 py-2 border border-slate-200 rounded-xl text-sm font-mono"
                     />
                     <input
                       type="text"
                       placeholder="Etiqueta visible (ej. Piloto de Dron)"
                       value={cargoEtiqueta}
                       onChange={(e) => setCargoEtiqueta(e.target.value)}
-                      className="px-3 py-2 border border-slate-300 rounded-lg text-sm"
+                      className="px-3 py-2 border border-slate-200 rounded-xl text-sm"
                     />
                     <button
                       type="button"
@@ -876,7 +877,7 @@ export const ConfiguracionView: React.FC<ConfiguracionViewProps> = ({
                           setCargoEtiqueta('');
                         }, 'Cargo agregado al catálogo.')
                       }
-                      className="inline-flex items-center justify-center gap-1.5 px-4 py-2 bg-slate-900 hover:bg-slate-800 text-white text-sm font-semibold rounded-lg whitespace-nowrap"
+                      className="inline-flex items-center justify-center gap-1.5 px-4 py-2 bg-[#0F2942] hover:bg-[#0284C7] text-white text-sm font-semibold rounded-xl whitespace-nowrap"
                     >
                       <Plus className="w-4 h-4" />
                       Agregar cargo
@@ -890,7 +891,7 @@ export const ConfiguracionView: React.FC<ConfiguracionViewProps> = ({
           {/* 4. FLOTA Y COMBUSTIBLE */}
           {seccion === 'flota' && (
             <div className="space-y-6">
-              <div className="bg-white border border-slate-200 rounded-xl p-5 space-y-4">
+              <div className="bg-white border border-slate-200/90 rounded-2xl p-5 space-y-4">
                 <div>
                   <h3 className="text-base font-bold text-slate-900">
                     Tipos de Combustible y Tarifas por Vigencia
@@ -902,9 +903,9 @@ export const ConfiguracionView: React.FC<ConfiguracionViewProps> = ({
                   </p>
                 </div>
 
-                <div className="overflow-x-auto border border-slate-200 rounded-lg">
+                <div className="overflow-x-auto border border-slate-200/80 rounded-2xl">
                   <table className="w-full text-sm text-left">
-                    <thead className="bg-slate-50 text-xs text-slate-600 border-b border-slate-200">
+                    <thead className="bg-[#F8FAFC] text-xs text-[#475569] border-b border-slate-200">
                       <tr>
                         <th className="px-4 py-2.5 font-semibold">Combustible</th>
                         <th className="px-4 py-2.5 font-semibold text-right">Tarifa vigente</th>
@@ -938,14 +939,14 @@ export const ConfiguracionView: React.FC<ConfiguracionViewProps> = ({
 
                 {canEdit && (
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-2 border-t border-slate-100">
-                    <div className="border border-slate-200 rounded-lg p-4 space-y-3">
+                    <div className="border border-slate-200/70 bg-[#F8FAFC] rounded-xl p-4 space-y-3">
                       <h4 className="text-xs font-bold uppercase tracking-wider text-slate-700">
                         Programar nueva vigencia de precio
                       </h4>
                       <select
                         value={fuelVigId}
                         onChange={(e) => setFuelVigId(e.target.value)}
-                        className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm bg-white"
+                        className="w-full px-3 py-2 border border-slate-200 rounded-xl text-sm bg-white"
                       >
                         {configuracion.combustibles.map((c) => (
                           <option key={c.id} value={c.id}>
@@ -961,13 +962,13 @@ export const ConfiguracionView: React.FC<ConfiguracionViewProps> = ({
                           placeholder="Precio galón"
                           value={fuelVigPrecio}
                           onChange={(e) => setFuelVigPrecio(e.target.value)}
-                          className="px-3 py-2 border border-slate-300 rounded-lg text-sm tabular-nums"
+                          className="px-3 py-2 border border-slate-200 rounded-xl text-sm tabular-nums"
                         />
                         <input
                           type="date"
                           value={fuelVigFecha}
                           onChange={(e) => setFuelVigFecha(e.target.value)}
-                          className="px-3 py-2 border border-slate-300 rounded-lg text-sm"
+                          className="px-3 py-2 border border-slate-200 rounded-xl text-sm"
                         />
                       </div>
                       <button
@@ -983,13 +984,13 @@ export const ConfiguracionView: React.FC<ConfiguracionViewProps> = ({
                             'Nueva vigencia de combustible registrada.'
                           )
                         }
-                        className="w-full px-3 py-2 bg-slate-900 hover:bg-slate-800 text-white text-xs font-semibold rounded-lg"
+                        className="w-full min-h-[40px] px-3 py-2 bg-[#0F2942] hover:bg-[#0284C7] text-white text-xs font-semibold rounded-xl transition-colors"
                       >
                         Aplicar vigencia de precio
                       </button>
                     </div>
 
-                    <div className="border border-slate-200 rounded-lg p-4 space-y-3">
+                    <div className="border border-slate-200/70 bg-[#F8FAFC] rounded-xl p-4 space-y-3">
                       <h4 className="text-xs font-bold uppercase tracking-wider text-slate-700">
                         Agregar tipo de combustible
                       </h4>
@@ -998,7 +999,7 @@ export const ConfiguracionView: React.FC<ConfiguracionViewProps> = ({
                         placeholder="Nombre (ej. GLP Automotriz)"
                         value={newFuelNombre}
                         onChange={(e) => setNewFuelNombre(e.target.value)}
-                        className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm"
+                        className="w-full px-3 py-2 border border-slate-200 rounded-xl text-sm"
                       />
                       <div className="grid grid-cols-2 gap-2">
                         <input
@@ -1008,13 +1009,13 @@ export const ConfiguracionView: React.FC<ConfiguracionViewProps> = ({
                           placeholder="Precio inicial galón"
                           value={newFuelPrecio}
                           onChange={(e) => setNewFuelPrecio(e.target.value)}
-                          className="px-3 py-2 border border-slate-300 rounded-lg text-sm tabular-nums"
+                          className="px-3 py-2 border border-slate-200 rounded-xl text-sm tabular-nums"
                         />
                         <input
                           type="date"
                           value={newFuelVigencia}
                           onChange={(e) => setNewFuelVigencia(e.target.value)}
-                          className="px-3 py-2 border border-slate-300 rounded-lg text-sm"
+                          className="px-3 py-2 border border-slate-200 rounded-xl text-sm"
                         />
                       </div>
                       <button
@@ -1030,7 +1031,7 @@ export const ConfiguracionView: React.FC<ConfiguracionViewProps> = ({
                             setNewFuelPrecio('');
                           }, 'Tipo de combustible agregado.')
                         }
-                        className="w-full px-3 py-2 bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-semibold rounded-lg"
+                        className="w-full min-h-[40px] px-3 py-2 bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-semibold rounded-xl transition-colors"
                       >
                         Crear combustible
                       </button>
@@ -1039,7 +1040,7 @@ export const ConfiguracionView: React.FC<ConfiguracionViewProps> = ({
                 )}
               </div>
 
-              <div className="bg-white border border-slate-200 rounded-xl p-5 space-y-3">
+              <div className="bg-white border border-slate-200/90 rounded-2xl p-5 space-y-3">
                 <h4 className="text-sm font-bold text-slate-900">
                   Parámetros actuales de flota registrada
                 </h4>
@@ -1047,9 +1048,9 @@ export const ConfiguracionView: React.FC<ConfiguracionViewProps> = ({
                   La asignación de combustible, rendimiento (km/gal) y costo de mantenimiento/km por
                   unidad se edita en Catálogos &rarr; Vehículos.
                 </p>
-                <div className="overflow-x-auto border border-slate-200 rounded-lg">
+                <div className="overflow-x-auto border border-slate-200/80 rounded-2xl">
                   <table className="w-full text-sm text-left">
-                    <thead className="bg-slate-50 text-xs text-slate-600 border-b border-slate-200">
+                    <thead className="bg-[#F8FAFC] text-xs text-[#475569] border-b border-slate-200">
                       <tr>
                         <th className="px-4 py-2 font-semibold">Vehículo</th>
                         <th className="px-4 py-2 font-semibold">Combustible</th>
@@ -1080,7 +1081,7 @@ export const ConfiguracionView: React.FC<ConfiguracionViewProps> = ({
               </div>
 
               {/* Reglas de Rendimiento de Flota (B4) y Cercanía de Rentas (B3) */}
-              <div className="bg-white border border-slate-200 rounded-xl p-5 space-y-4">
+              <div className="bg-white border border-slate-200/90 rounded-2xl p-5 space-y-4">
                 <div className="flex flex-wrap items-start justify-between gap-2">
                   <div>
                     <div className="flex flex-wrap items-center gap-2">
@@ -1112,7 +1113,7 @@ export const ConfiguracionView: React.FC<ConfiguracionViewProps> = ({
                       disabled={!canEdit}
                       value={rfFuenteKm}
                       onChange={(e) => setRfFuenteKm(e.target.value as FuenteKmRendimiento)}
-                      className="mt-1 w-full px-3 py-2 border border-slate-300 rounded-lg bg-white disabled:bg-slate-50"
+                      className="mt-1 w-full px-3 py-2 border border-slate-200 rounded-xl bg-white disabled:bg-slate-50"
                     >
                       {FUENTES_KM_RENDIMIENTO.map((f) => (
                         <option key={f} value={f} disabled={f !== 'ruta_asignada'}>
@@ -1136,7 +1137,7 @@ export const ConfiguracionView: React.FC<ConfiguracionViewProps> = ({
                       disabled={!canEdit}
                       value={rfUmbralAlertaPct}
                       onChange={(e) => setRfUmbralAlertaPct(e.target.value)}
-                      className="mt-1 w-full px-3 py-2 border border-slate-300 rounded-lg tabular-nums disabled:bg-slate-50"
+                      className="mt-1 w-full px-3 py-2 border border-slate-200 rounded-xl tabular-nums disabled:bg-slate-50"
                     />
                   </label>
                   <label className="block">
@@ -1150,7 +1151,7 @@ export const ConfiguracionView: React.FC<ConfiguracionViewProps> = ({
                       disabled={!canEdit}
                       value={rfUmbralCercaniaKm}
                       onChange={(e) => setRfUmbralCercaniaKm(e.target.value)}
-                      className="mt-1 w-full px-3 py-2 border border-slate-300 rounded-lg tabular-nums disabled:bg-slate-50"
+                      className="mt-1 w-full px-3 py-2 border border-slate-200 rounded-xl tabular-nums disabled:bg-slate-50"
                     />
                   </label>
                   {canEdit && (
@@ -1160,7 +1161,7 @@ export const ConfiguracionView: React.FC<ConfiguracionViewProps> = ({
                         type="date"
                         value={rfVigencia}
                         onChange={(e) => setRfVigencia(e.target.value)}
-                        className="mt-1 w-full px-3 py-2 border border-slate-300 rounded-lg"
+                        className="mt-1 w-full px-3 py-2 border border-slate-200 rounded-xl"
                       />
                     </label>
                   )}
@@ -1183,7 +1184,7 @@ export const ConfiguracionView: React.FC<ConfiguracionViewProps> = ({
                           'Regla de rendimiento y cercanía de rentas guardada.'
                         )
                       }
-                      className="inline-flex items-center gap-1.5 px-4 py-2 bg-slate-900 hover:bg-slate-800 text-white text-xs font-semibold rounded-lg"
+                      className="inline-flex items-center gap-1.5 min-h-[40px] px-4 py-2 bg-[#0F2942] hover:bg-[#0284C7] text-white text-xs font-semibold rounded-xl transition-colors"
                     >
                       <Save className="w-3.5 h-3.5" />
                       Aplicar vigencia de rendimiento
@@ -1197,7 +1198,7 @@ export const ConfiguracionView: React.FC<ConfiguracionViewProps> = ({
           {/* 5. SERVICIOS Y TERRENO */}
           {seccion === 'servicios' && (
             <div className="space-y-6">
-              <div className="bg-white border border-slate-200 rounded-xl p-5 space-y-4">
+              <div className="bg-white border border-slate-200/90 rounded-2xl p-5 space-y-4">
                 <div>
                   <h3 className="text-base font-bold text-slate-900">
                     Catálogo de Servicios y Tarifas Base
@@ -1209,9 +1210,9 @@ export const ConfiguracionView: React.FC<ConfiguracionViewProps> = ({
                   </p>
                 </div>
 
-                <div className="overflow-x-auto border border-slate-200 rounded-lg">
+                <div className="overflow-x-auto border border-slate-200/80 rounded-2xl">
                   <table className="w-full text-sm text-left">
-                    <thead className="bg-slate-50 text-xs text-slate-600 border-b border-slate-200">
+                    <thead className="bg-[#F8FAFC] text-xs text-[#475569] border-b border-slate-200">
                       <tr>
                         <th className="px-4 py-2.5 font-semibold">Servicio</th>
                         <th className="px-4 py-2.5 font-semibold text-right">Precio base</th>
@@ -1249,14 +1250,14 @@ export const ConfiguracionView: React.FC<ConfiguracionViewProps> = ({
 
                 {canEdit && (
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-2 border-t border-slate-100">
-                    <div className="border border-slate-200 rounded-lg p-4 space-y-3">
+                    <div className="border border-slate-200/70 bg-[#F8FAFC] rounded-xl p-4 space-y-3">
                       <h4 className="text-xs font-bold uppercase tracking-wider text-slate-700">
                         Programar nueva vigencia de servicio
                       </h4>
                       <select
                         value={srvVigCodigo}
                         onChange={(e) => setSrvVigCodigo(e.target.value)}
-                        className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm bg-white"
+                        className="w-full px-3 py-2 border border-slate-200 rounded-xl text-sm bg-white"
                       >
                         {configuracion.servicios.map((s) => (
                           <option key={s.codigo} value={s.codigo}>
@@ -1272,7 +1273,7 @@ export const ConfiguracionView: React.FC<ConfiguracionViewProps> = ({
                             min="0"
                             value={srvVigPrecioBase}
                             onChange={(e) => setSrvVigPrecioBase(e.target.value)}
-                            className="mt-1 w-full px-2.5 py-1.5 border border-slate-300 rounded-lg text-sm tabular-nums"
+                            className="mt-1 w-full px-2.5 py-1.5 border border-slate-200 rounded-xl text-sm tabular-nums"
                           />
                         </label>
                         <label className="block">
@@ -1282,7 +1283,7 @@ export const ConfiguracionView: React.FC<ConfiguracionViewProps> = ({
                             min="0"
                             value={srvVigCorredor}
                             onChange={(e) => setSrvVigCorredor(e.target.value)}
-                            className="mt-1 w-full px-2.5 py-1.5 border border-slate-300 rounded-lg text-sm tabular-nums"
+                            className="mt-1 w-full px-2.5 py-1.5 border border-slate-200 rounded-xl text-sm tabular-nums"
                           />
                         </label>
                         <label className="block">
@@ -1292,7 +1293,7 @@ export const ConfiguracionView: React.FC<ConfiguracionViewProps> = ({
                             min="0"
                             value={srvVigAreaExtra}
                             onChange={(e) => setSrvVigAreaExtra(e.target.value)}
-                            className="mt-1 w-full px-2.5 py-1.5 border border-slate-300 rounded-lg text-sm tabular-nums"
+                            className="mt-1 w-full px-2.5 py-1.5 border border-slate-200 rounded-xl text-sm tabular-nums"
                           />
                         </label>
                         <label className="block">
@@ -1301,7 +1302,7 @@ export const ConfiguracionView: React.FC<ConfiguracionViewProps> = ({
                             type="date"
                             value={srvVigFecha}
                             onChange={(e) => setSrvVigFecha(e.target.value)}
-                            className="mt-1 w-full px-2.5 py-1.5 border border-slate-300 rounded-lg text-sm"
+                            className="mt-1 w-full px-2.5 py-1.5 border border-slate-200 rounded-xl text-sm"
                           />
                         </label>
                       </div>
@@ -1323,13 +1324,13 @@ export const ConfiguracionView: React.FC<ConfiguracionViewProps> = ({
                             'Nueva vigencia de tarifa de servicio registrada.'
                           )
                         }
-                        className="w-full px-3 py-2 bg-slate-900 hover:bg-slate-800 text-white text-xs font-semibold rounded-lg"
+                        className="w-full min-h-[40px] px-3 py-2 bg-[#0F2942] hover:bg-[#0284C7] text-white text-xs font-semibold rounded-xl transition-colors"
                       >
                         Aplicar vigencia de tarifa
                       </button>
                     </div>
 
-                    <div className="border border-slate-200 rounded-lg p-4 space-y-3">
+                    <div className="border border-slate-200/70 bg-[#F8FAFC] rounded-xl p-4 space-y-3">
                       <h4 className="text-xs font-bold uppercase tracking-wider text-slate-700">
                         Agregar servicio al catálogo
                       </h4>
@@ -1339,14 +1340,14 @@ export const ConfiguracionView: React.FC<ConfiguracionViewProps> = ({
                           placeholder="Código (ej. batimetria)"
                           value={newSrvCodigo}
                           onChange={(e) => setNewSrvCodigo(e.target.value)}
-                          className="px-2.5 py-1.5 border border-slate-300 rounded-lg text-sm font-mono"
+                          className="px-2.5 py-1.5 border border-slate-200 rounded-xl text-sm font-mono"
                         />
                         <input
                           type="text"
                           placeholder="Nombre visible"
                           value={newSrvNombre}
                           onChange={(e) => setNewSrvNombre(e.target.value)}
-                          className="px-2.5 py-1.5 border border-slate-300 rounded-lg text-sm"
+                          className="px-2.5 py-1.5 border border-slate-200 rounded-xl text-sm"
                         />
                       </div>
                       <input
@@ -1354,7 +1355,7 @@ export const ConfiguracionView: React.FC<ConfiguracionViewProps> = ({
                         placeholder="Subtítulo o especialidad"
                         value={newSrvSubtitulo}
                         onChange={(e) => setNewSrvSubtitulo(e.target.value)}
-                        className="w-full px-2.5 py-1.5 border border-slate-300 rounded-lg text-sm"
+                        className="w-full px-2.5 py-1.5 border border-slate-200 rounded-xl text-sm"
                       />
                       <div className="grid grid-cols-2 gap-2 text-xs">
                         <label className="block">
@@ -1364,7 +1365,7 @@ export const ConfiguracionView: React.FC<ConfiguracionViewProps> = ({
                             min="0"
                             value={newSrvPrecioBase}
                             onChange={(e) => setNewSrvPrecioBase(e.target.value)}
-                            className="mt-1 w-full px-2.5 py-1.5 border border-slate-300 rounded-lg text-sm tabular-nums"
+                            className="mt-1 w-full px-2.5 py-1.5 border border-slate-200 rounded-xl text-sm tabular-nums"
                           />
                         </label>
                         <label className="block">
@@ -1373,7 +1374,7 @@ export const ConfiguracionView: React.FC<ConfiguracionViewProps> = ({
                             type="date"
                             value={newSrvVigencia}
                             onChange={(e) => setNewSrvVigencia(e.target.value)}
-                            className="mt-1 w-full px-2.5 py-1.5 border border-slate-300 rounded-lg text-sm"
+                            className="mt-1 w-full px-2.5 py-1.5 border border-slate-200 rounded-xl text-sm"
                           />
                         </label>
                       </div>
@@ -1398,7 +1399,7 @@ export const ConfiguracionView: React.FC<ConfiguracionViewProps> = ({
                             setNewSrvSubtitulo('');
                           }, 'Nuevo servicio añadido al catálogo.')
                         }
-                        className="w-full px-3 py-2 bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-semibold rounded-lg"
+                        className="w-full min-h-[40px] px-3 py-2 bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-semibold rounded-xl transition-colors"
                       >
                         Crear servicio
                       </button>
@@ -1408,7 +1409,7 @@ export const ConfiguracionView: React.FC<ConfiguracionViewProps> = ({
               </div>
 
               {/* Factores de terreno */}
-              <div className="bg-white border border-slate-200 rounded-xl p-5 space-y-4">
+              <div className="bg-white border border-slate-200/90 rounded-2xl p-5 space-y-4">
                 <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
                   <div>
                     <h4 className="text-sm font-bold text-slate-900">
@@ -1429,7 +1430,7 @@ export const ConfiguracionView: React.FC<ConfiguracionViewProps> = ({
                       disabled={!canEdit}
                       value={terLlano}
                       onChange={(e) => setTerLlano(e.target.value)}
-                      className="mt-1 w-full px-3 py-2 border border-slate-300 rounded-lg tabular-nums disabled:bg-slate-50"
+                      className="mt-1 w-full px-3 py-2 border border-slate-200 rounded-xl tabular-nums disabled:bg-slate-50"
                     />
                   </label>
                   <label className="block">
@@ -1441,7 +1442,7 @@ export const ConfiguracionView: React.FC<ConfiguracionViewProps> = ({
                       disabled={!canEdit}
                       value={terOndulado}
                       onChange={(e) => setTerOndulado(e.target.value)}
-                      className="mt-1 w-full px-3 py-2 border border-slate-300 rounded-lg tabular-nums disabled:bg-slate-50"
+                      className="mt-1 w-full px-3 py-2 border border-slate-200 rounded-xl tabular-nums disabled:bg-slate-50"
                     />
                   </label>
                   <label className="block">
@@ -1453,7 +1454,7 @@ export const ConfiguracionView: React.FC<ConfiguracionViewProps> = ({
                       disabled={!canEdit}
                       value={terMontanoso}
                       onChange={(e) => setTerMontanoso(e.target.value)}
-                      className="mt-1 w-full px-3 py-2 border border-slate-300 rounded-lg tabular-nums disabled:bg-slate-50"
+                      className="mt-1 w-full px-3 py-2 border border-slate-200 rounded-xl tabular-nums disabled:bg-slate-50"
                     />
                   </label>
                   {canEdit && (
@@ -1463,7 +1464,7 @@ export const ConfiguracionView: React.FC<ConfiguracionViewProps> = ({
                         type="date"
                         value={terVigFecha}
                         onChange={(e) => setTerVigFecha(e.target.value)}
-                        className="mt-1 w-full px-3 py-2 border border-slate-300 rounded-lg"
+                        className="mt-1 w-full px-3 py-2 border border-slate-200 rounded-xl"
                       />
                     </label>
                   )}
@@ -1484,7 +1485,7 @@ export const ConfiguracionView: React.FC<ConfiguracionViewProps> = ({
                           'Nueva vigencia de factores de terreno guardada.'
                         )
                       }
-                      className="px-4 py-2 bg-slate-900 hover:bg-slate-800 text-white text-xs font-semibold rounded-lg"
+                      className="min-h-[40px] px-4 py-2 bg-[#0F2942] hover:bg-[#0284C7] text-white text-xs font-semibold rounded-xl transition-colors"
                     >
                       Aplicar vigencia de terreno
                     </button>
@@ -1496,7 +1497,7 @@ export const ConfiguracionView: React.FC<ConfiguracionViewProps> = ({
 
           {/* 6. REGLAS DE VIÁTICOS Y GPS RUTA */}
           {seccion === 'viaticos_reglas' && canEdit && (
-            <div className="bg-white border border-slate-200 rounded-xl p-5 space-y-6">
+            <div className="bg-white border border-slate-200/90 rounded-2xl p-5 space-y-6">
               <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 border-b border-slate-100 pb-4">
                 <div>
                   <h3 className="text-base font-bold text-slate-900">
@@ -1512,13 +1513,13 @@ export const ConfiguracionView: React.FC<ConfiguracionViewProps> = ({
                     type="date"
                     value={rvVigencia}
                     onChange={(e) => setRvVigencia(e.target.value)}
-                    className="px-2.5 py-1.5 border border-slate-300 rounded-lg text-sm"
+                    className="px-2.5 py-1.5 border border-slate-200 rounded-xl text-sm"
                   />
                 </label>
               </div>
 
               {/* Regla GPS Ruta */}
-              <div className="border border-slate-200 rounded-lg p-4 space-y-3">
+              <div className="border border-slate-200/70 bg-[#F8FAFC] rounded-xl p-4 space-y-3">
                 <h4 className="text-sm font-bold text-slate-900">Regla oficial de GPS Ruta</h4>
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-3 text-sm">
                   <label className="block">
@@ -1531,7 +1532,7 @@ export const ConfiguracionView: React.FC<ConfiguracionViewProps> = ({
                       min="0"
                       value={rvTarifaKm}
                       onChange={(e) => setRvTarifaKm(e.target.value)}
-                      className="mt-1 w-full px-3 py-2 border border-slate-300 rounded-lg tabular-nums"
+                      className="mt-1 w-full px-3 py-2 border border-slate-200 rounded-xl tabular-nums"
                     />
                   </label>
                   <label className="block">
@@ -1542,7 +1543,7 @@ export const ConfiguracionView: React.FC<ConfiguracionViewProps> = ({
                       min="0"
                       value={rvMinKm}
                       onChange={(e) => setRvMinKm(e.target.value)}
-                      className="mt-1 w-full px-3 py-2 border border-slate-300 rounded-lg tabular-nums"
+                      className="mt-1 w-full px-3 py-2 border border-slate-200 rounded-xl tabular-nums"
                     />
                   </label>
                   <label className="block">
@@ -1550,7 +1551,7 @@ export const ConfiguracionView: React.FC<ConfiguracionViewProps> = ({
                     <select
                       value={rvConceptoDist}
                       onChange={(e) => setRvConceptoDist(e.target.value as ConceptoDistanciaGps)}
-                      className="mt-1 w-full px-3 py-2 border border-slate-300 rounded-lg bg-white"
+                      className="mt-1 w-full px-3 py-2 border border-slate-200 rounded-xl bg-white"
                     >
                       <option value="ida_vuelta">Ida y vuelta (× 2)</option>
                       <option value="solo_ida">Solo ida (× 1)</option>
@@ -1560,7 +1561,7 @@ export const ConfiguracionView: React.FC<ConfiguracionViewProps> = ({
               </div>
 
               {/* Dietas, Hospedaje y Umbrales */}
-              <div className="border border-slate-200 rounded-lg p-4 space-y-3">
+              <div className="border border-slate-200/70 bg-[#F8FAFC] rounded-xl p-4 space-y-3">
                 <h4 className="text-sm font-bold text-slate-900">
                   Dietas, Hospedaje y Umbrales de Ruta / KMZ
                 </h4>
@@ -1572,7 +1573,7 @@ export const ConfiguracionView: React.FC<ConfiguracionViewProps> = ({
                       min="0"
                       value={rvDietaUrbana}
                       onChange={(e) => setRvDietaUrbana(e.target.value)}
-                      className="mt-1 w-full px-3 py-2 border border-slate-300 rounded-lg tabular-nums"
+                      className="mt-1 w-full px-3 py-2 border border-slate-200 rounded-xl tabular-nums"
                     />
                   </label>
                   <label className="block">
@@ -1582,7 +1583,7 @@ export const ConfiguracionView: React.FC<ConfiguracionViewProps> = ({
                       min="0"
                       value={rvDietaCampo}
                       onChange={(e) => setRvDietaCampo(e.target.value)}
-                      className="mt-1 w-full px-3 py-2 border border-slate-300 rounded-lg tabular-nums"
+                      className="mt-1 w-full px-3 py-2 border border-slate-200 rounded-xl tabular-nums"
                     />
                   </label>
                   <label className="block">
@@ -1592,7 +1593,7 @@ export const ConfiguracionView: React.FC<ConfiguracionViewProps> = ({
                       min="0"
                       value={rvUmbralUrbana}
                       onChange={(e) => setRvUmbralUrbana(e.target.value)}
-                      className="mt-1 w-full px-3 py-2 border border-slate-300 rounded-lg tabular-nums"
+                      className="mt-1 w-full px-3 py-2 border border-slate-200 rounded-xl tabular-nums"
                     />
                   </label>
                   <label className="block">
@@ -1602,7 +1603,7 @@ export const ConfiguracionView: React.FC<ConfiguracionViewProps> = ({
                       min="0"
                       value={rvHospedaje}
                       onChange={(e) => setRvHospedaje(e.target.value)}
-                      className="mt-1 w-full px-3 py-2 border border-slate-300 rounded-lg tabular-nums"
+                      className="mt-1 w-full px-3 py-2 border border-slate-200 rounded-xl tabular-nums"
                     />
                   </label>
                   <label className="block">
@@ -1612,7 +1613,7 @@ export const ConfiguracionView: React.FC<ConfiguracionViewProps> = ({
                       min="0"
                       value={rvUmbralHospedaje}
                       onChange={(e) => setRvUmbralHospedaje(e.target.value)}
-                      className="mt-1 w-full px-3 py-2 border border-slate-300 rounded-lg tabular-nums"
+                      className="mt-1 w-full px-3 py-2 border border-slate-200 rounded-xl tabular-nums"
                     />
                   </label>
                   <label className="block">
@@ -1622,7 +1623,7 @@ export const ConfiguracionView: React.FC<ConfiguracionViewProps> = ({
                       min="0"
                       value={rvKmzPeajeUmbral}
                       onChange={(e) => setRvKmzPeajeUmbral(e.target.value)}
-                      className="mt-1 w-full px-3 py-2 border border-slate-300 rounded-lg tabular-nums"
+                      className="mt-1 w-full px-3 py-2 border border-slate-200 rounded-xl tabular-nums"
                     />
                   </label>
                   <label className="block">
@@ -1632,7 +1633,7 @@ export const ConfiguracionView: React.FC<ConfiguracionViewProps> = ({
                       min="0"
                       value={rvKmzPeajeTramo}
                       onChange={(e) => setRvKmzPeajeTramo(e.target.value)}
-                      className="mt-1 w-full px-3 py-2 border border-slate-300 rounded-lg tabular-nums"
+                      className="mt-1 w-full px-3 py-2 border border-slate-200 rounded-xl tabular-nums"
                     />
                   </label>
                   <label className="block">
@@ -1642,14 +1643,14 @@ export const ConfiguracionView: React.FC<ConfiguracionViewProps> = ({
                       min="0"
                       value={rvKmzPersonas}
                       onChange={(e) => setRvKmzPersonas(e.target.value)}
-                      className="mt-1 w-full px-3 py-2 border border-slate-300 rounded-lg tabular-nums"
+                      className="mt-1 w-full px-3 py-2 border border-slate-200 rounded-xl tabular-nums"
                     />
                   </label>
                 </div>
               </div>
 
               {/* Peajes por corredor */}
-              <div className="border border-slate-200 rounded-lg p-4 space-y-3">
+              <div className="border border-slate-200/70 bg-[#F8FAFC] rounded-xl p-4 space-y-3">
                 <h4 className="text-sm font-bold text-slate-900">Peajes por Corredor Vial ({moneda})</h4>
                 <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
                   {(
@@ -1673,7 +1674,7 @@ export const ConfiguracionView: React.FC<ConfiguracionViewProps> = ({
                         onChange={(e) =>
                           setRvPeajes((prev) => ({ ...prev, [field]: Number(e.target.value) }))
                         }
-                        className="mt-1 w-full px-2.5 py-1.5 border border-slate-300 rounded-lg text-sm tabular-nums"
+                        className="mt-1 w-full px-2.5 py-1.5 border border-slate-200 rounded-xl text-sm tabular-nums"
                       />
                     </label>
                   ))}
@@ -1681,7 +1682,7 @@ export const ConfiguracionView: React.FC<ConfiguracionViewProps> = ({
               </div>
 
               {/* Tarifas rápidas (presets) */}
-              <div className="border border-slate-200 rounded-lg p-4 space-y-3">
+              <div className="border border-slate-200/70 bg-[#F8FAFC] rounded-xl p-4 space-y-3">
                 <div className="flex items-center justify-between">
                   <h4 className="text-sm font-bold text-slate-900">
                     Tarifas Rápidas de Captura en Campo
@@ -1701,7 +1702,7 @@ export const ConfiguracionView: React.FC<ConfiguracionViewProps> = ({
                         },
                       ])
                     }
-                    className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-semibold border border-slate-300 rounded-lg hover:bg-slate-50"
+                    className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-semibold border border-slate-200 rounded-xl hover:bg-slate-50"
                   >
                     <Plus className="w-3.5 h-3.5" />
                     Agregar preset
@@ -1712,7 +1713,7 @@ export const ConfiguracionView: React.FC<ConfiguracionViewProps> = ({
                   {rvPresets.map((preset, idx) => (
                     <div
                       key={preset.id}
-                      className="grid grid-cols-1 md:grid-cols-12 gap-2 items-center bg-slate-50 p-2.5 rounded-lg border border-slate-200 text-xs"
+                      className="grid grid-cols-1 md:grid-cols-12 gap-2 items-center bg-white p-3 rounded-xl border border-slate-200/80 text-xs"
                     >
                       <input
                         type="text"
@@ -1723,7 +1724,7 @@ export const ConfiguracionView: React.FC<ConfiguracionViewProps> = ({
                           )
                         }
                         placeholder="Etiqueta botón"
-                        className="md:col-span-3 px-2.5 py-1.5 border border-slate-300 rounded bg-white"
+                        className="md:col-span-3 px-2.5 py-2 border border-slate-200 rounded-xl bg-white focus:border-[#0284C7] focus:outline-none"
                       />
                       <select
                         value={preset.categoria}
@@ -1734,7 +1735,7 @@ export const ConfiguracionView: React.FC<ConfiguracionViewProps> = ({
                             )
                           )
                         }
-                        className="md:col-span-2 px-2 py-1.5 border border-slate-300 rounded bg-white"
+                        className="md:col-span-2 px-2.5 py-2 border border-slate-200 rounded-xl bg-white focus:border-[#0284C7] focus:outline-none"
                       >
                         {CATEGORIAS_VIATICO.map((cat) => (
                           <option key={cat} value={cat}>
@@ -1751,7 +1752,7 @@ export const ConfiguracionView: React.FC<ConfiguracionViewProps> = ({
                           )
                         }
                         placeholder="Comercio / concepto"
-                        className="md:col-span-4 px-2.5 py-1.5 border border-slate-300 rounded bg-white"
+                        className="md:col-span-4 px-2.5 py-2 border border-slate-200 rounded-xl bg-white focus:border-[#0284C7] focus:outline-none"
                       />
                       <input
                         type="number"
@@ -1764,12 +1765,12 @@ export const ConfiguracionView: React.FC<ConfiguracionViewProps> = ({
                             )
                           )
                         }
-                        className="md:col-span-2 px-2.5 py-1.5 border border-slate-300 rounded bg-white tabular-nums"
+                        className="md:col-span-2 px-2.5 py-2 border border-slate-200 rounded-xl bg-white tabular-nums focus:border-[#0284C7] focus:outline-none"
                       />
                       <button
                         type="button"
                         onClick={() => setRvPresets((prev) => prev.filter((_, i) => i !== idx))}
-                        className="md:col-span-1 px-2 py-1.5 text-rose-700 hover:bg-rose-100 rounded text-center font-semibold"
+                        className="md:col-span-1 px-2 py-2 text-rose-700 hover:bg-rose-50 rounded-xl text-center font-semibold"
                         title="Quitar preset"
                       >
                         <Trash2 className="w-3.5 h-3.5 mx-auto" />
@@ -1806,7 +1807,7 @@ export const ConfiguracionView: React.FC<ConfiguracionViewProps> = ({
                       'Nueva vigencia de reglas de viáticos registrada.'
                     )
                   }
-                  className="inline-flex items-center gap-2 px-4 py-2 bg-slate-900 hover:bg-slate-800 text-white text-sm font-semibold rounded-lg whitespace-nowrap"
+                  className="inline-flex items-center gap-2 px-4 py-2 bg-[#0F2942] hover:bg-[#0284C7] text-white text-sm font-semibold rounded-xl whitespace-nowrap"
                 >
                   <Save className="w-4 h-4" />
                   Aplicar vigencia de reglas
@@ -1817,7 +1818,7 @@ export const ConfiguracionView: React.FC<ConfiguracionViewProps> = ({
 
           {/* 7. TOPES DE VIÁTICOS POR CARGO Y CATEGORÍA (B1) */}
           {seccion === 'viaticos_categorias' && (
-            <div className="bg-white border border-slate-200 rounded-xl p-5 space-y-5">
+            <div className="bg-white border border-slate-200/90 rounded-2xl p-5 space-y-5">
               <div className="flex flex-wrap items-start justify-between gap-2">
                 <div>
                   <h3 className="text-base font-bold text-slate-900">
@@ -1836,9 +1837,9 @@ export const ConfiguracionView: React.FC<ConfiguracionViewProps> = ({
                 )}
               </div>
 
-              <div className="overflow-x-auto border border-slate-200 rounded-lg">
+              <div className="overflow-x-auto border border-slate-200/80 rounded-2xl">
                 <table className="w-full text-sm text-left">
-                  <thead className="bg-slate-50 text-xs text-slate-600 border-b border-slate-200">
+                  <thead className="bg-[#F8FAFC] text-xs text-[#475569] border-b border-slate-200">
                     <tr>
                       <th className="px-4 py-2.5 font-semibold">Categoría</th>
                       {configuracion.cargos.map((c) => (
@@ -1895,7 +1896,7 @@ export const ConfiguracionView: React.FC<ConfiguracionViewProps> = ({
               </div>
 
               {canEdit && onAgregarVigenciaTopeViatico && (
-                <div className="border border-slate-200 rounded-lg p-4 space-y-3 bg-slate-50/50">
+                <div className="border border-slate-200/70 bg-[#F8FAFC] rounded-xl p-4 space-y-3">
                   <h4 className="text-xs font-bold uppercase tracking-wider text-slate-700">
                     Programar nueva vigencia de tope por cargo y categoría
                   </h4>
@@ -1905,7 +1906,7 @@ export const ConfiguracionView: React.FC<ConfiguracionViewProps> = ({
                       <select
                         value={topeCargo}
                         onChange={(e) => setTopeCargo(e.target.value)}
-                        className="mt-1 w-full px-3 py-2 border border-slate-300 rounded-lg bg-white text-sm"
+                        className="mt-1 w-full px-3 py-2 border border-slate-200 rounded-xl bg-white text-sm"
                       >
                         {configuracion.cargos.map((c) => (
                           <option key={c.codigo} value={c.codigo}>
@@ -1919,7 +1920,7 @@ export const ConfiguracionView: React.FC<ConfiguracionViewProps> = ({
                       <select
                         value={topeCategoria}
                         onChange={(e) => setTopeCategoria(e.target.value as CategoriaViatico)}
-                        className="mt-1 w-full px-3 py-2 border border-slate-300 rounded-lg bg-white text-sm"
+                        className="mt-1 w-full px-3 py-2 border border-slate-200 rounded-xl bg-white text-sm"
                       >
                         {CATEGORIAS_VIATICO.map((cat) => (
                           <option key={cat} value={cat}>
@@ -1938,7 +1939,7 @@ export const ConfiguracionView: React.FC<ConfiguracionViewProps> = ({
                         step="50"
                         value={topeMonto}
                         onChange={(e) => setTopeMonto(e.target.value)}
-                        className="mt-1 w-full px-3 py-2 border border-slate-300 rounded-lg text-sm tabular-nums bg-white"
+                        className="mt-1 w-full px-3 py-2 border border-slate-200 rounded-xl text-sm tabular-nums bg-white"
                       />
                     </label>
                     <label className="block">
@@ -1947,7 +1948,7 @@ export const ConfiguracionView: React.FC<ConfiguracionViewProps> = ({
                         type="date"
                         value={topeVigencia}
                         onChange={(e) => setTopeVigencia(e.target.value)}
-                        className="mt-1 w-full px-3 py-2 border border-slate-300 rounded-lg text-sm bg-white"
+                        className="mt-1 w-full px-3 py-2 border border-slate-200 rounded-xl text-sm bg-white"
                       />
                     </label>
                   </div>
@@ -1975,7 +1976,7 @@ export const ConfiguracionView: React.FC<ConfiguracionViewProps> = ({
                           'Nueva vigencia de tope por cargo registrada.'
                         )
                       }
-                      className="inline-flex items-center gap-1.5 px-4 py-2 bg-slate-900 hover:bg-slate-800 text-white text-xs font-semibold rounded-lg"
+                      className="inline-flex items-center gap-1.5 min-h-[40px] px-4 py-2 bg-[#0F2942] hover:bg-[#0284C7] text-white text-xs font-semibold rounded-xl transition-colors"
                     >
                       <Save className="w-3.5 h-3.5" />
                       Aplicar vigencia de tope
@@ -1988,12 +1989,12 @@ export const ConfiguracionView: React.FC<ConfiguracionViewProps> = ({
 
           {/* 8. ENSAYOS (PLACEHOLDER) */}
           {seccion === 'ensayos' && canEdit && (
-            <div className="bg-white border border-slate-200 rounded-xl p-6 space-y-3">
-              <div className="flex items-center gap-2 text-slate-900">
-                <FlaskConical className="w-5 h-5 text-slate-700" />
+            <div className="bg-white border border-slate-200/90 rounded-2xl p-6 space-y-3">
+              <div className="flex items-center gap-2 text-[#0F2942]">
+                <FlaskConical className="w-5 h-5 text-[#0284C7]" />
                 <h3 className="text-base font-bold">Módulo de Ensayos</h3>
               </div>
-              <p className="text-sm font-medium text-slate-700 bg-slate-50 border border-slate-200 rounded-lg px-4 py-4">
+              <p className="text-sm font-medium text-slate-700 bg-[#F8FAFC] border border-slate-200/70 rounded-xl px-4 py-4">
                 Parámetros de evaluación estructural: próximamente
               </p>
             </div>
@@ -2001,7 +2002,7 @@ export const ConfiguracionView: React.FC<ConfiguracionViewProps> = ({
 
           {/* 9. AYUDA Y TUTORIAL */}
           {seccion === 'ayuda' && (
-            <div className="bg-white border border-slate-200 rounded-xl p-6 space-y-5">
+            <div className="bg-white border border-slate-200/90 rounded-2xl p-6 space-y-5">
               <div>
                 <h3 className="text-base font-bold text-slate-900">Ayuda y Tutorial por Perfil</h3>
                 <p className="text-xs text-slate-500 mt-0.5">
@@ -2011,7 +2012,7 @@ export const ConfiguracionView: React.FC<ConfiguracionViewProps> = ({
               </div>
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div className="border border-slate-200 rounded-lg p-4 space-y-3">
+                <div className="border border-slate-200/70 bg-[#F8FAFC] rounded-xl p-4 space-y-3">
                   <div className="text-sm font-bold text-slate-900">Tutorial visual del perfil</div>
                   <p className="text-xs text-slate-600">
                     Tarjetas visuales con los flujos clave para el rol activo ({rol}).
@@ -2019,7 +2020,7 @@ export const ConfiguracionView: React.FC<ConfiguracionViewProps> = ({
                   <button
                     type="button"
                     onClick={onAbrirTutorial}
-                    className="inline-flex items-center gap-2 px-4 py-2 bg-slate-900 hover:bg-slate-800 text-white text-xs font-semibold rounded-lg whitespace-nowrap"
+                    className="inline-flex items-center gap-2 px-4 py-2 bg-[#0F2942] hover:bg-[#0284C7] text-white text-xs font-semibold rounded-xl whitespace-nowrap"
                   >
                     <BookOpen className="w-4 h-4" />
                     Abrir tutorial visual
@@ -2027,7 +2028,7 @@ export const ConfiguracionView: React.FC<ConfiguracionViewProps> = ({
                 </div>
 
                 {canEdit && (
-                  <div className="border border-slate-200 rounded-lg p-4 space-y-3">
+                  <div className="border border-slate-200/70 bg-[#F8FAFC] rounded-xl p-4 space-y-3">
                     <div className="text-sm font-bold text-slate-900">
                       Asistente de configuración inicial (Onboarding)
                     </div>
@@ -2044,7 +2045,7 @@ export const ConfiguracionView: React.FC<ConfiguracionViewProps> = ({
                           'Asistente de configuración reiniciado en tu panel Hoy.'
                         )
                       }
-                      className="inline-flex items-center gap-2 px-4 py-2 border border-slate-300 bg-white hover:bg-slate-50 text-slate-800 text-xs font-semibold rounded-lg whitespace-nowrap"
+                      className="inline-flex items-center gap-2 px-4 py-2 border border-slate-300 bg-white hover:bg-slate-50 text-slate-800 text-xs font-semibold rounded-xl whitespace-nowrap"
                     >
                       <RefreshCw className="w-4 h-4" />
                       Reiniciar asistente

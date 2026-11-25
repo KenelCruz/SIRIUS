@@ -5,6 +5,7 @@ import {
   CalendarDays,
   Camera,
   CheckCircle2,
+  ChevronDown,
   Compass,
   FileUp,
   FolderKanban,
@@ -13,6 +14,8 @@ import {
   Home,
   Layers,
   LogOut,
+  PanelLeftClose,
+  PanelLeftOpen,
   Plus,
   PlusCircle,
   Receipt,
@@ -32,7 +35,7 @@ import { DwgPlanViewer } from './components/DwgPlanViewer';
 import { KmzImportModal } from './components/KmzImportModal';
 import { KmzOsmViewer } from './components/KmzOsmViewer';
 import { MobileExpenseCaptureModal } from './components/MobileExpenseCaptureModal';
-import { DemoBanner, OfflineSyncBanner } from './components/OfflineSyncBanner';
+import { OfflineSyncBanner } from './components/OfflineSyncBanner';
 import { OnboardingWizardModal } from './components/OnboardingWizardModal';
 import { PresupuestosView } from './components/PresupuestosView';
 import { ProyectosView } from './components/ProyectosView';
@@ -94,6 +97,7 @@ type TecnicoTab = 'hoy' | 'rutas_tecnico' | 'ruta_detalle' | 'agenda_tecnico' | 
 export default function App() {
   const isOnline = useOnlineStatus();
   const viewerFileInputRef = useRef<HTMLInputElement>(null);
+  const accountMenuRef = useRef<HTMLDivElement>(null);
 
   const {
     sesion,
@@ -179,6 +183,24 @@ export default function App() {
   const [isCapturingGps, setIsCapturingGps] = useState(false);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
 
+  const [isSidebarExpanded, setIsSidebarExpanded] = useState<boolean>(() => {
+    try {
+      return localStorage.getItem('sirius_sidebar_expanded') === 'true';
+    } catch {
+      return false;
+    }
+  });
+  const [isTecnicoSidebarExpanded, setIsTecnicoSidebarExpanded] = useState<boolean>(() => {
+    try {
+      const saved = localStorage.getItem('sirius_tecnico_sidebar_expanded');
+      return saved === null ? true : saved === 'true';
+    } catch {
+      return true;
+    }
+  });
+  const [isAccountMenuOpen, setIsAccountMenuOpen] = useState(false);
+  const [isSigningOut, setIsSigningOut] = useState(false);
+
   const showToast = (msg: string) => {
     setToastMessage(msg);
     setTimeout(() => {
@@ -263,7 +285,52 @@ export default function App() {
     showToast('Sesión restaurada desde caché offline.');
   };
 
+  useEffect(() => {
+    if (!isAccountMenuOpen) return;
+    const handlePointerDown = (event: MouseEvent) => {
+      if (accountMenuRef.current && !accountMenuRef.current.contains(event.target as Node)) {
+        setIsAccountMenuOpen(false);
+      }
+    };
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        setIsAccountMenuOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handlePointerDown);
+    document.addEventListener('keydown', handleKeyDown);
+    return () => {
+      document.removeEventListener('mousedown', handlePointerDown);
+      document.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [isAccountMenuOpen]);
+
+  const toggleSidebarExpanded = () => {
+    setIsSidebarExpanded((prev) => {
+      const next = !prev;
+      try {
+        localStorage.setItem('sirius_sidebar_expanded', String(next));
+      } catch {
+        // Ignore storage error
+      }
+      return next;
+    });
+  };
+
+  const toggleTecnicoSidebarExpanded = () => {
+    setIsTecnicoSidebarExpanded((prev) => {
+      const next = !prev;
+      try {
+        localStorage.setItem('sirius_tecnico_sidebar_expanded', String(next));
+      } catch {
+        // Ignore storage error
+      }
+      return next;
+    });
+  };
+
   const handleSeleccionarEmpresa = async (empresaId: string) => {
+    setIsAccountMenuOpen(false);
     const actualizada = await seleccionarEmpresa(empresaId);
     if (actualizada.rolActivo === 'tecnico') {
       setTecnicoTab('hoy');
@@ -275,12 +342,36 @@ export default function App() {
   };
 
   const handleCerrarSesion = async () => {
-    await cerrarSesion();
-    setSelectedRutaId('');
-    setTecnicoRutaDetalleId('');
-    setStandaloneKmz(null);
-    setIsOnboardingOpen(false);
-    setIsTutorialOpen(false);
+    if (isSigningOut) return;
+    setIsSigningOut(true);
+    setIsAccountMenuOpen(false);
+    try {
+      await cerrarSesion();
+      setSelectedRutaId('');
+      setTecnicoRutaDetalleId('');
+      setStandaloneKmz(null);
+      setPreloadedKmzForModal(null);
+      setLoadedDwgPlan(null);
+      setDefaultProyectoModal(undefined);
+      setIsKmzModalOpen(false);
+      setIsExpenseModalOpen(false);
+      setEditingViatico(null);
+      setExpenseDefaultProyectoId(undefined);
+      setExpenseDefaultRutaId(undefined);
+      setIsReportarSelectorOpen(false);
+      setIsBitacoraModalOpen(false);
+      setBitacoraDefaultServicioId(undefined);
+      setTransicionServicioId(null);
+      setPendingKmzAsig(null);
+      setKmzAsigConflictos([]);
+      setConfigSeccionInicial(undefined);
+      setIsOnboardingOpen(false);
+      setIsTutorialOpen(false);
+      setTecnicoSuccessBanner(null);
+      setToastMessage(null);
+    } finally {
+      setIsSigningOut(false);
+    }
   };
 
   const handleSyncNow = async () => {
@@ -431,17 +522,17 @@ export default function App() {
     const tecnicoSidebarItems: Array<{
       id: Exclude<TecnicoTab, 'ruta_detalle'>;
       label: string;
+      shortLabel: string;
       icon: React.FC<{ className?: string }>;
     }> = [
-      { id: 'hoy', label: 'Hoy en Campo', icon: Compass },
-      { id: 'rutas_tecnico', label: 'Mis Rutas', icon: Route },
-      { id: 'agenda_tecnico', label: 'Mi Agenda Semanal', icon: CalendarDays },
-      { id: 'viaticos_tecnico', label: 'Mis Viáticos', icon: Receipt },
+      { id: 'hoy', label: 'Hoy en Campo', shortLabel: 'Hoy', icon: Compass },
+      { id: 'rutas_tecnico', label: 'Mis Rutas', shortLabel: 'Rutas', icon: Route },
+      { id: 'agenda_tecnico', label: 'Mi Agenda Semanal', shortLabel: 'Agenda', icon: CalendarDays },
+      { id: 'viaticos_tecnico', label: 'Mis Viáticos', shortLabel: 'Viáticos', icon: Receipt },
     ];
 
     return (
-      <div className="min-h-screen flex flex-col bg-[#F8FAFC] text-[#0D1C2F]">
-        <DemoBanner visible={isDemoActivo} />
+      <div className="min-h-screen flex flex-col bg-[#F1F5F9] text-[#0D1C2F]">
         <OfflineSyncBanner
           isOnline={isOnline}
           pendingCount={pendingCounts.total}
@@ -454,124 +545,232 @@ export default function App() {
         />
 
         <div className="flex flex-1 min-h-0">
-          {/* Desktop Sidebar Técnico (únicamente vistas permitidas) */}
-          <aside className="hidden lg:flex lg:w-64 lg:flex-col bg-[#0F2942] text-white shrink-0">
-            <div className="px-5 py-5 border-b border-[#1E3A5F] space-y-3">
-              <div className="flex items-center gap-2.5">
-                <div className="flex h-8 w-8 items-center justify-center rounded-md bg-[#0284C7] text-white">
-                  <Compass className="h-4 w-4" />
-                </div>
-                <div className="min-w-0">
-                  <div className="text-base font-bold tracking-tight truncate">SIRIUS</div>
-                  <div className="text-[11px] leading-tight text-[#CBD5E1] line-clamp-2">
-                    Módulo de Campo · Técnico
-                  </div>
-                  <div className="mt-0.5 text-[11px] font-medium text-[#93CCFF] truncate">
-                    {empresaNombre}
-                  </div>
-                </div>
-              </div>
-
-              {empresasDisponibles.length > 1 && (
-                <div className="flex items-center gap-1.5 rounded-md bg-[#091A2C] px-2.5 py-2 border border-white/10">
-                  <Building2 className="h-3.5 w-3.5 text-[#93CCFF] shrink-0" />
-                  <select
-                    value={empresaId}
-                    onChange={(e) => handleSeleccionarEmpresa(e.target.value)}
-                    aria-label="Cambiar empresa activa"
-                    className="w-full bg-transparent text-xs font-semibold text-white focus:outline-none"
+          {/* Desktop Sidebar Técnico unificado (barra blanca compacta ampliable a completa) */}
+          <aside
+            className={`hidden lg:flex lg:flex-col justify-between bg-white border-r border-slate-200/80 py-4 shrink-0 transition-[width] duration-200 ${
+              isTecnicoSidebarExpanded ? 'lg:w-[248px] px-3' : 'lg:w-[76px] items-center px-2.5'
+            }`}
+          >
+            <div
+              className={`flex flex-col gap-3 w-full ${
+                isTecnicoSidebarExpanded ? '' : 'items-center'
+              }`}
+            >
+              {isTecnicoSidebarExpanded ? (
+                <div className="flex items-center justify-between gap-2 px-1">
+                  <button
+                    type="button"
+                    onClick={() => setTecnicoTab('hoy')}
+                    className="flex items-center gap-2.5 min-w-0 text-left"
                   >
-                    {empresasDisponibles.map((item) => (
-                      <option
-                        key={item.empresa.id}
-                        value={item.empresa.id}
-                        className="text-[#0D1C2F]"
-                      >
-                        {item.empresa.nombre} ({item.rol})
-                      </option>
-                    ))}
-                  </select>
+                    <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br from-[#0F2942] to-[#0284C7] text-white shadow-sm shrink-0">
+                      <Compass className="h-5 w-5" />
+                    </div>
+                    <div className="min-w-0">
+                      <div className="text-sm font-bold tracking-tight text-[#0F2942] truncate">
+                        SIRIUS
+                      </div>
+                      <div className="text-[11px] font-medium text-[#475569] truncate">
+                        Técnico
+                      </div>
+                    </div>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={toggleTecnicoSidebarExpanded}
+                    title="Contraer barra lateral"
+                    aria-label="Contraer barra lateral"
+                    aria-expanded={true}
+                    className="flex h-9 w-9 items-center justify-center rounded-xl border border-slate-200/80 bg-[#F8FAFC] text-[#475569] hover:bg-slate-100 hover:text-[#0F2942] transition-colors shrink-0"
+                  >
+                    <PanelLeftClose className="h-4 w-4" />
+                  </button>
                 </div>
+              ) : (
+                <>
+                  <button
+                    type="button"
+                    onClick={() => setTecnicoTab('hoy')}
+                    title="SIRIUS — Hoy en Campo"
+                    aria-label="SIRIUS — Hoy en Campo"
+                    className="flex h-11 w-11 items-center justify-center rounded-2xl bg-gradient-to-br from-[#0F2942] to-[#0284C7] text-white shadow-sm hover:opacity-95 transition-opacity"
+                  >
+                    <Compass className="h-5 w-5" />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={toggleTecnicoSidebarExpanded}
+                    title="Ampliar barra lateral"
+                    aria-label="Ampliar barra lateral"
+                    aria-expanded={false}
+                    className="flex h-9 w-10 items-center justify-center rounded-xl border border-slate-200/70 bg-[#F8FAFC] text-[#475569] hover:bg-slate-100 hover:text-[#0F2942] transition-colors"
+                  >
+                    <PanelLeftOpen className="h-4 w-4" />
+                  </button>
+                </>
               )}
-            </div>
-
-            <nav className="flex-1 p-3 space-y-1">
-              {tecnicoSidebarItems.map((item) => {
-                const Icon = item.icon;
-                const active =
-                  tecnicoTab === item.id ||
-                  (item.id === 'rutas_tecnico' && tecnicoTab === 'ruta_detalle');
-                return (
-                  <button
-                    key={item.id}
-                    type="button"
-                    onClick={() => setTecnicoTab(item.id)}
-                    className={`w-full flex items-center gap-3 rounded-md px-3 py-2.5 text-xs font-semibold transition-colors whitespace-nowrap shrink-0 min-h-[40px] ${
-                      active
-                        ? 'bg-[#0284C7] text-white shadow-sm'
-                        : 'text-[#CBD5E1] hover:bg-[#1E3A5F] hover:text-white'
-                    }`}
-                  >
-                    <Icon className="h-4 w-4 shrink-0" />
-                    <span>{item.label}</span>
-                  </button>
-                );
-              })}
-            </nav>
-
-            <div className="p-4 border-t border-[#1E3A5F] space-y-3">
-              <div className="rounded-lg bg-[#091A2C] p-3 text-xs border border-white/10">
-                <div className="font-bold text-white truncate">{sesion.usuario.nombre}</div>
-                <div className="mt-1 flex items-center justify-between text-[11px] text-[#93CCFF]">
-                  <span className="font-mono uppercase">TÉCNICO</span>
-                  <button
-                    type="button"
-                    onClick={handleCerrarSesion}
-                    className="inline-flex items-center gap-1 text-[#CBD5E1] hover:text-white whitespace-nowrap shrink-0"
-                  >
-                    <LogOut className="h-3 w-3" />
-                    Cerrar sesión
-                  </button>
-                </div>
-              </div>
 
               <button
                 type="button"
                 onClick={() => setIsReportarSelectorOpen(true)}
-                className="w-full flex items-center justify-center gap-2 rounded-md bg-[#0284C7] px-4 py-2.5 text-xs font-semibold text-white hover:bg-[#006398] transition-colors whitespace-nowrap shrink-0 min-h-[44px]"
+                title={isTecnicoSidebarExpanded ? undefined : 'Reportar en campo'}
+                aria-label="Reportar en campo"
+                className={`flex items-center rounded-xl border border-sky-200 bg-sky-50 text-[#0284C7] hover:bg-[#0284C7] hover:text-white transition-colors font-semibold text-xs whitespace-nowrap ${
+                  isTecnicoSidebarExpanded
+                    ? 'h-10 w-full justify-start gap-2.5 px-3'
+                    : 'h-10 w-10 justify-center'
+                }`}
               >
-                <PlusCircle className="h-4 w-4" />
-                Reportar en campo
+                <PlusCircle className="h-4 w-4 shrink-0" />
+                {isTecnicoSidebarExpanded && <span>Reportar en campo</span>}
+              </button>
+
+              <nav
+                aria-label="Navegación de campo"
+                className={`w-full rounded-2xl border border-slate-200/70 bg-[#F8FAFC] p-1.5 flex flex-col gap-1 ${
+                  isTecnicoSidebarExpanded ? '' : 'items-center'
+                }`}
+              >
+                {tecnicoSidebarItems.map((item) => {
+                  const Icon = item.icon;
+                  const active =
+                    tecnicoTab === item.id ||
+                    (item.id === 'rutas_tecnico' && tecnicoTab === 'ruta_detalle');
+                  return (
+                    <button
+                      key={item.id}
+                      type="button"
+                      onClick={() => setTecnicoTab(item.id)}
+                      title={isTecnicoSidebarExpanded ? undefined : item.label}
+                      aria-label={item.label}
+                      className={`flex items-center rounded-xl transition-colors whitespace-nowrap ${
+                        isTecnicoSidebarExpanded
+                          ? 'h-10 w-full justify-start gap-3 px-3 text-xs font-semibold'
+                          : 'h-10 w-10 justify-center'
+                      } ${
+                        active
+                          ? 'bg-[#0F2942] text-white shadow-sm'
+                          : 'text-[#64748B] hover:bg-white hover:text-[#0F2942]'
+                      }`}
+                    >
+                      <Icon className="h-[18px] w-[18px] shrink-0" />
+                      {isTecnicoSidebarExpanded && <span className="truncate">{item.label}</span>}
+                    </button>
+                  );
+                })}
+              </nav>
+            </div>
+
+            <div
+              className={`w-full rounded-2xl border border-slate-200/70 bg-[#F8FAFC] p-1.5 flex flex-col gap-1 ${
+                isTecnicoSidebarExpanded ? '' : 'items-center'
+              }`}
+            >
+              <button
+                type="button"
+                onClick={() => setIsTutorialOpen(true)}
+                title={isTecnicoSidebarExpanded ? undefined : 'Ver guía visual'}
+                aria-label="Ver guía visual"
+                className={`flex items-center rounded-xl text-[#64748B] hover:bg-white hover:text-[#0284C7] transition-colors whitespace-nowrap ${
+                  isTecnicoSidebarExpanded
+                    ? 'h-10 w-full justify-start gap-3 px-3 text-xs font-semibold'
+                    : 'h-10 w-10 justify-center'
+                }`}
+              >
+                <HelpCircle className="h-[18px] w-[18px] shrink-0" />
+                {isTecnicoSidebarExpanded && <span>Ver guía</span>}
+              </button>
+              <button
+                type="button"
+                onClick={handleCerrarSesion}
+                disabled={isSigningOut}
+                title={isTecnicoSidebarExpanded ? undefined : 'Cerrar sesión'}
+                aria-label="Cerrar sesión"
+                className={`flex items-center rounded-xl text-[#64748B] hover:bg-rose-50 hover:text-[#DC2626] transition-colors whitespace-nowrap disabled:opacity-50 ${
+                  isTecnicoSidebarExpanded
+                    ? 'h-10 w-full justify-start gap-3 px-3 text-xs font-semibold'
+                    : 'h-10 w-10 justify-center'
+                }`}
+              >
+                <LogOut className="h-[18px] w-[18px] shrink-0" />
+                {isTecnicoSidebarExpanded && (
+                  <span>{isSigningOut ? 'Cerrando sesión...' : 'Cerrar sesión'}</span>
+                )}
               </button>
             </div>
           </aside>
 
           {/* Main Viewport Técnico */}
           <div className="flex-1 flex flex-col min-w-0 pb-20 lg:pb-0">
-            <header className="sticky top-0 z-30 flex items-center justify-between gap-3 border-b border-slate-200 bg-white/95 backdrop-blur px-4 sm:px-6 h-14">
-              <div className="flex items-center gap-2.5 min-w-0">
-                <div className="lg:hidden flex h-8 w-8 items-center justify-center rounded-md bg-[#0F2942] text-white shrink-0">
+            <header className="sticky top-0 z-30 flex items-center justify-between gap-6 border-b border-slate-200/80 bg-white/95 backdrop-blur px-4 sm:px-6 h-16">
+              {/* Zone 1: Brand & Active Company */}
+              <div className="flex items-center gap-3 min-w-0 shrink-0">
+                <div className="lg:hidden flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-br from-[#0F2942] to-[#0284C7] text-white shrink-0">
                   <Compass className="h-4 w-4" />
                 </div>
                 <div className="min-w-0">
-                  <h1 className="text-sm sm:text-base font-bold tracking-tight text-[#0D1C2F] truncate">
-                    {tecnicoTab === 'hoy' && 'Hoy en Campo'}
-                    {tecnicoTab === 'rutas_tecnico' && 'Mis Rutas Asignadas'}
-                    {tecnicoTab === 'ruta_detalle' && 'Detalle y Mapa de Ruta'}
-                    {tecnicoTab === 'agenda_tecnico' && 'Mi Agenda Semanal'}
-                    {tecnicoTab === 'viaticos_tecnico' && 'Mis Viáticos'}
-                  </h1>
+                  <div className="text-sm sm:text-base font-bold tracking-tight text-[#0F2942] whitespace-nowrap">
+                    SIRIUS
+                  </div>
+                  {empresasDisponibles.length > 1 ? (
+                    <div className="hidden sm:flex items-center gap-1 text-[11px] text-[#475569]">
+                      <Building2 className="h-3 w-3 text-[#0284C7] shrink-0" />
+                      <select
+                        value={empresaId}
+                        onChange={(e) => handleSeleccionarEmpresa(e.target.value)}
+                        aria-label="Cambiar empresa activa"
+                        className="bg-transparent font-medium text-[#475569] hover:text-[#0F2942] focus:outline-none max-w-[160px] truncate"
+                      >
+                        {empresasDisponibles.map((item) => (
+                          <option key={item.empresa.id} value={item.empresa.id}>
+                            {item.empresa.nombre}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  ) : (
+                    <div className="hidden sm:block text-[11px] font-medium text-[#475569] truncate max-w-[170px]">
+                      {empresaNombre}
+                    </div>
+                  )}
                 </div>
               </div>
 
-              <div className="flex items-center gap-2 shrink-0">
+              {/* Zone 2: Clean Top Pill-Track Nav */}
+              <nav
+                aria-label="Navegación principal técnico"
+                className="hidden lg:flex items-center gap-1 rounded-2xl border border-slate-200/70 bg-[#F1F5F9] p-1"
+              >
+                {tecnicoSidebarItems.map((item) => {
+                  const active =
+                    tecnicoTab === item.id ||
+                    (item.id === 'rutas_tecnico' && tecnicoTab === 'ruta_detalle');
+                  return (
+                    <button
+                      key={item.id}
+                      type="button"
+                      onClick={() => setTecnicoTab(item.id)}
+                      className={`rounded-xl px-4 py-1.5 text-xs font-semibold transition-colors whitespace-nowrap shrink-0 min-h-[34px] ${
+                        active
+                          ? 'bg-[#0F2942] text-white shadow-sm'
+                          : 'text-[#475569] hover:text-[#0F2942]'
+                      }`}
+                    >
+                      {item.shortLabel}
+                    </button>
+                  );
+                })}
+              </nav>
+
+              {/* Zone 3: Actions & Profile */}
+              <div className="flex items-center gap-2.5 shrink-0">
                 <div
-                  className={`inline-flex items-center gap-1 text-xs font-medium whitespace-nowrap ${
+                  className={`hidden xl:inline-flex items-center gap-1.5 text-xs font-medium whitespace-nowrap ${
                     isOnline ? 'text-[#15803D]' : 'text-[#D97706]'
                   }`}
                 >
                   {isOnline ? <Wifi className="h-3.5 w-3.5" /> : <WifiOff className="h-3.5 w-3.5" />}
-                  <span className="hidden sm:inline">{isOnline ? 'Conectado' : 'Offline'}</span>
+                  <span>{isOnline ? 'Conectado' : 'Offline'}</span>
                 </div>
 
                 <PWAInstallButton />
@@ -579,31 +778,106 @@ export default function App() {
                 <button
                   type="button"
                   onClick={() => setIsTutorialOpen(true)}
-                  className="inline-flex items-center gap-1.5 rounded-md border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-[#0F2942] hover:bg-slate-50 min-h-[40px] whitespace-nowrap shrink-0"
+                  className="lg:hidden inline-flex items-center justify-center rounded-xl border border-slate-200 bg-white p-2 text-xs font-semibold text-[#0F2942] hover:bg-slate-50 min-h-[40px] min-w-[40px]"
                   title="Ver guía visual del módulo técnico"
+                  aria-label="Ver guía"
                 >
                   <HelpCircle className="h-4 w-4 text-[#0284C7]" />
-                  <span className="hidden sm:inline">Ver guía</span>
                 </button>
 
                 <button
                   type="button"
                   onClick={() => setIsReportarSelectorOpen(true)}
-                  className="inline-flex items-center gap-1.5 rounded-md bg-[#0284C7] px-3.5 py-2 text-xs font-semibold text-white hover:bg-[#006398] min-h-[40px] whitespace-nowrap shrink-0"
+                  className="inline-flex items-center gap-1.5 rounded-xl bg-[#0F2942] px-4 py-2 text-xs font-semibold text-white hover:bg-[#0284C7] transition-colors min-h-[40px] whitespace-nowrap shrink-0"
                 >
                   <PlusCircle className="h-4 w-4" />
                   <span className="hidden sm:inline">Reportar en campo</span>
                 </button>
+
+                <div ref={accountMenuRef} className="relative hidden md:block pl-2 border-l border-slate-200">
+                  <button
+                    type="button"
+                    onClick={() => setIsAccountMenuOpen((prev) => !prev)}
+                    aria-haspopup="menu"
+                    aria-expanded={isAccountMenuOpen}
+                    aria-label="Menú de cuenta y cierre de sesión"
+                    className="flex items-center gap-2 rounded-xl px-2 py-1 hover:bg-slate-100 transition-colors"
+                  >
+                    <div className="flex h-8 w-8 items-center justify-center rounded-full bg-[#0F2942] text-xs font-bold text-white shrink-0">
+                      {sesion.usuario.nombre
+                        .split(' ')
+                        .map((n) => n[0])
+                        .slice(0, 2)
+                        .join('')
+                        .toUpperCase()}
+                    </div>
+                    <div className="leading-tight text-left max-w-[130px]">
+                      <div className="text-xs font-semibold text-[#0F2942] truncate">
+                        {sesion.usuario.nombre}
+                      </div>
+                      <div className="text-[11px] text-[#475569] truncate">Técnico</div>
+                    </div>
+                    <ChevronDown
+                      className={`h-3.5 w-3.5 text-[#475569] transition-transform ${
+                        isAccountMenuOpen ? 'rotate-180' : ''
+                      }`}
+                    />
+                  </button>
+
+                  {isAccountMenuOpen && (
+                    <div
+                      role="menu"
+                      aria-label="Opciones de cuenta"
+                      className="absolute right-0 mt-2 w-64 rounded-2xl border border-slate-200 bg-white p-2 shadow-lg z-50"
+                    >
+                      <div className="px-3 py-2 border-b border-slate-100">
+                        <div className="text-xs font-bold text-[#0F2942] truncate">
+                          {sesion.usuario.nombre}
+                        </div>
+                        <div className="text-[11px] text-[#475569] truncate">
+                          {sesion.usuario.email}
+                        </div>
+                        <div className="mt-1 text-[11px] font-medium text-[#0284C7] truncate">
+                          {empresaNombre} · Técnico
+                        </div>
+                      </div>
+                      <div className="pt-1.5 space-y-1">
+                        <button
+                          type="button"
+                          role="menuitem"
+                          onClick={() => {
+                            setIsAccountMenuOpen(false);
+                            setIsTutorialOpen(true);
+                          }}
+                          className="w-full flex items-center gap-2.5 rounded-xl px-3 py-2 text-xs font-medium text-[#0F2942] hover:bg-slate-50 transition-colors"
+                        >
+                          <HelpCircle className="h-4 w-4 text-[#0284C7]" />
+                          Ver guía visual
+                        </button>
+                        <button
+                          type="button"
+                          role="menuitem"
+                          onClick={handleCerrarSesion}
+                          disabled={isSigningOut}
+                          className="w-full flex items-center gap-2.5 rounded-xl px-3 py-2 text-xs font-semibold text-[#DC2626] hover:bg-rose-50 transition-colors disabled:opacity-50"
+                        >
+                          <LogOut className="h-4 w-4" />
+                          {isSigningOut ? 'Cerrando sesión...' : 'Cerrar sesión'}
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                </div>
               </div>
             </header>
 
-            <main className="flex-1 p-4 sm:p-6 space-y-6 max-w-[1080px] w-full mx-auto pb-24 lg:pb-8">
+            <main className="flex-1 p-4 sm:p-6 space-y-6 max-w-[1440px] w-full mx-auto pb-24 lg:pb-8">
               {/* Mobile Session Strip */}
-              <div className="flex lg:hidden items-center justify-between gap-2 rounded-lg border border-slate-200 bg-white px-3.5 py-2.5 text-xs">
+              <div className="flex lg:hidden items-center justify-between gap-2 rounded-2xl border border-slate-200 bg-white px-3.5 py-2.5 text-xs">
                 <div className="min-w-0">
                   <div className="font-bold text-[#0F2942] truncate">{empresaNombre}</div>
-                  <div className="font-mono text-[11px] text-[#43474D]">
-                    {sesion.usuario.nombre} · TÉCNICO
+                  <div className="text-[11px] font-medium text-[#475569]">
+                    {sesion.usuario.nombre} · Técnico
                   </div>
                 </div>
                 <div className="flex items-center gap-2 shrink-0">
@@ -612,7 +886,7 @@ export default function App() {
                       value={empresaId}
                       onChange={(e) => handleSeleccionarEmpresa(e.target.value)}
                       aria-label="Cambiar empresa activa"
-                      className="rounded-md border border-slate-200 bg-white px-2.5 py-1.5 text-[11px] font-semibold text-[#0F2942] max-w-[140px] min-h-[36px]"
+                      className="rounded-xl border border-slate-200 bg-white px-2.5 py-1.5 text-[11px] font-semibold text-[#0F2942] max-w-[140px] min-h-[36px]"
                     >
                       {empresasDisponibles.map((item) => (
                         <option key={item.empresa.id} value={item.empresa.id}>
@@ -624,7 +898,9 @@ export default function App() {
                   <button
                     type="button"
                     onClick={handleCerrarSesion}
-                    className="rounded-md border border-slate-200 p-2 text-[#334155] hover:bg-slate-50 min-h-[36px] min-w-[36px] flex items-center justify-center"
+                    disabled={isSigningOut}
+                    title="Cerrar sesión"
+                    className="rounded-xl border border-slate-200 p-2 text-[#334155] hover:bg-rose-50 hover:text-[#DC2626] min-h-[36px] min-w-[36px] flex items-center justify-center disabled:opacity-50"
                     aria-label="Cerrar sesión"
                   >
                     <LogOut className="h-3.5 w-3.5" />
@@ -1005,9 +1281,12 @@ export default function App() {
   const viewerAreaM2 = standaloneKmz?.totalAreaM2 ?? selectedRuta?.totalAreaM2 ?? 0;
   const viewerPerimeterM = standaloneKmz?.totalPerimeterM ?? selectedRuta?.totalPerimeterM ?? 0;
 
+  const topBarItems = navItems.filter((item) =>
+    ['hoy', 'proyectos', 'presupuestos', 'agenda', 'viaticos', 'catalogos'].includes(item.id)
+  );
+
   return (
-    <div className="min-h-screen flex flex-col bg-[#F8FAFC] text-[#0D1C2F]">
-      <DemoBanner visible={isDemoActivo} />
+    <div className="min-h-screen flex flex-col bg-[#F1F5F9] text-[#0D1C2F]">
       <OfflineSyncBanner
         isOnline={isOnline}
         pendingCount={pendingCounts.total}
@@ -1020,128 +1299,219 @@ export default function App() {
       />
 
       <div className="flex flex-1 min-h-0">
-        {/* Desktop Sidebar */}
-        <aside className="hidden lg:flex lg:w-64 lg:flex-col bg-[#0F2942] text-white shrink-0">
-          <div className="px-5 py-5 border-b border-[#1E3A5F] space-y-3">
-            <div className="flex items-center gap-2.5">
-              <div className="flex h-8 w-8 items-center justify-center rounded-md bg-[#0284C7] text-white">
-                <Compass className="h-4 w-4" />
-              </div>
-              <div className="min-w-0">
-                <div
-                  className="text-base font-bold tracking-tight whitespace-nowrap truncate"
-                  title="SIRIUS: Sistema Integral de Recursos, Información, Operaciones y Análisis"
+        {/* Desktop Sidebar (Slim Icon Rail ampliable a barra completa) */}
+        <aside
+          className={`hidden lg:flex lg:flex-col justify-between bg-white border-r border-slate-200/80 py-4 shrink-0 transition-[width] duration-200 ${
+            isSidebarExpanded ? 'lg:w-[248px] px-3' : 'lg:w-[76px] items-center px-2.5'
+          }`}
+        >
+          <div className={`flex flex-col gap-3 w-full ${isSidebarExpanded ? '' : 'items-center'}`}>
+            {isSidebarExpanded ? (
+              <div className="flex items-center justify-between gap-2 px-1">
+                <button
+                  type="button"
+                  onClick={() => setAdminTab(rol === 'admin' ? 'hoy' : 'proyectos')}
+                  className="flex items-center gap-2.5 min-w-0 text-left"
                 >
-                  SIRIUS
-                </div>
-                <div className="text-[11px] leading-tight text-[#CBD5E1] line-clamp-2">
-                  Sistema Integral de Recursos, Información, Operaciones y Análisis
-                </div>
-                <div className="mt-0.5 text-[11px] font-medium text-[#93CCFF] truncate">
-                  {snapshot.empresa.nombre}
-                </div>
-              </div>
-            </div>
-
-            {empresasDisponibles.length > 1 && (
-              <div className="flex items-center gap-1.5 rounded-md bg-[#091A2C] px-2.5 py-2 border border-white/10">
-                <Building2 className="h-3.5 w-3.5 text-[#93CCFF] shrink-0" />
-                <select
-                  value={empresaId}
-                  onChange={(e) => handleSeleccionarEmpresa(e.target.value)}
-                  aria-label="Cambiar empresa activa"
-                  className="w-full bg-transparent text-xs font-semibold text-white focus:outline-none"
+                  <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br from-[#0F2942] to-[#0284C7] text-white shadow-sm shrink-0">
+                    <Compass className="h-5 w-5" />
+                  </div>
+                  <div className="min-w-0">
+                    <div className="text-sm font-bold tracking-tight text-[#0F2942] truncate">
+                      SIRIUS
+                    </div>
+                    <div className="text-[11px] font-medium text-[#475569] truncate">
+                      {rol === 'admin' ? 'Administrador' : 'Coordinador'}
+                    </div>
+                  </div>
+                </button>
+                <button
+                  type="button"
+                  onClick={toggleSidebarExpanded}
+                  title="Contraer barra lateral"
+                  aria-label="Contraer barra lateral"
+                  aria-expanded={true}
+                  className="flex h-9 w-9 items-center justify-center rounded-xl border border-slate-200/80 bg-[#F8FAFC] text-[#475569] hover:bg-slate-100 hover:text-[#0F2942] transition-colors shrink-0"
                 >
-                  {empresasDisponibles.map((item) => (
-                    <option key={item.empresa.id} value={item.empresa.id} className="text-[#0D1C2F]">
-                      {item.empresa.nombre} ({item.rol})
-                    </option>
-                  ))}
-                </select>
+                  <PanelLeftClose className="h-4 w-4" />
+                </button>
               </div>
+            ) : (
+              <>
+                <button
+                  type="button"
+                  onClick={() => setAdminTab(rol === 'admin' ? 'hoy' : 'proyectos')}
+                  title="SIRIUS — Inicio"
+                  aria-label="SIRIUS Inicio"
+                  className="flex h-11 w-11 items-center justify-center rounded-2xl bg-gradient-to-br from-[#0F2942] to-[#0284C7] text-white shadow-sm hover:opacity-95 transition-opacity"
+                >
+                  <Compass className="h-5 w-5" />
+                </button>
+                <button
+                  type="button"
+                  onClick={toggleSidebarExpanded}
+                  title="Ampliar barra lateral"
+                  aria-label="Ampliar barra lateral"
+                  aria-expanded={false}
+                  className="flex h-9 w-10 items-center justify-center rounded-xl border border-slate-200/70 bg-[#F8FAFC] text-[#475569] hover:bg-slate-100 hover:text-[#0F2942] transition-colors"
+                >
+                  <PanelLeftOpen className="h-4 w-4" />
+                </button>
+              </>
             )}
-          </div>
-
-          <nav className="flex-1 p-3 space-y-1">
-            {navItems.map((item) => {
-              const Icon = item.icon;
-              const active = adminTab === item.id;
-              return (
-                <button
-                  key={item.id}
-                  type="button"
-                  onClick={() => setAdminTab(item.id)}
-                  className={`w-full flex items-center gap-3 rounded-md px-3 py-2.5 text-xs font-semibold transition-colors whitespace-nowrap shrink-0 min-h-[40px] ${
-                    active
-                      ? 'bg-[#0284C7] text-white shadow-sm'
-                      : 'text-[#CBD5E1] hover:bg-[#1E3A5F] hover:text-white'
-                  }`}
-                >
-                  <Icon className="h-4 w-4 shrink-0" />
-                  <span>{item.label}</span>
-                </button>
-              );
-            })}
-          </nav>
-
-          {/* Sesión Activa & Reporte Móvil */}
-          <div className="p-4 border-t border-[#1E3A5F] space-y-3">
-            <div className="rounded-lg bg-[#091A2C] p-3 text-xs border border-white/10">
-              <div className="font-bold text-white truncate">{sesion.usuario.nombre}</div>
-              <div className="mt-1 flex items-center justify-between text-[11px] text-[#93CCFF]">
-                <span className="font-mono uppercase">{rol}</span>
-                <button
-                  type="button"
-                  onClick={handleCerrarSesion}
-                  className="inline-flex items-center gap-1 text-[#CBD5E1] hover:text-white whitespace-nowrap shrink-0"
-                >
-                  <LogOut className="h-3 w-3" />
-                  Cerrar sesión
-                </button>
-              </div>
-            </div>
 
             <button
               type="button"
               onClick={() => abrirModalViatico()}
-              className="w-full flex items-center justify-center gap-2 rounded-md border border-white/20 bg-[#0284C7] px-3 py-2.5 text-xs font-semibold text-white hover:bg-[#006398] transition-colors whitespace-nowrap shrink-0 min-h-[40px]"
+              title={isSidebarExpanded ? undefined : 'Registrar viático rápido'}
+              aria-label="Registrar viático"
+              className={`flex items-center rounded-xl border border-sky-200 bg-sky-50 text-[#0284C7] hover:bg-[#0284C7] hover:text-white transition-colors font-semibold text-xs whitespace-nowrap ${
+                isSidebarExpanded
+                  ? 'h-10 w-full justify-start gap-2.5 px-3'
+                  : 'h-10 w-10 justify-center'
+              }`}
             >
-              <Camera className="h-3.5 w-3.5" />
-              Registrar viático
+              <Camera className="h-4 w-4 shrink-0" />
+              {isSidebarExpanded && <span>Registrar viático</span>}
+            </button>
+
+            <nav
+              aria-label="Módulos de operación"
+              className={`w-full rounded-2xl border border-slate-200/70 bg-[#F8FAFC] p-1.5 flex flex-col gap-1 ${
+                isSidebarExpanded ? '' : 'items-center'
+              }`}
+            >
+              {navItems.map((item) => {
+                const Icon = item.icon;
+                const active = adminTab === item.id;
+                return (
+                  <button
+                    key={item.id}
+                    type="button"
+                    onClick={() => setAdminTab(item.id)}
+                    title={isSidebarExpanded ? undefined : item.label}
+                    aria-label={item.label}
+                    className={`flex items-center rounded-xl transition-colors whitespace-nowrap ${
+                      isSidebarExpanded
+                        ? 'h-10 w-full justify-start gap-3 px-3 text-xs font-semibold'
+                        : 'h-10 w-10 justify-center'
+                    } ${
+                      active
+                        ? 'bg-[#0F2942] text-white shadow-sm'
+                        : 'text-[#64748B] hover:bg-white hover:text-[#0F2942]'
+                    }`}
+                  >
+                    <Icon className="h-[18px] w-[18px] shrink-0" />
+                    {isSidebarExpanded && <span className="truncate">{item.label}</span>}
+                  </button>
+                );
+              })}
+            </nav>
+          </div>
+
+          <div
+            className={`w-full rounded-2xl border border-slate-200/70 bg-[#F8FAFC] p-1.5 flex flex-col gap-1 ${
+              isSidebarExpanded ? '' : 'items-center'
+            }`}
+          >
+            <button
+              type="button"
+              onClick={() => setIsTutorialOpen(true)}
+              title={isSidebarExpanded ? undefined : 'Ver guía visual'}
+              aria-label="Ver guía visual"
+              className={`flex items-center rounded-xl text-[#64748B] hover:bg-white hover:text-[#0284C7] transition-colors whitespace-nowrap ${
+                isSidebarExpanded
+                  ? 'h-10 w-full justify-start gap-3 px-3 text-xs font-semibold'
+                  : 'h-10 w-10 justify-center'
+              }`}
+            >
+              <HelpCircle className="h-[18px] w-[18px] shrink-0" />
+              {isSidebarExpanded && <span>Ver guía</span>}
+            </button>
+            <button
+              type="button"
+              onClick={handleCerrarSesion}
+              disabled={isSigningOut}
+              title={isSidebarExpanded ? undefined : 'Cerrar sesión'}
+              aria-label="Cerrar sesión"
+              className={`flex items-center rounded-xl text-[#64748B] hover:bg-rose-50 hover:text-[#DC2626] transition-colors whitespace-nowrap disabled:opacity-50 ${
+                isSidebarExpanded
+                  ? 'h-10 w-full justify-start gap-3 px-3 text-xs font-semibold'
+                  : 'h-10 w-10 justify-center'
+              }`}
+            >
+              <LogOut className="h-[18px] w-[18px] shrink-0" />
+              {isSidebarExpanded && (
+                <span>{isSigningOut ? 'Cerrando sesión...' : 'Cerrar sesión'}</span>
+              )}
             </button>
           </div>
         </aside>
 
         {/* Main Viewport */}
         <div className="flex-1 flex flex-col min-w-0 pb-20 lg:pb-0">
-          <header className="sticky top-0 z-30 flex items-center justify-between gap-4 border-b border-slate-200 bg-white/95 backdrop-blur px-4 sm:px-6 h-14">
-            <div className="flex items-center gap-3 min-w-0">
-              <div className="lg:hidden flex h-8 w-8 items-center justify-center rounded-md bg-[#0F2942] text-white shrink-0">
+          <header className="sticky top-0 z-30 flex items-center justify-between gap-6 border-b border-slate-200/80 bg-white/95 backdrop-blur px-4 sm:px-6 h-16">
+            {/* Zone 1: Brand / Active Company */}
+            <div className="flex items-center gap-3 min-w-0 shrink-0">
+              <div className="lg:hidden flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-br from-[#0F2942] to-[#0284C7] text-white shrink-0">
                 <Compass className="h-4 w-4" />
               </div>
               <div className="min-w-0">
-                <h1 className="text-sm sm:text-base font-bold tracking-tight text-[#0D1C2F] truncate">
-                  {adminTab === 'hoy' && `${snapshot.empresa.nombre} · Hoy`}
-                  {adminTab === 'proyectos' && `${snapshot.empresa.nombre} · Proyectos y rutas`}
-                  {adminTab === 'presupuestos' &&
-                    `${snapshot.empresa.nombre} · Presupuestos y márgenes`}
-                  {adminTab === 'agenda' && 'Agenda de cuadrillas y conflictos'}
-                  {adminTab === 'rutas' && 'Cotizador de rutas y servicios'}
-                  {adminTab === 'map' &&
-                    (mapViewerMode === 'planos'
-                      ? 'Planos arquitectónicos (.DWG / .DXF)'
-                      : 'Visor cartográfico (KMZ / KML / GeoJSON)')}
-                  {adminTab === 'viaticos' && 'Control de viáticos y reparto por proyecto'}
-                  {adminTab === 'catalogos' && 'Catálogos, flota y equipos GNSS'}
-                  {adminTab === 'auditoria' && 'Auditoría operativa'}
-                  {adminTab === 'configuracion' && `${snapshot.empresa.nombre} · Configuración`}
-                </h1>
+                <div className="text-sm sm:text-base font-bold tracking-tight text-[#0F2942] whitespace-nowrap">
+                  SIRIUS
+                </div>
+                {empresasDisponibles.length > 1 ? (
+                  <div className="hidden sm:flex items-center gap-1 text-[11px] text-[#475569]">
+                    <Building2 className="h-3 w-3 text-[#0284C7] shrink-0" />
+                    <select
+                      value={empresaId}
+                      onChange={(e) => handleSeleccionarEmpresa(e.target.value)}
+                      aria-label="Cambiar empresa activa"
+                      className="bg-transparent font-medium text-[#475569] hover:text-[#0F2942] focus:outline-none max-w-[160px] truncate"
+                    >
+                      {empresasDisponibles.map((item) => (
+                        <option key={item.empresa.id} value={item.empresa.id}>
+                          {item.empresa.nombre}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                ) : (
+                  <div className="hidden sm:block text-[11px] font-medium text-[#475569] truncate max-w-[170px]">
+                    {snapshot.empresa.nombre}
+                  </div>
+                )}
               </div>
             </div>
 
+            {/* Zone 2: Clean Top Pill-Track Nav */}
+            <nav
+              aria-label="Navegación principal"
+              className="hidden lg:flex items-center gap-1 rounded-2xl border border-slate-200/70 bg-[#F1F5F9] p-1"
+            >
+              {topBarItems.map((item) => {
+                const active = adminTab === item.id;
+                return (
+                  <button
+                    key={item.id}
+                    type="button"
+                    onClick={() => setAdminTab(item.id)}
+                    className={`rounded-xl px-3.5 py-1.5 text-xs font-semibold transition-colors whitespace-nowrap shrink-0 min-h-[34px] ${
+                      active
+                        ? 'bg-[#0F2942] text-white shadow-sm'
+                        : 'text-[#475569] hover:text-[#0F2942]'
+                    }`}
+                  >
+                    {item.shortLabel}
+                  </button>
+                );
+              })}
+            </nav>
+
+            {/* Zone 3: Actions & Profile */}
             <div className="flex items-center gap-2.5 shrink-0">
               <div
-                className={`hidden sm:inline-flex items-center gap-1.5 text-xs font-medium whitespace-nowrap ${
+                className={`hidden xl:inline-flex items-center gap-1.5 text-xs font-medium whitespace-nowrap ${
                   isOnline ? 'text-[#15803D]' : 'text-[#D97706]'
                 }`}
               >
@@ -1155,7 +1525,7 @@ export default function App() {
                 <button
                   type="button"
                   onClick={() => setAdminTab('hoy')}
-                  className="lg:hidden inline-flex items-center justify-center rounded-md border border-slate-200 bg-white px-2.5 py-2 text-xs font-semibold text-[#0F2942] hover:bg-slate-50 min-h-[40px] min-w-[40px]"
+                  className="lg:hidden inline-flex items-center justify-center rounded-xl border border-slate-200 bg-white px-2.5 py-2 text-xs font-semibold text-[#0F2942] hover:bg-slate-50 min-h-[40px] min-w-[40px]"
                   title="Hoy"
                   aria-label="Ir a Hoy"
                 >
@@ -1167,7 +1537,7 @@ export default function App() {
                 <button
                   type="button"
                   onClick={() => setAdminTab('configuracion')}
-                  className="lg:hidden inline-flex items-center justify-center rounded-md border border-slate-200 bg-white px-2.5 py-2 text-xs font-semibold text-[#0F2942] hover:bg-slate-50 min-h-[40px] min-w-[40px]"
+                  className="lg:hidden inline-flex items-center justify-center rounded-xl border border-slate-200 bg-white px-2.5 py-2 text-xs font-semibold text-[#0F2942] hover:bg-slate-50 min-h-[40px] min-w-[40px]"
                   title="Configuración"
                   aria-label="Ir a Configuración"
                 >
@@ -1178,11 +1548,11 @@ export default function App() {
               <button
                 type="button"
                 onClick={() => setIsTutorialOpen(true)}
-                className="inline-flex items-center gap-1.5 rounded-md border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-[#0F2942] hover:bg-slate-50 min-h-[40px] whitespace-nowrap shrink-0"
-                title="Abrir tutorial visual del perfil"
+                className="lg:hidden inline-flex items-center justify-center rounded-xl border border-slate-200 bg-white p-2 text-xs font-semibold text-[#0F2942] hover:bg-slate-50 min-h-[40px] min-w-[40px]"
+                title="Ver guía visual del módulo"
+                aria-label="Ver guía"
               >
                 <HelpCircle className="h-4 w-4 text-[#0284C7]" />
-                <span className="hidden sm:inline">Ver tutorial</span>
               </button>
 
               {canEdit && (
@@ -1193,22 +1563,99 @@ export default function App() {
                     setDefaultProyectoModal(snapshot.proyectos[0]?.id);
                     setIsKmzModalOpen(true);
                   }}
-                  className="inline-flex items-center gap-1.5 rounded-md bg-[#0F2942] px-4 py-2 text-xs font-semibold text-white hover:bg-[#0284C7] transition-colors whitespace-nowrap shrink-0 min-h-[40px]"
+                  className="inline-flex items-center gap-1.5 rounded-xl bg-[#0F2942] px-4 py-2 text-xs font-semibold text-white hover:bg-[#0284C7] transition-colors whitespace-nowrap shrink-0 min-h-[40px]"
                 >
                   <Plus className="h-4 w-4" />
                   <span className="hidden sm:inline">Importar KMZ</span>
                   <span className="sm:hidden">KMZ</span>
                 </button>
               )}
+
+              <div ref={accountMenuRef} className="relative hidden md:block pl-2 border-l border-slate-200">
+                <button
+                  type="button"
+                  onClick={() => setIsAccountMenuOpen((prev) => !prev)}
+                  aria-haspopup="menu"
+                  aria-expanded={isAccountMenuOpen}
+                  aria-label="Menú de cuenta y cierre de sesión"
+                  className="flex items-center gap-2 rounded-xl px-2 py-1 hover:bg-slate-100 transition-colors"
+                >
+                  <div className="flex h-8 w-8 items-center justify-center rounded-full bg-[#0F2942] text-xs font-bold text-white shrink-0">
+                    {sesion.usuario.nombre
+                      .split(' ')
+                      .map((n) => n[0])
+                      .slice(0, 2)
+                      .join('')
+                      .toUpperCase()}
+                  </div>
+                  <div className="leading-tight text-left max-w-[140px]">
+                    <div className="text-xs font-semibold text-[#0F2942] truncate">
+                      {sesion.usuario.nombre}
+                    </div>
+                    <div className="text-[11px] text-[#475569] truncate">
+                      {rol === 'admin' ? 'Administrador' : 'Coordinador'}
+                    </div>
+                  </div>
+                  <ChevronDown
+                    className={`h-3.5 w-3.5 text-[#475569] transition-transform ${
+                      isAccountMenuOpen ? 'rotate-180' : ''
+                    }`}
+                  />
+                </button>
+
+                {isAccountMenuOpen && (
+                  <div
+                    role="menu"
+                    aria-label="Opciones de cuenta"
+                    className="absolute right-0 mt-2 w-64 rounded-2xl border border-slate-200 bg-white p-2 shadow-lg z-50"
+                  >
+                    <div className="px-3 py-2 border-b border-slate-100">
+                      <div className="text-xs font-bold text-[#0F2942] truncate">
+                        {sesion.usuario.nombre}
+                      </div>
+                      <div className="text-[11px] text-[#475569] truncate">
+                        {sesion.usuario.email}
+                      </div>
+                      <div className="mt-1 text-[11px] font-medium text-[#0284C7] truncate">
+                        {snapshot.empresa.nombre} · {rol === 'admin' ? 'Administrador' : 'Coordinador'}
+                      </div>
+                    </div>
+                    <div className="pt-1.5 space-y-1">
+                      <button
+                        type="button"
+                        role="menuitem"
+                        onClick={() => {
+                          setIsAccountMenuOpen(false);
+                          setIsTutorialOpen(true);
+                        }}
+                        className="w-full flex items-center gap-2.5 rounded-xl px-3 py-2 text-xs font-medium text-[#0F2942] hover:bg-slate-50 transition-colors"
+                      >
+                        <HelpCircle className="h-4 w-4 text-[#0284C7]" />
+                        Ver guía visual
+                      </button>
+                      <button
+                        type="button"
+                        role="menuitem"
+                        onClick={handleCerrarSesion}
+                        disabled={isSigningOut}
+                        className="w-full flex items-center gap-2.5 rounded-xl px-3 py-2 text-xs font-semibold text-[#DC2626] hover:bg-rose-50 transition-colors disabled:opacity-50"
+                      >
+                        <LogOut className="h-4 w-4" />
+                        {isSigningOut ? 'Cerrando sesión...' : 'Cerrar sesión'}
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
             </div>
           </header>
 
           <main className="flex-1 p-4 sm:p-6 space-y-6 max-w-[1440px] w-full mx-auto pb-24 lg:pb-8">
-            <div className="flex lg:hidden items-center justify-between gap-2 rounded-lg border border-slate-200 bg-white px-3.5 py-2.5 text-xs">
+            <div className="flex lg:hidden items-center justify-between gap-2 rounded-2xl border border-slate-200 bg-white px-3.5 py-2.5 text-xs">
               <div className="min-w-0">
                 <div className="font-bold text-[#0F2942] truncate">{snapshot.empresa.nombre}</div>
-                <div className="font-mono text-[11px] text-[#43474D]">
-                  {sesion.usuario.nombre} · {rol.toUpperCase()}
+                <div className="text-[11px] font-medium text-[#475569]">
+                  {sesion.usuario.nombre} · {rol === 'admin' ? 'Administrador' : 'Coordinador'}
                 </div>
               </div>
               <div className="flex items-center gap-2 shrink-0">
@@ -1217,7 +1664,7 @@ export default function App() {
                     value={empresaId}
                     onChange={(e) => handleSeleccionarEmpresa(e.target.value)}
                     aria-label="Cambiar empresa activa"
-                    className="rounded-md border border-slate-200 bg-white px-2.5 py-1.5 text-[11px] font-semibold text-[#0F2942] max-w-[140px] min-h-[36px]"
+                    className="rounded-xl border border-slate-200 bg-white px-2.5 py-1.5 text-[11px] font-semibold text-[#0F2942] max-w-[140px] min-h-[36px]"
                   >
                     {empresasDisponibles.map((item) => (
                       <option key={item.empresa.id} value={item.empresa.id}>
@@ -1229,7 +1676,9 @@ export default function App() {
                 <button
                   type="button"
                   onClick={handleCerrarSesion}
-                  className="rounded-md border border-slate-200 p-2 text-[#334155] hover:bg-slate-50 min-h-[36px] min-w-[36px] flex items-center justify-center"
+                  disabled={isSigningOut}
+                  title="Cerrar sesión"
+                  className="rounded-xl border border-slate-200 p-2 text-[#334155] hover:bg-rose-50 hover:text-[#DC2626] min-h-[36px] min-w-[36px] flex items-center justify-center disabled:opacity-50"
                   aria-label="Cerrar sesión"
                 >
                   <LogOut className="h-3.5 w-3.5" />
@@ -1243,6 +1692,8 @@ export default function App() {
                 isLoading={isLoadingSnapshot}
                 personal={snapshot.personal}
                 proyectos={snapshot.proyectos}
+                presupuestos={snapshot.presupuestos ?? []}
+                configuracion={configuracion}
                 serviciosConfig={configuracion?.servicios ?? []}
                 rutas={snapshot.rutas}
                 servicios={snapshot.servicios}
@@ -1253,6 +1704,7 @@ export default function App() {
                 rentas={snapshot.rentas}
                 onboarding={onboarding}
                 isDemo={isDemoActivo}
+                usuarioNombre={sesion.usuario.nombre}
                 onIrAPasoOnboarding={(pasoId) => {
                   handleNavegarPasoOnboarding(pasoId).catch(() => {});
                 }}
@@ -1263,6 +1715,12 @@ export default function App() {
                   showToast(
                     'Tarjeta ocultada. Puedes reabrir el asistente en Configuración → Ayuda y tutorial.'
                   );
+                }}
+                onAbrirModalViatico={() => abrirModalViatico()}
+                onAbrirKmzModal={() => {
+                  setPreloadedKmzForModal(null);
+                  setDefaultProyectoModal(snapshot.proyectos[0]?.id);
+                  setIsKmzModalOpen(true);
                 }}
                 onIrATab={(tab) => setAdminTab(tab)}
               />
@@ -1493,16 +1951,27 @@ export default function App() {
             )}
 
             {adminTab === 'map' && (
-              <section className="space-y-5">
-                <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-slate-200 bg-white px-5 py-3">
-                  <div className="inline-flex rounded-md bg-slate-100 p-1 border border-slate-200">
+              <section className="space-y-6">
+                <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-3">
+                  <div>
+                    <h2 className="text-xl sm:text-2xl font-bold tracking-tight text-[#0F2942]">
+                      Visor Cartográfico y Planos CAD
+                    </h2>
+                    <p className="text-xs sm:text-sm text-[#475569] mt-0.5">
+                      {mapViewerMode === 'planos'
+                        ? 'Lectura vectorial CAD local para arquitectura e ingeniería'
+                        : 'Parcelas, polilíneas y coordenadas UTM Zona 19N sobre OSM'}
+                    </p>
+                  </div>
+
+                  <div className="inline-flex rounded-2xl border border-slate-200/80 bg-white p-1 self-start sm:self-auto">
                     <button
                       type="button"
                       onClick={() => setMapViewerMode('cartografia')}
-                      className={`inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-semibold transition-colors whitespace-nowrap shrink-0 ${
+                      className={`inline-flex items-center gap-1.5 rounded-xl px-3.5 py-2 text-xs font-semibold transition-colors whitespace-nowrap shrink-0 ${
                         mapViewerMode === 'cartografia'
                           ? 'bg-[#0F2942] text-white shadow-sm'
-                          : 'text-[#334155] hover:text-[#0F2942]'
+                          : 'text-[#475569] hover:text-[#0F2942]'
                       }`}
                     >
                       <Layers className="h-3.5 w-3.5" />
@@ -1511,27 +1980,21 @@ export default function App() {
                     <button
                       type="button"
                       onClick={() => setMapViewerMode('planos')}
-                      className={`inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-semibold transition-colors whitespace-nowrap shrink-0 ${
+                      className={`inline-flex items-center gap-1.5 rounded-xl px-3.5 py-2 text-xs font-semibold transition-colors whitespace-nowrap shrink-0 ${
                         mapViewerMode === 'planos'
                           ? 'bg-[#0F2942] text-white shadow-sm'
-                          : 'text-[#334155] hover:text-[#0F2942]'
+                          : 'text-[#475569] hover:text-[#0F2942]'
                       }`}
                     >
                       <Compass className="h-3.5 w-3.5" />
                       Planos DWG / DXF
                     </button>
                   </div>
-
-                  <span className="text-xs text-[#43474D]">
-                    {mapViewerMode === 'planos'
-                      ? 'Lectura vectorial CAD local para arquitectura e ingeniería'
-                      : 'Parcelas, polilíneas y coordenadas UTM Zona 19N sobre OSM'}
-                  </span>
                 </div>
 
                 {mapViewerMode === 'cartografia' ? (
                   <>
-                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 rounded-lg border border-slate-200 bg-white p-4">
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 rounded-2xl border border-slate-200/90 bg-white p-4">
                       <div className="flex flex-wrap items-center gap-2.5 flex-1 min-w-0">
                         <select
                           value={standaloneKmz ? '__standalone__' : selectedRuta?.id ?? ''}
@@ -1541,7 +2004,7 @@ export default function App() {
                               setSelectedRutaId(e.target.value);
                             }
                           }}
-                          className="rounded-md border border-slate-200 bg-white px-3 py-2 text-xs font-medium text-[#0D1C2F] min-h-[40px] max-w-full"
+                          className="rounded-xl border border-slate-200 bg-[#F8FAFC] px-3 py-2 text-xs font-medium text-[#0D1C2F] min-h-[40px] max-w-full"
                         >
                           {standaloneKmz && (
                             <option value="__standalone__">
@@ -1570,7 +2033,7 @@ export default function App() {
                         <button
                           type="button"
                           onClick={() => viewerFileInputRef.current?.click()}
-                          className="inline-flex items-center gap-1.5 rounded-md border border-slate-200 bg-slate-50 px-3.5 py-2 text-xs font-semibold text-[#0F2942] hover:bg-sky-50 min-h-[40px] whitespace-nowrap shrink-0"
+                          className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 bg-[#F8FAFC] px-3.5 py-2 text-xs font-semibold text-[#0F2942] hover:bg-slate-100 min-h-[40px] whitespace-nowrap shrink-0"
                         >
                           <FileUp className="h-4 w-4 text-[#0284C7]" />
                           Cargar archivo KMZ
@@ -1583,7 +2046,7 @@ export default function App() {
                               setPreloadedKmzForModal(standaloneKmz);
                               setIsKmzModalOpen(true);
                             }}
-                            className="inline-flex items-center gap-1.5 rounded-md bg-[#0F2942] px-3.5 py-2 text-xs font-semibold text-white hover:bg-[#0284C7] min-h-[40px] whitespace-nowrap shrink-0"
+                            className="inline-flex items-center gap-1.5 rounded-xl bg-[#0F2942] px-3.5 py-2 text-xs font-semibold text-white hover:bg-[#0284C7] min-h-[40px] whitespace-nowrap shrink-0"
                           >
                             <Plus className="h-4 w-4" />
                             Crear ruta desde archivo
@@ -1595,7 +2058,7 @@ export default function App() {
                         type="button"
                         onClick={() => handleCaptureLiveGps()}
                         disabled={isCapturingGps}
-                        className="inline-flex items-center justify-center gap-1.5 rounded-md bg-[#0284C7] px-4 py-2 text-xs font-semibold text-white hover:bg-[#006398] disabled:opacity-60 min-h-[40px] whitespace-nowrap shrink-0"
+                        className="inline-flex items-center justify-center gap-1.5 rounded-xl bg-[#0284C7] px-4 py-2 text-xs font-semibold text-white hover:bg-[#0369A1] disabled:opacity-60 min-h-[40px] whitespace-nowrap shrink-0"
                       >
                         <Compass className="h-4 w-4" />
                         {isCapturingGps ? 'Fijando GPS...' : 'Capturar GPS'}
@@ -1639,6 +2102,8 @@ export default function App() {
                 rentas={snapshot.rentas}
                 cargos={cargos}
                 configuracion={configuracion ?? undefined}
+                empresaNombre={snapshot.empresa.nombre}
+                empresaRnc={snapshot.empresa.rnc}
                 moneda={snapshot.empresa.moneda}
                 onAbrirModalNuevo={() => abrirModalViatico()}
                 onDecidirViatico={async (params) => {

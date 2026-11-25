@@ -313,21 +313,30 @@ export const AgendaView: React.FC<AgendaViewProps> = ({
 
   return (
     <section className="space-y-6">
+      <div>
+        <h2 className="text-2xl sm:text-[26px] font-bold tracking-tight text-[#0F2942]">
+          Agenda y Asignaciones
+        </h2>
+        <p className="text-sm text-[#475569] mt-0.5">
+          Programación diaria y semanal de cuadrillas, vehículos y equipos GNSS con detección de solapamientos.
+        </p>
+      </div>
+
       {canAssign && (
         <form
           onSubmit={handleSubmitAsignacion}
-          className={`rounded-lg border bg-white p-5 space-y-4 ${
-            editingAsignacionId ? 'border-[#0284C7] ring-1 ring-[#0284C7]' : 'border-slate-200'
+          className={`rounded-2xl border bg-white p-5 sm:p-6 space-y-4 ${
+            editingAsignacionId ? 'border-[#0284C7] ring-1 ring-[#0284C7]' : 'border-slate-200/90'
           }`}
         >
-          <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-200 pb-3">
+          <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 pb-3.5">
             <div>
-              <h2 className="text-sm font-bold text-[#0F2942]">
+              <h3 className="text-base font-bold text-[#0F2942]">
                 {editingAsignacionId
                   ? 'Editar asignación de cuadrilla'
                   : 'Programar asignación de cuadrilla'}
-              </h2>
-              <p className="text-xs text-[#43474D]">
+              </h3>
+              <p className="text-xs text-[#475569] mt-0.5">
                 Valida solapamientos en todo el rango de fechas de cuadrilla, técnicos, vehículos, equipos GNSS y proximidad espacial (&lt; 120 m).
               </p>
             </div>
@@ -335,7 +344,7 @@ export const AgendaView: React.FC<AgendaViewProps> = ({
               <button
                 type="button"
                 onClick={resetFormToDefaults}
-                className="inline-flex items-center gap-1.5 rounded-md border border-slate-300 bg-white px-3 py-2 text-xs font-semibold text-[#334155] hover:bg-slate-50 min-h-[40px] whitespace-nowrap shrink-0"
+                className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3.5 py-2 text-xs font-semibold text-[#0F2942] hover:bg-slate-50 min-h-[42px] whitespace-nowrap shrink-0"
               >
                 <X className="h-3.5 w-3.5" />
                 Cancelar edición
@@ -344,7 +353,7 @@ export const AgendaView: React.FC<AgendaViewProps> = ({
           </div>
 
           {formError && (
-            <div className="rounded-md border border-[#FCA5A5] bg-[#FEE2E2] px-3.5 py-2.5 text-xs text-[#93000A]">
+            <div className="rounded-xl border border-[#FCA5A5] bg-[#FEE2E2] px-4 py-3 text-xs font-medium text-[#93000A]">
               {formError}
             </div>
           )}
@@ -364,7 +373,7 @@ export const AgendaView: React.FC<AgendaViewProps> = ({
                     }
                   }
                 }}
-                className="w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-xs min-h-[40px]"
+                className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs text-[#0F2942] min-h-[42px] focus:border-[#0284C7] focus:outline-none"
               >
                 {rutas.map((r) => (
                   <option key={r.id} value={r.id}>
@@ -381,7 +390,7 @@ export const AgendaView: React.FC<AgendaViewProps> = ({
                 required
                 value={fechaInicio}
                 onChange={(e) => setFechaInicio(e.target.value)}
-                className="w-full rounded-md border border-slate-300 px-3 py-2 font-mono text-xs min-h-[40px]"
+                className="w-full rounded-xl border border-slate-200 px-3 py-2 font-mono text-xs text-[#0F2942] min-h-[42px] focus:border-[#0284C7] focus:outline-none"
               />
             </div>
 
@@ -393,7 +402,7 @@ export const AgendaView: React.FC<AgendaViewProps> = ({
                 min={fechaInicio}
                 value={fechaFin}
                 onChange={(e) => setFechaFin(e.target.value)}
-                className="w-full rounded-md border border-slate-300 px-3 py-2 font-mono text-xs min-h-[40px]"
+                className="w-full rounded-xl border border-slate-200 px-3 py-2 font-mono text-xs text-[#0F2942] min-h-[42px] focus:border-[#0284C7] focus:outline-none"
               />
             </div>
           </div>
@@ -404,7 +413,7 @@ export const AgendaView: React.FC<AgendaViewProps> = ({
               <select
                 value={cuadrillaId}
                 onChange={(e) => setCuadrillaId(e.target.value)}
-                className="w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-xs min-h-[40px]"
+                className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs text-[#0F2942] min-h-[42px] focus:border-[#0284C7] focus:outline-none"
               >
                 {cuadrillas.map((c) => {
                   const jefe = personal.find((p) => p.id === c.jefeId);
@@ -420,7 +429,7 @@ export const AgendaView: React.FC<AgendaViewProps> = ({
 
             <div>
               <label className="block font-semibold text-[#334155] mb-1.5">Vehículos</label>
-              <div className="space-y-1.5 max-h-28 overflow-y-auto rounded-md border border-slate-200 p-2.5 bg-slate-50">
+              <div className="space-y-1.5 max-h-28 overflow-y-auto rounded-xl border border-slate-200/70 p-2.5 bg-[#F8FAFC]">
                 {vehiculos.map((v) => {
                   const enMant = v.estado !== 'disponible';
                   return (
@@ -453,7 +462,7 @@ export const AgendaView: React.FC<AgendaViewProps> = ({
 
             <div>
               <label className="block font-semibold text-[#334155] mb-1.5">Equipos GNSS RTK</label>
-              <div className="space-y-1.5 max-h-28 overflow-y-auto rounded-md border border-slate-200 p-2.5 bg-slate-50">
+              <div className="space-y-1.5 max-h-28 overflow-y-auto rounded-xl border border-slate-200/70 p-2.5 bg-[#F8FAFC]">
                 {equipos.map((eq) => (
                   <label
                     key={eq.id}
@@ -484,7 +493,7 @@ export const AgendaView: React.FC<AgendaViewProps> = ({
               <button
                 type="button"
                 onClick={resetFormToDefaults}
-                className="rounded-md border border-slate-300 bg-white px-4 py-2 text-xs font-semibold text-[#334155] hover:bg-slate-50 min-h-[40px] whitespace-nowrap shrink-0"
+                className="rounded-xl border border-slate-200 bg-white px-4 py-2 text-xs font-semibold text-[#0F2942] hover:bg-slate-50 min-h-[42px] whitespace-nowrap shrink-0"
               >
                 Cancelar
               </button>
@@ -492,7 +501,7 @@ export const AgendaView: React.FC<AgendaViewProps> = ({
             <button
               type="submit"
               disabled={isSaving}
-              className="inline-flex items-center gap-1.5 rounded-md bg-[#0F2942] px-4 py-2 text-xs font-semibold text-white hover:bg-[#0284C7] disabled:opacity-50 min-h-[40px] whitespace-nowrap shrink-0"
+              className="inline-flex items-center gap-1.5 rounded-xl bg-[#0F2942] px-4 py-2 text-xs font-semibold text-white hover:bg-[#0284C7] disabled:opacity-50 min-h-[42px] whitespace-nowrap shrink-0 transition-colors"
             >
               {editingAsignacionId ? <Pencil className="h-3.5 w-3.5" /> : <Plus className="h-4 w-4" />}
               {isSaving
@@ -506,24 +515,24 @@ export const AgendaView: React.FC<AgendaViewProps> = ({
       )}
 
       {/* F6-F7: Agenda Diaria y Semanal */}
-      <div className="rounded-lg border border-slate-200 bg-white p-5 space-y-5">
-        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3 border-b border-slate-200 pb-4">
+      <div className="rounded-2xl border border-slate-200/90 bg-white p-5 sm:p-6 space-y-5">
+        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3 border-b border-slate-100 pb-4">
           <div className="flex items-center gap-2">
             <CalendarDays className="h-4 w-4 text-[#0284C7]" />
-            <h2 className="text-sm font-bold text-[#0F2942]">
+            <h3 className="text-base font-bold text-[#0F2942]">
               Agenda operativa
-            </h2>
+            </h3>
           </div>
 
-          <div className="flex flex-wrap items-center gap-2 text-xs">
-            <div className="inline-flex rounded-md border border-slate-200 bg-slate-50 p-1">
+          <div className="flex flex-wrap items-center gap-2.5 text-xs">
+            <div className="inline-flex rounded-2xl border border-slate-200/70 bg-[#F1F5F9] p-1">
               <button
                 type="button"
                 onClick={() => setVistaAgenda('diaria')}
-                className={`rounded-md px-3 py-1.5 text-xs font-semibold transition-colors whitespace-nowrap shrink-0 ${
+                className={`rounded-xl px-3.5 py-1.5 text-xs font-semibold transition-colors whitespace-nowrap shrink-0 ${
                   vistaAgenda === 'diaria'
-                    ? 'bg-[#0F2942] text-white'
-                    : 'text-[#43474D] hover:bg-white'
+                    ? 'bg-[#0F2942] text-white shadow-sm'
+                    : 'text-[#475569] hover:text-[#0F2942]'
                 }`}
               >
                 Vista diaria
@@ -531,10 +540,10 @@ export const AgendaView: React.FC<AgendaViewProps> = ({
               <button
                 type="button"
                 onClick={() => setVistaAgenda('semanal')}
-                className={`rounded-md px-3 py-1.5 text-xs font-semibold transition-colors whitespace-nowrap shrink-0 ${
+                className={`rounded-xl px-3.5 py-1.5 text-xs font-semibold transition-colors whitespace-nowrap shrink-0 ${
                   vistaAgenda === 'semanal'
-                    ? 'bg-[#0F2942] text-white'
-                    : 'text-[#43474D] hover:bg-white'
+                    ? 'bg-[#0F2942] text-white shadow-sm'
+                    : 'text-[#475569] hover:text-[#0F2942]'
                 }`}
               >
                 Vista semanal
@@ -544,7 +553,7 @@ export const AgendaView: React.FC<AgendaViewProps> = ({
             <select
               value={filtroCuadrilla}
               onChange={(e) => setFiltroCuadrilla(e.target.value)}
-              className="rounded-md border border-slate-300 bg-white px-3 py-2 text-xs min-h-[40px]"
+              className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs text-[#0F2942] min-h-[42px] focus:border-[#0284C7] focus:outline-none"
             >
               <option value="ALL">Todas las cuadrillas</option>
               {cuadrillas.map((c) => (
@@ -561,7 +570,7 @@ export const AgendaView: React.FC<AgendaViewProps> = ({
                   type="date"
                   value={filtroFecha}
                   onChange={(e) => setFiltroFecha(e.target.value)}
-                  className="rounded-md border border-slate-300 px-3 py-2 font-mono text-xs min-h-[40px]"
+                  className="rounded-xl border border-slate-200 px-3 py-2 font-mono text-xs text-[#0F2942] min-h-[42px] focus:border-[#0284C7] focus:outline-none"
                 />
                 {filtroFecha && (
                   <button
@@ -587,7 +596,7 @@ export const AgendaView: React.FC<AgendaViewProps> = ({
                 <button
                   type="button"
                   onClick={() => setSemanaInicioIso((s) => sumarDiasIso(s, -7))}
-                  className="inline-flex items-center gap-1 rounded-md border border-slate-300 bg-white px-3 py-2 font-semibold text-[#334155] hover:bg-slate-50 min-h-[38px] whitespace-nowrap shrink-0"
+                  className="inline-flex items-center gap-1 rounded-xl border border-slate-200 bg-white px-3 py-2 font-semibold text-[#0F2942] hover:bg-slate-50 min-h-[40px] whitespace-nowrap shrink-0"
                 >
                   <ChevronLeft className="h-3.5 w-3.5" />
                   Semana anterior
@@ -599,14 +608,14 @@ export const AgendaView: React.FC<AgendaViewProps> = ({
                       obtenerLunesSemana(new Date().toISOString().slice(0, 10))
                     )
                   }
-                  className="rounded-md border border-slate-300 bg-white px-3 py-2 font-semibold text-[#0284C7] hover:bg-[#EFF6FF] min-h-[38px] whitespace-nowrap shrink-0"
+                  className="rounded-xl border border-slate-200 bg-white px-3 py-2 font-semibold text-[#0284C7] hover:bg-[#EFF6FF] min-h-[40px] whitespace-nowrap shrink-0"
                 >
                   Semana actual
                 </button>
                 <button
                   type="button"
                   onClick={() => setSemanaInicioIso((s) => sumarDiasIso(s, 7))}
-                  className="inline-flex items-center gap-1 rounded-md border border-slate-300 bg-white px-3 py-2 font-semibold text-[#334155] hover:bg-slate-50 min-h-[38px] whitespace-nowrap shrink-0"
+                  className="inline-flex items-center gap-1 rounded-xl border border-slate-200 bg-white px-3 py-2 font-semibold text-[#0F2942] hover:bg-slate-50 min-h-[40px] whitespace-nowrap shrink-0"
                 >
                   Semana siguiente
                   <ChevronRight className="h-3.5 w-3.5" />
@@ -618,13 +627,13 @@ export const AgendaView: React.FC<AgendaViewProps> = ({
               {diasSemana.map((dia) => (
                 <div
                   key={dia.fecha}
-                  className="rounded-lg border border-slate-200 bg-slate-50 p-3 flex flex-col gap-2 min-h-[168px]"
+                  className="rounded-xl border border-slate-200/70 bg-[#F8FAFC] p-3 flex flex-col gap-2 min-h-[168px]"
                 >
-                  <div className="flex items-center justify-between border-b border-slate-200 pb-1.5">
+                  <div className="flex items-center justify-between border-b border-slate-200/80 pb-1.5">
                     <span className="text-[11px] font-bold text-[#0F2942]">
                       {dia.labelDia}
                     </span>
-                    <span className="font-mono text-[10px] text-[#43474D] tabular-nums">{dia.fecha}</span>
+                    <span className="font-mono text-[10px] text-[#475569] tabular-nums">{dia.fecha}</span>
                   </div>
 
                   {dia.items.length === 0 ? (
@@ -634,7 +643,7 @@ export const AgendaView: React.FC<AgendaViewProps> = ({
                       {dia.items.map(({ asignacion, ruta, cuadrilla }) => (
                         <div
                           key={`${dia.fecha}-${asignacion.id}`}
-                          className="rounded-md border border-slate-200 bg-white p-2.5 space-y-1 text-[11px]"
+                          className="rounded-xl border border-slate-200/80 bg-white p-2.5 space-y-1 text-[11px]"
                         >
                           <div className="flex items-start justify-between gap-1">
                             <span className="font-mono font-bold text-[#0284C7] truncate">
@@ -646,7 +655,7 @@ export const AgendaView: React.FC<AgendaViewProps> = ({
                                   type="button"
                                   onClick={() => handleStartEdit(asignacion)}
                                   title="Reasignar"
-                                  className="rounded-md p-1 text-[#0F2942] hover:bg-[#EFF6FF]"
+                                  className="rounded-lg p-1 text-[#0F2942] hover:bg-[#EFF6FF]"
                                 >
                                   <Pencil className="h-3 w-3" />
                                 </button>
@@ -654,17 +663,17 @@ export const AgendaView: React.FC<AgendaViewProps> = ({
                                   type="button"
                                   onClick={() => onEliminarAsignacion(asignacion.id)}
                                   title="Eliminar"
-                                  className="rounded-md p-1 text-[#DC2626] hover:bg-[#FEE2E2]"
+                                  className="rounded-lg p-1 text-[#DC2626] hover:bg-[#FEE2E2]"
                                 >
                                   <Trash2 className="h-3 w-3" />
                                 </button>
                               </div>
                             )}
                           </div>
-                          <div className="font-semibold text-[#0D1C2F] line-clamp-2">
+                          <div className="font-semibold text-[#0F2942] line-clamp-2">
                             {ruta?.nombre || 'Ruta'}
                           </div>
-                          <div className="text-[10px] text-[#43474D]">
+                          <div className="text-[10px] text-[#475569]">
                             {cuadrilla?.nombre || asignacion.cuadrillaId}
                           </div>
                           {asignacion.overrideConflicto && (
@@ -681,16 +690,16 @@ export const AgendaView: React.FC<AgendaViewProps> = ({
             </div>
           </div>
         ) : agendaPorDia.length === 0 ? (
-          <div className="py-8 text-center text-xs text-[#43474D]">
+          <div className="py-8 text-center text-xs text-[#475569]">
             No hay asignaciones programadas para los filtros seleccionados.
           </div>
         ) : (
           <div className="space-y-4">
             {agendaPorDia.map(([fechaDia, items]) => (
               <div key={fechaDia} className="space-y-2.5">
-                <div className="flex items-center justify-between border-b border-slate-200 pb-1.5">
+                <div className="flex items-center justify-between border-b border-slate-100 pb-1.5">
                   <span className="font-mono text-xs font-bold text-[#0F2942] tabular-nums">{fechaDia}</span>
-                  <span className="text-[11px] text-[#43474D] tabular-nums">
+                  <span className="text-[11px] text-[#475569] tabular-nums">
                     {items.length} cuadrilla(s) en campo
                   </span>
                 </div>
@@ -707,7 +716,7 @@ export const AgendaView: React.FC<AgendaViewProps> = ({
                     return (
                       <div
                         key={`${fechaDia}-${asignacion.id}`}
-                        className="rounded-lg border border-slate-200 bg-slate-50/70 p-4 space-y-2 text-xs"
+                        className="rounded-xl border border-slate-200/70 bg-[#F8FAFC] p-4 space-y-2 text-xs"
                       >
                         <div className="flex items-start justify-between gap-2">
                           <div>
@@ -715,7 +724,7 @@ export const AgendaView: React.FC<AgendaViewProps> = ({
                               {ruta?.codigoParcela || asignacion.rutaId} · Rango{' '}
                               {asignacion.fechaInicio} → {asignacion.fechaFin}
                             </div>
-                            <div className="font-bold text-[#0D1C2F]">
+                            <div className="font-bold text-[#0F2942]">
                               {ruta?.nombre || 'Ruta sin nombre'}
                             </div>
                           </div>
@@ -726,7 +735,7 @@ export const AgendaView: React.FC<AgendaViewProps> = ({
                                 type="button"
                                 onClick={() => handleStartEdit(asignacion)}
                                 title="Reasignar / Editar rango"
-                                className="inline-flex items-center gap-1 rounded-md border border-slate-300 bg-white px-2.5 py-1.5 text-[11px] font-semibold text-[#0F2942] hover:bg-[#EFF6FF] whitespace-nowrap shrink-0"
+                                className="inline-flex items-center gap-1 rounded-xl border border-slate-200 bg-white px-3 py-1.5 text-[11px] font-semibold text-[#0F2942] hover:bg-[#EFF6FF] whitespace-nowrap shrink-0"
                               >
                                 <Pencil className="h-3 w-3" />
                                 Reasignar
@@ -735,7 +744,7 @@ export const AgendaView: React.FC<AgendaViewProps> = ({
                                 type="button"
                                 onClick={() => onEliminarAsignacion(asignacion.id)}
                                 title="Eliminar asignación"
-                                className="rounded-md p-1.5 text-[#DC2626] hover:bg-[#FEE2E2]"
+                                className="rounded-xl p-1.5 text-[#DC2626] hover:bg-[#FEE2E2]"
                               >
                                 <Trash2 className="h-3.5 w-3.5" />
                               </button>
@@ -753,7 +762,7 @@ export const AgendaView: React.FC<AgendaViewProps> = ({
                         </div>
 
                         {asignacion.overrideConflicto ? (
-                          <div className="rounded-md border border-[#FCA5A5] bg-[#FEE2E2]/60 px-3 py-2 text-[11px] text-[#93000A]">
+                          <div className="rounded-xl border border-[#FCA5A5] bg-[#FEE2E2]/60 px-3 py-2 text-[11px] text-[#93000A]">
                             <span className="inline-flex items-center gap-1 font-semibold">
                               <AlertTriangle className="h-3 w-3" />
                               Excepción autorizada por {asignacion.overrideConflicto.usuarioNombre} (

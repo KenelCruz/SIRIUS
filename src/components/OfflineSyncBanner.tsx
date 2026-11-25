@@ -1,5 +1,5 @@
 import React from 'react';
-import { AlertTriangle, FlaskConical, RefreshCw, WifiOff, X } from 'lucide-react';
+import { AlertTriangle, RefreshCw, WifiOff, X } from 'lucide-react';
 import type { AvisoSobrescrituraLWW, ConteoPendientesPorTipo } from '../types/domain';
 
 interface OfflineSyncBannerProps {
@@ -12,19 +12,6 @@ interface OfflineSyncBannerProps {
   onDescartarAvisosLww?: () => void;
   onSyncNow: () => void;
 }
-
-export const DemoBanner: React.FC<{ visible: boolean }> = ({ visible }) => {
-  if (!visible) return null;
-  return (
-    <div
-      role="status"
-      className="flex items-center justify-center gap-2 bg-amber-100 border-b border-amber-300 px-3 py-1.5 text-xs font-semibold text-amber-950"
-    >
-      <FlaskConical className="h-3.5 w-3.5 shrink-0 text-[#B45309]" />
-      <span>Datos de demostración, no son reales</span>
-    </div>
-  );
-};
 
 function formatearDesglosePendientes(counts?: ConteoPendientesPorTipo): string {
   if (!counts || counts.total === 0) return '';
@@ -92,7 +79,7 @@ export const OfflineSyncBanner: React.FC<OfflineSyncBannerProps> = ({
             <button
               type="button"
               onClick={onDescartarAvisosLww}
-              className="rounded-md p-1.5 text-amber-900 hover:bg-amber-200/70 shrink-0"
+              className="rounded-xl p-1.5 text-amber-900 hover:bg-amber-200/70 shrink-0 transition-colors"
               aria-label="Cerrar aviso de sincronización"
             >
               <X className="h-4 w-4" />
@@ -115,7 +102,7 @@ export const OfflineSyncBanner: React.FC<OfflineSyncBannerProps> = ({
             type="button"
             onClick={onSyncNow}
             disabled={!isOnline || isSyncing}
-            className="inline-flex items-center gap-1.5 rounded-md bg-white/15 px-3 py-1.5 text-xs font-semibold text-white hover:bg-white/25 disabled:opacity-50 whitespace-nowrap shrink-0"
+            className="inline-flex items-center gap-1.5 rounded-xl bg-white/15 px-3 py-1.5 text-xs font-semibold text-white hover:bg-white/25 disabled:opacity-50 whitespace-nowrap shrink-0 transition-colors"
           >
             <RefreshCw className={`h-3.5 w-3.5 ${isSyncing ? 'animate-spin' : ''}`} />
             Reconciliar
@@ -144,7 +131,7 @@ export const OfflineSyncBanner: React.FC<OfflineSyncBannerProps> = ({
             type="button"
             onClick={onSyncNow}
             disabled={!isOnline || isSyncing}
-            className="inline-flex items-center gap-1.5 rounded-md border border-white/25 bg-white/10 px-3 py-1.5 text-xs font-semibold text-white hover:bg-[#0284C7] disabled:opacity-50 transition-colors whitespace-nowrap shrink-0"
+            className="inline-flex items-center gap-1.5 rounded-xl border border-white/25 bg-white/10 px-3 py-1.5 text-xs font-semibold text-white hover:bg-[#0284C7] disabled:opacity-50 transition-colors whitespace-nowrap shrink-0"
           >
             <RefreshCw className={`h-3.5 w-3.5 ${isSyncing ? 'animate-spin' : ''}`} />
             {isSyncing ? 'Sincronizando...' : 'Sincronizar ahora'}

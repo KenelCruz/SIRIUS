@@ -101,24 +101,24 @@ export const TecnicoTransicionModal: React.FC<TecnicoTransicionModalProps> = ({
       aria-modal="true"
       aria-labelledby="titulo-transicion-tecnico"
     >
-      <div className="w-full sm:max-w-md rounded-t-2xl sm:rounded-xl border border-slate-200 bg-white shadow-2xl">
-        <div className="sm:hidden pt-2.5 pb-1 flex justify-center">
+      <div className="w-full sm:max-w-md rounded-t-2xl sm:rounded-2xl border border-slate-200/90 bg-white shadow-2xl overflow-hidden">
+        <div className="sm:hidden pt-2.5 pb-1 flex justify-center bg-[#F8FAFC]">
           <div className="h-1.5 w-10 rounded-full bg-slate-300" />
         </div>
 
-        <div className="flex items-center justify-between border-b border-slate-200 px-5 py-3.5">
+        <div className="flex items-center justify-between border-b border-slate-200/80 bg-[#F8FAFC] px-5 py-3.5">
           <div>
-            <h2 id="titulo-transicion-tecnico" className="text-base font-bold text-slate-900">
+            <h2 id="titulo-transicion-tecnico" className="text-base font-bold tracking-tight text-[#0F2942]">
               {esIniciarCampo ? 'Iniciar Trabajo en Campo' : 'Cerrar Servicio a Procesando'}
             </h2>
-            <p className="text-xs text-slate-500">
+            <p className="text-xs text-[#475569]">
               {ruta?.codigoParcela || 'Ruta'} · {servicio.nombre}
             </p>
           </div>
           <button
             type="button"
             onClick={onClose}
-            className="min-h-[44px] min-w-[44px] flex items-center justify-center rounded-md text-slate-500 hover:bg-slate-100"
+            className="min-h-[44px] min-w-[44px] flex items-center justify-center rounded-xl text-[#475569] hover:bg-slate-200/70 transition-colors"
             aria-label="Cerrar diálogo"
           >
             <X className="h-4 w-4" />
@@ -126,8 +126,8 @@ export const TecnicoTransicionModal: React.FC<TecnicoTransicionModalProps> = ({
         </div>
 
         <form onSubmit={handleSubmit} className="p-5 space-y-4 text-xs">
-          <div className="flex items-center justify-between rounded-md bg-slate-50 px-3.5 py-2.5">
-            <span className="font-medium text-slate-600">Cambio de estado:</span>
+          <div className="flex items-center justify-between rounded-xl border border-slate-200/70 bg-[#F8FAFC] px-3.5 py-2.5">
+            <span className="font-medium text-[#475569]">Cambio de estado:</span>
             <div className="flex items-center gap-2">
               <WorkflowBadge status={servicio.estado} />
               <span className="text-slate-400">→</span>
@@ -136,7 +136,7 @@ export const TecnicoTransicionModal: React.FC<TecnicoTransicionModalProps> = ({
           </div>
 
           {!isOnline && (
-            <div className="flex items-start gap-2 rounded-md border border-amber-300 bg-amber-50 px-3.5 py-2.5 text-amber-900">
+            <div className="flex items-start gap-2 rounded-xl border border-amber-300 bg-amber-50 px-3.5 py-2.5 text-amber-900">
               <WifiOff className="h-4 w-4 shrink-0 mt-0.5 text-[#B45309]" />
               <span>
                 Sin conexión: este cambio quedará en cola local hasta que recuperes internet.
@@ -156,12 +156,12 @@ export const TecnicoTransicionModal: React.FC<TecnicoTransicionModalProps> = ({
                 setFechaInput(e.target.value);
                 setErrorMsg(null);
               }}
-              className="w-full rounded-md border border-slate-300 px-3 py-2.5 font-mono text-xs text-slate-900 min-h-[44px]"
+              className="w-full rounded-xl border border-slate-200 px-3 py-2.5 font-mono text-xs text-[#0F2942] min-h-[44px] focus:border-[#0284C7] focus:outline-none"
             />
           </div>
 
           {esIniciarCampo && (
-            <div className="rounded-lg bg-slate-50 p-3.5 space-y-1.5">
+            <div className="rounded-xl border border-slate-200/70 bg-[#F8FAFC] p-3.5 space-y-1.5">
               <div className="flex items-center gap-1.5 font-semibold text-[#0F2942]">
                 <CalendarCheck className="h-4 w-4 text-[#0284C7]" />
                 Rango(s) asignado(s) a tu cuadrilla:
@@ -178,7 +178,7 @@ export const TecnicoTransicionModal: React.FC<TecnicoTransicionModalProps> = ({
                 </ul>
               )}
               {!dentroDeAsignacion && (
-                <div className="mt-2 flex items-start gap-2 rounded-md border border-rose-200 bg-rose-50 p-2.5 text-rose-800">
+                <div className="mt-2 flex items-start gap-2 rounded-xl border border-rose-200 bg-rose-50 p-2.5 text-rose-800">
                   <AlertTriangle className="h-4 w-4 shrink-0 mt-0.5 text-[#DC2626]" />
                   <span>
                     Bloqueado: solo puedes iniciar campo dentro del rango de fechas asignado a tu cuadrilla. Coordina una reprogramación si necesitas cambiar de fecha.
@@ -191,7 +191,7 @@ export const TecnicoTransicionModal: React.FC<TecnicoTransicionModalProps> = ({
           {esCerrarServicio && (
             <div className="space-y-2.5">
               {servicio.fechaRealInicio && (
-                <div className="text-[11px] text-slate-500">
+                <div className="text-[11px] text-[#475569]">
                   Inicio real registrado:{' '}
                   <span className="font-mono font-semibold text-[#0F2942]">
                     {servicio.fechaRealInicio}
@@ -200,14 +200,14 @@ export const TecnicoTransicionModal: React.FC<TecnicoTransicionModalProps> = ({
               )}
 
               {fechaFinAnteriorAInicio && (
-                <div className="flex items-start gap-2 rounded-md border border-rose-200 bg-rose-50 p-2.5 text-rose-800">
+                <div className="flex items-start gap-2 rounded-xl border border-rose-200 bg-rose-50 p-2.5 text-rose-800">
                   <AlertTriangle className="h-4 w-4 shrink-0 mt-0.5 text-[#DC2626]" />
                   <span>La fecha de cierre no puede ser anterior al inicio real.</span>
                 </div>
               )}
 
               {faltaBitacoraAlCerrar ? (
-                <div className="rounded-lg border border-rose-200 bg-rose-50 p-3.5 space-y-2.5 text-rose-800">
+                <div className="rounded-xl border border-rose-200 bg-rose-50 p-3.5 space-y-2.5 text-rose-800">
                   <div className="flex items-start gap-2 font-semibold">
                     <AlertTriangle className="h-4 w-4 shrink-0 mt-0.5 text-[#DC2626]" />
                     <span>
@@ -220,14 +220,14 @@ export const TecnicoTransicionModal: React.FC<TecnicoTransicionModalProps> = ({
                       onClose();
                       onAbrirBitacora(servicio.id);
                     }}
-                    className="w-full inline-flex items-center justify-center gap-2 rounded-md bg-[#0F2942] px-3 py-2 text-xs font-semibold text-white hover:bg-[#0284C7] min-h-[44px]"
+                    className="w-full inline-flex items-center justify-center gap-2 rounded-xl bg-[#0F2942] px-3 py-2 text-xs font-semibold text-white hover:bg-[#0284C7] min-h-[44px] transition-colors"
                   >
                     <ClipboardList className="h-4 w-4" />
                     Agregar nota de bitácora
                   </button>
                 </div>
               ) : (
-                <div className="flex items-center gap-2 rounded-md border border-emerald-200 bg-emerald-50 px-3.5 py-2.5 text-[#15803D]">
+                <div className="flex items-center gap-2 rounded-xl border border-emerald-200 bg-emerald-50 px-3.5 py-2.5 text-[#15803D]">
                   <CheckCircle2 className="h-4 w-4 shrink-0" />
                   <span>
                     Bitácora verificada ({bitacoraCount}{' '}
@@ -239,23 +239,23 @@ export const TecnicoTransicionModal: React.FC<TecnicoTransicionModalProps> = ({
           )}
 
           {errorMsg && (
-            <div className="rounded-md border border-rose-200 bg-rose-50 px-3.5 py-2.5 text-rose-800">
+            <div className="rounded-xl border border-rose-200 bg-rose-50 px-3.5 py-2.5 text-rose-800">
               {errorMsg}
             </div>
           )}
 
-          <div className="flex flex-col-reverse sm:flex-row sm:justify-end gap-2.5 pt-2 border-t border-slate-200">
+          <div className="flex flex-col-reverse sm:flex-row sm:justify-end gap-2.5 pt-2 border-t border-slate-200/80">
             <button
               type="button"
               onClick={onClose}
-              className="rounded-md border border-slate-300 bg-white px-4 py-2.5 text-xs font-semibold text-slate-700 hover:bg-slate-50 min-h-[44px]"
+              className="rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-xs font-semibold text-slate-700 hover:bg-slate-50 min-h-[44px] transition-colors"
             >
               Cancelar
             </button>
             <button
               type="submit"
               disabled={isSaving || bloqueadoPorRegla}
-              className="inline-flex items-center justify-center gap-2 rounded-md bg-[#0F2942] px-4 py-2.5 text-xs font-semibold text-white hover:bg-[#0284C7] disabled:opacity-45 min-h-[44px]"
+              className="inline-flex items-center justify-center gap-2 rounded-xl bg-[#0F2942] px-4 py-2.5 text-xs font-semibold text-white hover:bg-[#0284C7] disabled:opacity-45 min-h-[44px] transition-colors shadow-sm"
             >
               {esIniciarCampo ? <Play className="h-4 w-4" /> : <CheckCircle2 className="h-4 w-4" />}
               {isSaving

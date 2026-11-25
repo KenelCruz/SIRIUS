@@ -10,6 +10,7 @@ import {
   Receipt,
   Sparkles,
   Trash2,
+  Upload,
   Utensils,
   X,
 } from 'lucide-react';
@@ -19,8 +20,11 @@ import {
   calcularCombustibleGpsRuta,
   completarRepartoConSinAsignar,
   crearConfiguracionInicialEmpresa,
+  evaluarAlertaTopeCategoriaRecibo,
   evaluarTopeViaticoEnMision,
+  normalizarResultadoAnalisisRecibo,
   obtenerReglasViaticosVigentes,
+  type ResultadoAnalisisRecibo,
   validarRepartoViatico,
 } from '../domain';
 import type {
@@ -170,6 +174,8 @@ export const MobileExpenseCaptureModal: React.FC<MobileExpenseCaptureModalProps>
     ? reglasCaptura.categoriasViatico
     : CATEGORIAS_VIATICO;
   const cameraInputRef = useRef<HTMLInputElement>(null);
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const streamRef = useRef<MediaStream | null>(null);
   const [captureMode, setCaptureMode] = useState<'ocr' | 'gps' | 'quick'>('ocr');
   const [rutaId, setRutaId] = useState(defaultRutaId || rutas[0]?.id || '');
   const [misionId, setMisionId] = useState('');
@@ -205,6 +211,10 @@ export const MobileExpenseCaptureModal: React.FC<MobileExpenseCaptureModalProps>
   const [isSaving, setIsSaving] = useState(false);
   const [ocrStatusMsg, setOcrStatusMsg] = useState<string | null>(null);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const [isCameraOpen, setIsCameraOpen] = useState(false);
+  const [isStartingCamera, setIsStartingCamera] = useState(false);
+  const [cameraError, setCameraError] = useState<string | null>(null);
+  const [extractedAnalysis, setExtractedAnalysis] = useState<ResultadoAnalisisRecibo | null>(null);
 
   const [isLocating, setIsLocating] = useState(false);
   const [gpsCoords, setGpsCoords] = useState<{
@@ -215,12 +225,43 @@ export const MobileExpenseCaptureModal: React.FC<MobileExpenseCaptureModalProps>
   } | null>(null);
   const [distanceKm, setDistanceKm] = useState<number | undefined>(undefined);
 
+  const stopCamera = () => {
+    if (streamRef.current) {
+      for (const track of streamRef.current.getTracks()) {
+        track.stop();
+      }
+      streamRef.current = null;
+    }
+    if (videoRef.current) {
+      videoRef.current.srcObject = null;
+    }
+    setIsCameraOpen(false);
+  };
+
+  useEffect(() => {
+    if (!isOpen) {
+      stopCamera();
+    }
+    return () => {
+      stopCamera();
+    };
+  }, [isOpen]);
+
+  useEffect(() => {
+    if (isCameraOpen && videoRef.current && streamRef.current) {
+      videoRef.current.srcObject = streamRef.current;
+      videoRef.current.play().catch(() => {});
+    }
+  }, [isCameraOpen]);
+
   // Sincroniza ruta, proyecto y campos al abrir o cambiar de ruta activa / modo edición
   useEffect(() => {
     if (!isOpen) return;
 
     setErrorMsg(null);
     setOcrStatusMsg(null);
+    setCameraError(null);
+    setExtractedAnalysis(null);
 
     if (editingViatico) {
       setRutaId(editingViatico.rutaId || '');
@@ -330,6 +371,21 @@ export const MobileExpenseCaptureModal: React.FC<MobileExpenseCaptureModalProps>
     ]
   );
 
+  const alertaTopeCategoria = useMemo(
+    () =>
+      evaluarAlertaTopeCategoriaRecibo({
+        categoria: category,
+        montoReciboRD: montoNumerico,
+        cargoCodigo: cargoEfectivo,
+        config: configuracion,
+        topeDirecto: reglasCaptura.topesUsuario?.[category],
+        fechaCalculoIso: dateIso,
+      }),
+    [category, montoNumerico, cargoEfectivo, configuracion, reglasCaptura.topesUsuario, dateIso]
+  );
+
+  const superaTopeVisual = alertaTopeCategoria.superaTope || evalTope.superaTope;
+
   const repartosCalculados = useMemo<RepartoProyecto[]>(() => {
     if (repartoModo === 'sin_asignar') {
       return [{ proyectoId: 'sin_asignar', montoRD: montoNumerico }];
@@ -353,25 +409,27 @@ export const MobileExpenseCaptureModal: React.FC<MobileExpenseCaptureModalProps>
     }
   };
 
-  const handleReceiptSelected = async (file: File) => {
+  const analyzeReceiptDataUrl = async (base64: string, mimeType: string) => {
     setErrorMsg(null);
     setOcrStatusMsg(null);
+    setCameraError(null);
     setMethod('OCR Móvil');
+    setReceiptPreview(base64);
+    setPendingReceiptMime(mimeType);
+
+    if (!isOnline) {
+      setNeedsOfflineOcr(true);
+      setExtractedAnalysis(null);
+      setOcrStatusMsg(
+        'Sin conexión: foto guardada en cola local para lectura con IA al reconectar. Puedes completar los campos manualmente.'
+      );
+      if (!merchant) setMerchant('Comprobante pendiente de lectura IA');
+      return;
+    }
+
+    setExtractedAnalysis(null);
+    setIsAnalyzing(true);
     try {
-      const { base64, mimeType } = await compressImageToBase64(file);
-      setReceiptPreview(base64);
-      setPendingReceiptMime(mimeType);
-
-      if (!isOnline) {
-        setNeedsOfflineOcr(true);
-        setOcrStatusMsg(
-          'Sin conexión: foto guardada en cola local para lectura OCR al reconectar. Puedes completar los campos manualmente.'
-        );
-        if (!merchant) setMerchant('Comprobante pendiente de lectura IA');
-        return;
-      }
-
-      setIsAnalyzing(true);
       const res = await fetch('/api/expenses/analyze-receipt', {
         method: 'POST',
         headers: {
@@ -386,30 +444,111 @@ export const MobileExpenseCaptureModal: React.FC<MobileExpenseCaptureModalProps>
       });
       const data = await res.json();
       if (!res.ok) {
-        throw new Error(data.error || 'No se pudo leer el comprobante automáticamente.');
+        throw new Error(data.error || 'No se pudo analizar el comprobante automáticamente.');
       }
 
-      const ex = data.extracted;
+      const ex = normalizarResultadoAnalisisRecibo(data.extracted, dateIso);
+      setExtractedAnalysis(ex);
+
       if (ex.merchant) setMerchant(ex.merchant);
-      if (typeof ex.amountRD === 'number' && ex.amountRD > 0) {
+      if (ex.amountRD > 0) {
         setAmountRD(String(ex.amountRD));
         syncAmountIntoUniqueSplit(ex.amountRD);
       }
-      if (typeof ex.itbisRD === 'number') setItbisRD(String(ex.itbisRD));
-      if (ex.ncf) setNcf(ex.ncf);
+      setItbisRD(String(ex.itbisRD));
+      setNcf(ex.ncf);
       if (ex.dateIso) setDateIso(ex.dateIso);
       if (ex.notes) setNotes(ex.notes);
       if (categoriasDisponibles.includes(ex.category)) setCategory(ex.category);
 
       setNeedsOfflineOcr(false);
+      const partesResumen: string[] = [];
+      if (ex.amountRD > 0) partesResumen.push(`monto ${formatRD(ex.amountRD, moneda)}`);
+      if (ex.cargos.length > 0) partesResumen.push(`${ex.cargos.length} cargo(s)`);
+      if (ex.ncf) partesResumen.push(`NCF ${ex.ncf}`);
+      if (ex.dateIso) partesResumen.push(`fecha ${ex.dateIso}`);
       setOcrStatusMsg(
-        `Sugerencia OCR aplicada (confianza ${ex.confidence ?? 'alta'}). Revisa y edita cualquier campo antes de guardar.`
+        `Análisis IA aplicado (${partesResumen.join(' · ') || `confianza ${ex.confidence}`}). Verifica los datos antes de registrar.`
       );
     } catch (err: unknown) {
-      setErrorMsg(err instanceof Error ? err.message : 'Error procesando el comprobante.');
+      setErrorMsg(err instanceof Error ? err.message : 'Error analizando el comprobante con IA.');
     } finally {
       setIsAnalyzing(false);
     }
+  };
+
+  const handleReceiptSelected = async (file: File) => {
+    setErrorMsg(null);
+    setOcrStatusMsg(null);
+    setCameraError(null);
+    try {
+      const { base64, mimeType } = await compressImageToBase64(file);
+      await analyzeReceiptDataUrl(base64, mimeType);
+    } catch (err: unknown) {
+      setErrorMsg(err instanceof Error ? err.message : 'Error procesando la imagen seleccionada.');
+    }
+  };
+
+  const handleOpenCamera = async () => {
+    setErrorMsg(null);
+    setCameraError(null);
+    if (typeof navigator === 'undefined' || !navigator.mediaDevices?.getUserMedia) {
+      setCameraError(
+        'La cámara en vivo no está disponible en este navegador. Usa "Subir imagen" para seleccionar o tomar la foto.'
+      );
+      return;
+    }
+
+    stopCamera();
+    setIsStartingCamera(true);
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: {
+          facingMode: { ideal: 'environment' },
+          width: { ideal: 1600 },
+          height: { ideal: 1200 },
+        },
+        audio: false,
+      });
+      streamRef.current = stream;
+      setIsCameraOpen(true);
+    } catch {
+      setCameraError(
+        'No se pudo acceder a la cámara (permiso denegado o dispositivo sin cámara). Puedes usar "Subir imagen".'
+      );
+    } finally {
+      setIsStartingCamera(false);
+    }
+  };
+
+  const handleCaptureCameraFrame = async () => {
+    const video = videoRef.current;
+    if (!video || video.videoWidth === 0 || video.videoHeight === 0) {
+      setCameraError('La cámara aún se está enfocando. Intenta capturar nuevamente en un segundo.');
+      return;
+    }
+
+    const maxDim = 1280;
+    let width = video.videoWidth;
+    let height = video.videoHeight;
+    if (width > maxDim || height > maxDim) {
+      const ratio = Math.min(maxDim / width, maxDim / height);
+      width = Math.round(width * ratio);
+      height = Math.round(height * ratio);
+    }
+
+    const canvas = document.createElement('canvas');
+    canvas.width = width;
+    canvas.height = height;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) {
+      setCameraError('No se pudo procesar el fotograma de la cámara.');
+      return;
+    }
+    ctx.drawImage(video, 0, 0, width, height);
+    const dataUrl = canvas.toDataURL('image/jpeg', 0.82);
+    stopCamera();
+    await analyzeReceiptDataUrl(dataUrl, 'image/jpeg');
   };
 
   const handleAutoGpsMileage = () => {
@@ -591,24 +730,24 @@ export const MobileExpenseCaptureModal: React.FC<MobileExpenseCaptureModalProps>
       aria-modal="true"
       aria-labelledby="titulo-captura-viatico"
     >
-      <div className="w-full sm:max-w-xl rounded-t-2xl sm:rounded-xl border border-slate-200 bg-white shadow-2xl max-h-[92vh] flex flex-col">
-        <div className="sm:hidden pt-2.5 pb-1 flex justify-center">
+      <div className="w-full sm:max-w-xl rounded-t-2xl sm:rounded-2xl border border-slate-200/90 bg-white shadow-2xl max-h-[92vh] flex flex-col overflow-hidden">
+        <div className="sm:hidden pt-2.5 pb-1 flex justify-center bg-[#F8FAFC]">
           <div className="h-1.5 w-10 rounded-full bg-slate-300" />
         </div>
 
-        <div className="flex items-center justify-between border-b border-slate-200 px-5 py-3.5">
+        <div className="flex items-center justify-between border-b border-slate-200/80 bg-[#F8FAFC] px-5 py-3.5">
           <div>
-            <h2 id="titulo-captura-viatico" className="text-base font-bold text-slate-900">
+            <h2 id="titulo-captura-viatico" className="text-base font-bold tracking-tight text-[#0F2942]">
               {editingViatico ? 'Editar Viático Pendiente' : 'Reportar Viático en Campo'}
             </h2>
-            <p className="text-xs text-slate-500">
+            <p className="text-xs text-[#475569]">
               Captura opcional por foto OCR (editable), ruta GPS o tarifa rápida. Se registra en estado Pendiente.
             </p>
           </div>
           <button
             type="button"
             onClick={onClose}
-            className="min-h-[40px] min-w-[40px] flex items-center justify-center rounded-md text-slate-500 hover:bg-slate-100 shrink-0"
+            className="min-h-[40px] min-w-[40px] flex items-center justify-center rounded-xl text-[#475569] hover:bg-slate-200/70 shrink-0 transition-colors"
             aria-label="Cerrar"
           >
             <X className="h-4 w-4" />
@@ -617,14 +756,14 @@ export const MobileExpenseCaptureModal: React.FC<MobileExpenseCaptureModalProps>
 
         <form onSubmit={handleSubmit} className="overflow-y-auto p-5 space-y-4">
           {/* Capture Mode Tabs */}
-          <div className="grid grid-cols-3 gap-1.5 rounded-lg bg-slate-100 p-1">
+          <div className="grid grid-cols-3 gap-1.5 rounded-2xl border border-slate-200/70 bg-[#F1F5F9] p-1">
             <button
               type="button"
               onClick={() => setCaptureMode('ocr')}
-              className={`flex items-center justify-center gap-1.5 rounded-md py-2.5 text-xs font-semibold transition-colors min-h-[44px] whitespace-nowrap ${
+              className={`flex items-center justify-center gap-1.5 rounded-xl py-2.5 text-xs font-semibold transition-all min-h-[44px] whitespace-nowrap ${
                 captureMode === 'ocr'
-                  ? 'bg-[#0F2942] text-white'
-                  : 'text-slate-700 hover:bg-white'
+                  ? 'bg-[#0F2942] text-white shadow-sm'
+                  : 'text-[#475569] hover:bg-white hover:text-[#0F2942]'
               }`}
             >
               <Camera className="h-3.5 w-3.5" />
@@ -632,11 +771,14 @@ export const MobileExpenseCaptureModal: React.FC<MobileExpenseCaptureModalProps>
             </button>
             <button
               type="button"
-              onClick={() => setCaptureMode('gps')}
-              className={`flex items-center justify-center gap-1.5 rounded-md py-2.5 text-xs font-semibold transition-colors min-h-[44px] whitespace-nowrap ${
+              onClick={() => {
+                stopCamera();
+                setCaptureMode('gps');
+              }}
+              className={`flex items-center justify-center gap-1.5 rounded-xl py-2.5 text-xs font-semibold transition-all min-h-[44px] whitespace-nowrap ${
                 captureMode === 'gps'
-                  ? 'bg-[#0F2942] text-white'
-                  : 'text-slate-700 hover:bg-white'
+                  ? 'bg-[#0F2942] text-white shadow-sm'
+                  : 'text-[#475569] hover:bg-white hover:text-[#0F2942]'
               }`}
             >
               <Navigation className="h-3.5 w-3.5" />
@@ -644,11 +786,14 @@ export const MobileExpenseCaptureModal: React.FC<MobileExpenseCaptureModalProps>
             </button>
             <button
               type="button"
-              onClick={() => setCaptureMode('quick')}
-              className={`flex items-center justify-center gap-1.5 rounded-md py-2.5 text-xs font-semibold transition-colors min-h-[44px] whitespace-nowrap ${
+              onClick={() => {
+                stopCamera();
+                setCaptureMode('quick');
+              }}
+              className={`flex items-center justify-center gap-1.5 rounded-xl py-2.5 text-xs font-semibold transition-all min-h-[44px] whitespace-nowrap ${
                 captureMode === 'quick'
-                  ? 'bg-[#0F2942] text-white'
-                  : 'text-slate-700 hover:bg-white'
+                  ? 'bg-[#0F2942] text-white shadow-sm'
+                  : 'text-[#475569] hover:bg-white hover:text-[#0F2942]'
               }`}
             >
               <Utensils className="h-3.5 w-3.5" />
@@ -657,7 +802,7 @@ export const MobileExpenseCaptureModal: React.FC<MobileExpenseCaptureModalProps>
           </div>
 
           {rolActivo === 'tecnico' && !personalIdUsuario && (
-            <div className="flex items-start gap-2 rounded-lg border border-rose-200 bg-rose-50 px-3.5 py-2.5 text-xs text-rose-800">
+            <div className="flex items-start gap-2 rounded-xl border border-rose-200 bg-rose-50 px-3.5 py-2.5 text-xs text-rose-800">
               <AlertTriangle className="h-4 w-4 shrink-0 mt-0.5 text-[#DC2626]" />
               <span>{ERROR_TECNICO_SIN_PERSONAL}</span>
             </div>
@@ -672,7 +817,7 @@ export const MobileExpenseCaptureModal: React.FC<MobileExpenseCaptureModalProps>
               <select
                 value={misionId}
                 onChange={(e) => setMisionId(e.target.value)}
-                className="w-full rounded-md border border-slate-300 bg-white px-3 py-2.5 text-xs text-slate-900 min-h-[44px] focus:border-[#0284C7] focus:outline-none"
+                className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-xs text-[#0F2942] min-h-[44px] focus:border-[#0284C7] focus:outline-none"
               >
                 <option value="">Sin misión (gasto suelto / administrativo)</option>
                 {misiones.map((m) => (
@@ -701,7 +846,7 @@ export const MobileExpenseCaptureModal: React.FC<MobileExpenseCaptureModalProps>
                     if (matchMision) setMisionId(matchMision.id);
                   }
                 }}
-                className="w-full rounded-md border border-slate-300 bg-white px-3 py-2.5 text-xs text-slate-900 min-h-[44px] focus:border-[#0284C7] focus:outline-none"
+                className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-xs text-[#0F2942] min-h-[44px] focus:border-[#0284C7] focus:outline-none"
               >
                 <option value="">Sin ruta específica (gasto general)</option>
                 {rutas.map((r) => (
@@ -714,7 +859,7 @@ export const MobileExpenseCaptureModal: React.FC<MobileExpenseCaptureModalProps>
           </div>
 
           {captureMode === 'ocr' && (
-            <div className="rounded-lg border border-slate-200 bg-slate-50 p-4">
+            <div className="rounded-2xl border border-slate-200/70 bg-[#F8FAFC] p-4 space-y-3">
               <input
                 ref={cameraInputRef}
                 type="file"
@@ -723,59 +868,239 @@ export const MobileExpenseCaptureModal: React.FC<MobileExpenseCaptureModalProps>
                 className="hidden"
                 onChange={(e) => {
                   const f = e.target.files?.[0];
+                  e.target.value = '';
                   if (f) handleReceiptSelected(f);
                 }}
               />
-              <div className="flex flex-col sm:flex-row items-center gap-3">
-                <button
-                  type="button"
-                  onClick={() => cameraInputRef.current?.click()}
-                  disabled={isAnalyzing}
-                  className="w-full sm:w-auto flex-1 inline-flex items-center justify-center gap-2 rounded-md bg-[#0284C7] px-4 py-3 text-xs font-semibold text-white hover:bg-[#0369A1] disabled:opacity-60 transition-colors min-h-[48px]"
-                >
-                  {isAnalyzing ? (
-                    <>
-                      <Loader2 className="h-4 w-4 animate-spin" />
-                      Leyendo comprobante (sugerencia)...
-                    </>
-                  ) : (
-                    <>
+
+              {isCameraOpen ? (
+                <div className="space-y-3">
+                  <div className="relative overflow-hidden rounded-xl border border-slate-200 bg-[#0F2942]">
+                    <video
+                      ref={videoRef}
+                      autoPlay
+                      playsInline
+                      muted
+                      className="w-full max-h-64 object-cover"
+                    />
+                    <div className="pointer-events-none absolute inset-4 rounded-xl border border-dashed border-white/70" />
+                  </div>
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <button
+                      type="button"
+                      onClick={stopCamera}
+                      className="rounded-xl border border-slate-200 bg-white px-3.5 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-100 min-h-[44px] whitespace-nowrap transition-colors"
+                    >
+                      Cerrar cámara
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleCaptureCameraFrame}
+                      disabled={isAnalyzing}
+                      className="flex-1 sm:flex-initial inline-flex items-center justify-center gap-2 rounded-xl bg-[#0284C7] px-4 py-2 text-xs font-semibold text-white hover:bg-[#0369A1] disabled:opacity-60 min-h-[44px] whitespace-nowrap transition-colors"
+                    >
                       <Camera className="h-4 w-4" />
-                      Subir o capturar recibo
-                    </>
+                      Capturar y analizar recibo
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2.5">
+                  <button
+                    type="button"
+                    onClick={handleOpenCamera}
+                    disabled={isAnalyzing || isStartingCamera}
+                    className="flex-1 inline-flex items-center justify-center gap-2 rounded-xl bg-[#0284C7] px-4 py-2.5 text-xs font-semibold text-white hover:bg-[#0369A1] disabled:opacity-60 transition-colors min-h-[44px] whitespace-nowrap shadow-sm"
+                  >
+                    {isAnalyzing ? (
+                      <>
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                        Analizando recibo con IA...
+                      </>
+                    ) : isStartingCamera ? (
+                      <>
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                        Iniciando cámara...
+                      </>
+                    ) : (
+                      <>
+                        <Camera className="h-4 w-4" />
+                        Usar cámara
+                      </>
+                    )}
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => cameraInputRef.current?.click()}
+                    disabled={isAnalyzing}
+                    className="inline-flex items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-xs font-semibold text-[#0F2942] hover:bg-slate-100 disabled:opacity-60 transition-colors min-h-[44px] whitespace-nowrap"
+                  >
+                    <Upload className="h-4 w-4 text-[#0284C7]" />
+                    Subir imagen
+                  </button>
+
+                  {receiptPreview && (
+                    <div className="flex items-center gap-2">
+                      <div className="relative shrink-0">
+                        <MediaThumb
+                          src={receiptPreview}
+                          alt="Vista previa del comprobante"
+                          caption="Recibo"
+                          sizeClass="h-14 w-14 shrink-0"
+                          onRemove={
+                            isAnalyzing
+                              ? undefined
+                              : () => {
+                                  setReceiptPreview(null);
+                                  setPendingReceiptMime(undefined);
+                                  setNeedsOfflineOcr(false);
+                                  setExtractedAnalysis(null);
+                                }
+                          }
+                          removeLabel="Quitar comprobante"
+                        />
+                        {isAnalyzing && (
+                          <div
+                            className="absolute inset-0 flex items-center justify-center rounded-xl bg-[#0F2942]/55"
+                            aria-hidden="true"
+                          >
+                            <Loader2 className="h-5 w-5 animate-spin text-white" />
+                          </div>
+                        )}
+                      </div>
+                      {isOnline && (
+                        <button
+                          type="button"
+                          onClick={() =>
+                            analyzeReceiptDataUrl(
+                              receiptPreview,
+                              pendingReceiptMime || 'image/jpeg'
+                            )
+                          }
+                          disabled={isAnalyzing}
+                          className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3 py-2 text-[11px] font-semibold text-[#0F2942] hover:bg-slate-100 disabled:opacity-50 min-h-[40px] whitespace-nowrap transition-colors"
+                        >
+                          <Sparkles className="h-3.5 w-3.5 text-[#0284C7]" />
+                          Re-analizar
+                        </button>
+                      )}
+                    </div>
                   )}
-                </button>
-                {receiptPreview && (
-                  <MediaThumb
-                    src={receiptPreview}
-                    alt="Vista previa del comprobante"
-                    caption="Recibo"
-                    sizeClass="h-16 w-16 shrink-0"
-                    onRemove={() => {
-                      setReceiptPreview(null);
-                      setPendingReceiptMime(undefined);
-                      setNeedsOfflineOcr(false);
-                    }}
-                    removeLabel="Quitar comprobante"
-                  />
-                )}
-              </div>
-              <p className="mt-2.5 flex items-center gap-1.5 text-[11px] text-slate-600">
+                </div>
+              )}
+
+              {cameraError && (
+                <div className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-[11px] text-amber-900">
+                  {cameraError}
+                </div>
+              )}
+
+              {isAnalyzing && (
+                <div
+                  role="status"
+                  aria-live="polite"
+                  className="rounded-xl border border-sky-200 bg-white p-3.5 space-y-3 text-xs"
+                >
+                  <div className="flex items-start gap-2.5">
+                    <Loader2 className="h-4 w-4 animate-spin text-[#0284C7] shrink-0 mt-0.5" />
+                    <div className="space-y-0.5">
+                      <div className="font-semibold text-[#0F2942]">
+                        Analizando recibo con IA...
+                      </div>
+                      <p className="text-[11px] text-[#475569]">
+                        Extrayendo monto total, desglose de cargos, ITBIS, NCF y fecha del comprobante.
+                      </p>
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 pt-1 border-t border-slate-100" aria-hidden="true">
+                    {['Subtotal', 'ITBIS', 'Otros cargos', 'NCF'].map((campo) => (
+                      <div key={campo} className="space-y-1.5">
+                        <div className="text-[10px] text-slate-500">{campo}</div>
+                        <div className="h-3.5 w-16 rounded-lg bg-slate-200 animate-pulse" />
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {!isAnalyzing && extractedAnalysis && (
+                <div className="rounded-xl border border-slate-200/90 bg-white p-3.5 space-y-2 text-[11px] text-slate-700">
+                  <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 pb-1.5">
+                    <span className="font-semibold text-[#0F2942]">
+                      Desglose detectado por IA
+                    </span>
+                    <span className="font-mono text-slate-500">
+                      Confianza: {extractedAnalysis.confidence} · Fecha: {extractedAnalysis.dateIso}
+                    </span>
+                  </div>
+
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 font-mono tabular-nums">
+                    <div>
+                      <div className="text-[10px] font-sans text-slate-500">Subtotal</div>
+                      <div className="font-semibold text-slate-900">
+                        {formatRD(extractedAnalysis.subtotalRD, moneda)}
+                      </div>
+                    </div>
+                    <div>
+                      <div className="text-[10px] font-sans text-slate-500">ITBIS</div>
+                      <div className="font-semibold text-slate-900">
+                        {formatRD(extractedAnalysis.itbisRD, moneda)}
+                      </div>
+                    </div>
+                    <div>
+                      <div className="text-[10px] font-sans text-slate-500">Otros cargos</div>
+                      <div className="font-semibold text-slate-900">
+                        {formatRD(extractedAnalysis.otrosCargosRD, moneda)}
+                      </div>
+                    </div>
+                    <div>
+                      <div className="text-[10px] font-sans text-slate-500">NCF</div>
+                      <div className="font-semibold text-[#0284C7]">
+                        {extractedAnalysis.ncf || 'No requerido'}
+                      </div>
+                    </div>
+                  </div>
+
+                  {extractedAnalysis.cargos.length > 0 && (
+                    <div className="border-t border-slate-100 pt-1.5 space-y-1">
+                      <div className="text-[10px] font-semibold text-slate-500">
+                        Cargos identificados en el recibo
+                      </div>
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-0.5">
+                        {extractedAnalysis.cargos.map((cargo, idx) => (
+                          <div
+                            key={`${cargo.descripcion}-${idx}`}
+                            className="flex items-center justify-between gap-2"
+                          >
+                            <span className="truncate text-slate-700">{cargo.descripcion}</span>
+                            <span className="font-mono font-semibold text-slate-900 tabular-nums shrink-0">
+                              {formatRD(cargo.montoRD, moneda)}
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              <p className="flex items-center gap-1.5 text-[11px] text-slate-600">
                 <Sparkles className="h-3.5 w-3.5 text-[#0284C7] shrink-0" />
                 {isOnline
-                  ? 'La foto prellena los campos como sugerencia editable; revisa monto, NCF e ITBIS antes de guardar.'
-                  : 'Modo sin señal: la fotografía se encola localmente para OCR al reconectar.'}
+                  ? 'La cámara analiza automáticamente monto, cargos, ITBIS, NCF (si aplica) y fecha como sugerencia editable.'
+                  : 'Modo sin señal: la fotografía se encola localmente para análisis IA al reconectar.'}
               </p>
             </div>
           )}
 
           {captureMode === 'gps' && (
-            <div className="rounded-lg border border-slate-200 bg-slate-50 p-4 space-y-2.5">
+            <div className="rounded-2xl border border-slate-200/70 bg-[#F8FAFC] p-4 space-y-2.5">
               <button
                 type="button"
                 onClick={handleAutoGpsMileage}
                 disabled={isLocating}
-                className="w-full inline-flex items-center justify-center gap-2 rounded-md bg-[#0284C7] px-4 py-3 text-xs font-semibold text-white hover:bg-[#0369A1] disabled:opacity-60 transition-colors min-h-[48px]"
+                className="w-full inline-flex items-center justify-center gap-2 rounded-xl bg-[#0284C7] px-4 py-3 text-xs font-semibold text-white hover:bg-[#0369A1] disabled:opacity-60 transition-colors min-h-[48px] shadow-sm"
               >
                 {isLocating ? (
                   <>
@@ -789,7 +1114,7 @@ export const MobileExpenseCaptureModal: React.FC<MobileExpenseCaptureModalProps>
                   </>
                 )}
               </button>
-              <p className="text-[11px] text-slate-600">
+              <p className="text-[11px] text-[#475569]">
                 Calcula la distancia geodésica desde base hasta la parcela (
                 {reglasCaptura.gpsRuta.conceptoDistancia === 'ida_vuelta'
                   ? 'ida y vuelta'
@@ -807,7 +1132,7 @@ export const MobileExpenseCaptureModal: React.FC<MobileExpenseCaptureModalProps>
                   key={preset.id}
                   type="button"
                   onClick={() => handleApplyPreset(preset)}
-                  className="rounded-lg border border-slate-200 bg-slate-50 p-3.5 text-left hover:border-[#0284C7] hover:bg-sky-50/70 transition-colors min-h-[56px]"
+                  className="rounded-2xl border border-slate-200/70 bg-[#F8FAFC] p-3.5 text-left hover:border-[#0284C7] hover:bg-sky-50/70 transition-colors min-h-[56px]"
                 >
                   <div className="text-xs font-semibold text-[#0F2942]">{preset.etiqueta}</div>
                   <div className="mt-0.5 font-mono text-xs font-bold text-[#0284C7] tabular-nums">
@@ -819,15 +1144,56 @@ export const MobileExpenseCaptureModal: React.FC<MobileExpenseCaptureModalProps>
           )}
 
           {ocrStatusMsg && (
-            <div className="flex items-start gap-2 rounded-md border border-emerald-200 bg-emerald-50 px-3.5 py-2.5 text-xs text-[#15803D]">
+            <div className="flex items-start gap-2 rounded-xl border border-emerald-200 bg-emerald-50 px-3.5 py-2.5 text-xs text-[#15803D]">
               <CheckCircle2 className="h-4 w-4 shrink-0 mt-0.5" />
               <span>{ocrStatusMsg}</span>
             </div>
           )}
 
           {errorMsg && (
-            <div className="rounded-md border border-rose-200 bg-rose-50 px-3.5 py-2.5 text-xs text-rose-800">
+            <div className="rounded-xl border border-rose-200 bg-rose-50 px-3.5 py-2.5 text-xs text-rose-800">
               {errorMsg}
+            </div>
+          )}
+
+          {superaTopeVisual && (
+            <div
+              role="alert"
+              className="flex items-start gap-2.5 rounded-xl border border-rose-300 bg-rose-50 px-3.5 py-3 text-xs text-rose-900"
+            >
+              <AlertTriangle className="h-4 w-4 shrink-0 mt-0.5 text-[#DC2626]" />
+              <div className="space-y-0.5">
+                <div className="font-semibold text-[#991B1B]">
+                  {alertaTopeCategoria.categoriaNoPermitida || evalTope.categoriaNoPermitida
+                    ? `Categoría "${category}" no permitida según reglas de viáticos`
+                    : alertaTopeCategoria.superaTope
+                    ? `El monto del recibo supera el tope permitido para ${category}`
+                    : `El acumulado en misión supera el tope de ${category}`}
+                </div>
+                <p className="text-[11px] text-rose-800 tabular-nums">
+                  {alertaTopeCategoria.superaTope ? (
+                    <>
+                      Recibo:{' '}
+                      <strong className="font-mono">{formatRD(montoNumerico, moneda)}</strong>
+                      {' · '}
+                      Tope configurado:{' '}
+                      <strong className="font-mono">
+                        {formatRD(alertaTopeCategoria.topePermitidoRD ?? 0, moneda)}
+                      </strong>
+                      {' · '}
+                      Excedente:{' '}
+                      <strong className="font-mono text-[#DC2626]">
+                        +{formatRD(alertaTopeCategoria.excedenteReciboRD, moneda)}
+                      </strong>
+                      {evalTope.motivoExcedenteRequerido
+                        ? '. Indica el motivo del excedente más abajo para poder registrarlo.'
+                        : '. Quedará marcado con excedente para revisión administrativa.'}
+                    </>
+                  ) : (
+                    evalTope.mensajeAviso
+                  )}
+                </p>
+              </div>
             </div>
           )}
 
@@ -838,7 +1204,7 @@ export const MobileExpenseCaptureModal: React.FC<MobileExpenseCaptureModalProps>
               <select
                 value={category}
                 onChange={(e) => setCategory(e.target.value as CategoriaViatico)}
-                className="w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-xs text-slate-900 min-h-[42px] focus:border-[#0284C7] focus:outline-none"
+                className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs text-[#0F2942] min-h-[42px] focus:border-[#0284C7] focus:outline-none"
               >
                 {categoriasDisponibles.map((c) => (
                   <option key={c} value={c}>
@@ -860,8 +1226,31 @@ export const MobileExpenseCaptureModal: React.FC<MobileExpenseCaptureModalProps>
                   syncAmountIntoUniqueSplit(Number(e.target.value) || 0);
                 }}
                 placeholder="0.00"
-                className="w-full rounded-md border border-slate-300 px-3 py-2 font-mono text-xs text-slate-900 min-h-[42px] tabular-nums focus:border-[#0284C7] focus:outline-none"
+                className={`w-full rounded-xl border px-3 py-2 font-mono text-xs min-h-[42px] tabular-nums focus:outline-none ${
+                  superaTopeVisual
+                    ? 'border-rose-400 bg-rose-50/40 text-rose-900 focus:border-[#DC2626]'
+                    : 'border-slate-200 text-[#0F2942] focus:border-[#0284C7]'
+                }`}
               />
+              {alertaTopeCategoria.aplicaTope && (
+                <p
+                  className={`mt-1 text-[11px] tabular-nums ${
+                    alertaTopeCategoria.superaTope
+                      ? 'font-semibold text-[#DC2626]'
+                      : 'text-slate-500'
+                  }`}
+                >
+                  {alertaTopeCategoria.superaTope
+                    ? `Excede el tope de ${formatRD(
+                        alertaTopeCategoria.topePermitidoRD ?? 0,
+                        moneda
+                      )} (+${formatRD(alertaTopeCategoria.excedenteReciboRD, moneda)})`
+                    : `Tope permitido para ${category}: ${formatRD(
+                        alertaTopeCategoria.topePermitidoRD ?? 0,
+                        moneda
+                      )}`}
+                </p>
+              )}
             </div>
             <div className="sm:col-span-2">
               <label className="block font-semibold text-slate-700 mb-1.5">
@@ -873,7 +1262,7 @@ export const MobileExpenseCaptureModal: React.FC<MobileExpenseCaptureModalProps>
                 value={merchant}
                 onChange={(e) => setMerchant(e.target.value)}
                 placeholder="Ej. Estación Texaco Autovía del Este"
-                className="w-full rounded-md border border-slate-300 px-3 py-2 text-xs text-slate-900 min-h-[42px] focus:border-[#0284C7] focus:outline-none"
+                className="w-full rounded-xl border border-slate-200 px-3 py-2 text-xs text-[#0F2942] min-h-[42px] focus:border-[#0284C7] focus:outline-none"
               />
             </div>
             <div>
@@ -883,7 +1272,7 @@ export const MobileExpenseCaptureModal: React.FC<MobileExpenseCaptureModalProps>
                 value={ncf}
                 onChange={(e) => setNcf(e.target.value)}
                 placeholder="B010000..."
-                className="w-full rounded-md border border-slate-300 px-3 py-2 font-mono text-xs text-slate-900 min-h-[42px] focus:border-[#0284C7] focus:outline-none"
+                className="w-full rounded-xl border border-slate-200 px-3 py-2 font-mono text-xs text-[#0F2942] min-h-[42px] focus:border-[#0284C7] focus:outline-none"
               />
             </div>
             <div>
@@ -894,7 +1283,7 @@ export const MobileExpenseCaptureModal: React.FC<MobileExpenseCaptureModalProps>
                 min={0}
                 value={itbisRD}
                 onChange={(e) => setItbisRD(e.target.value)}
-                className="w-full rounded-md border border-slate-300 px-3 py-2 font-mono text-xs text-slate-900 min-h-[42px] tabular-nums focus:border-[#0284C7] focus:outline-none"
+                className="w-full rounded-xl border border-slate-200 px-3 py-2 font-mono text-xs text-[#0F2942] min-h-[42px] tabular-nums focus:border-[#0284C7] focus:outline-none"
               />
             </div>
             <div>
@@ -904,7 +1293,7 @@ export const MobileExpenseCaptureModal: React.FC<MobileExpenseCaptureModalProps>
                 required
                 value={dateIso}
                 onChange={(e) => setDateIso(e.target.value)}
-                className="w-full rounded-md border border-slate-300 px-3 py-2 font-mono text-xs text-slate-900 min-h-[42px] focus:border-[#0284C7] focus:outline-none"
+                className="w-full rounded-xl border border-slate-200 px-3 py-2 font-mono text-xs text-[#0F2942] min-h-[42px] focus:border-[#0284C7] focus:outline-none"
               />
             </div>
             <div>
@@ -914,7 +1303,7 @@ export const MobileExpenseCaptureModal: React.FC<MobileExpenseCaptureModalProps>
                 value={notes}
                 onChange={(e) => setNotes(e.target.value)}
                 placeholder="Detalle de artículos o km"
-                className="w-full rounded-md border border-slate-300 px-3 py-2 text-xs text-slate-900 min-h-[42px] focus:border-[#0284C7] focus:outline-none"
+                className="w-full rounded-xl border border-slate-200 px-3 py-2 text-xs text-[#0F2942] min-h-[42px] focus:border-[#0284C7] focus:outline-none"
               />
             </div>
 
@@ -927,7 +1316,7 @@ export const MobileExpenseCaptureModal: React.FC<MobileExpenseCaptureModalProps>
                   <select
                     value={vehiculoId}
                     onChange={(e) => setVehiculoId(e.target.value)}
-                    className="w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-xs text-slate-900 min-h-[42px] focus:border-[#0284C7] focus:outline-none"
+                    className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs text-[#0F2942] min-h-[42px] focus:border-[#0284C7] focus:outline-none"
                   >
                     <option value="">Sin vehículo específico</option>
                     {vehiculos.map((v) => (
@@ -948,7 +1337,7 @@ export const MobileExpenseCaptureModal: React.FC<MobileExpenseCaptureModalProps>
                     value={galonesCargados}
                     onChange={(e) => setGalonesCargados(e.target.value)}
                     placeholder="Ej. 11.2"
-                    className="w-full rounded-md border border-slate-300 px-3 py-2 font-mono text-xs text-slate-900 min-h-[42px] tabular-nums focus:border-[#0284C7] focus:outline-none"
+                    className="w-full rounded-xl border border-slate-200 px-3 py-2 font-mono text-xs text-[#0F2942] min-h-[42px] tabular-nums focus:border-[#0284C7] focus:outline-none"
                   />
                 </div>
               </>
@@ -958,10 +1347,10 @@ export const MobileExpenseCaptureModal: React.FC<MobileExpenseCaptureModalProps>
           {/* Evaluación de Tope en Misión (B2) */}
           {evalTope.aplicaTope && (
             <div
-              className={`rounded-lg border p-3.5 text-xs space-y-2 ${
+              className={`rounded-2xl border p-3.5 text-xs space-y-2 ${
                 evalTope.categoriaNoPermitida || evalTope.superaTope
                   ? 'border-rose-200 bg-rose-50 text-rose-900'
-                  : 'border-slate-200 bg-slate-50 text-slate-700'
+                  : 'border-slate-200/70 bg-[#F8FAFC] text-slate-700'
               }`}
             >
               <div className="flex flex-wrap items-center justify-between gap-2">
@@ -994,7 +1383,7 @@ export const MobileExpenseCaptureModal: React.FC<MobileExpenseCaptureModalProps>
                     value={motivoExcedente}
                     onChange={(e) => setMotivoExcedente(e.target.value)}
                     placeholder="Ej. Extensión de jornada por lluvia o zona remota..."
-                    className="w-full rounded-md border border-rose-300 bg-white px-3 py-2 text-xs text-slate-900 focus:border-[#0284C7] focus:outline-none"
+                    className="w-full rounded-xl border border-rose-300 bg-white px-3 py-2 text-xs text-[#0F2942] focus:border-[#0284C7] focus:outline-none"
                   />
                 </div>
               )}
@@ -1002,12 +1391,12 @@ export const MobileExpenseCaptureModal: React.FC<MobileExpenseCaptureModalProps>
           )}
 
           {/* Exact Project Split Editor (F10) */}
-          <div className="rounded-lg border border-slate-200 bg-slate-50 p-4 space-y-3 text-xs">
+          <div className="rounded-2xl border border-slate-200/70 bg-[#F8FAFC] p-4 space-y-3 text-xs">
             <div className="flex flex-wrap items-center justify-between gap-2">
               <span className="font-bold text-[#0F2942]">
                 Imputación Exacta a Proyectos (RD$)
               </span>
-              <div className="inline-flex rounded-md border border-slate-300 bg-white p-0.5">
+              <div className="inline-flex rounded-xl border border-slate-200 bg-[#F1F5F9] p-1">
                 {(
                   [
                     { id: 'unico', label: '1 Proyecto' },
@@ -1026,8 +1415,8 @@ export const MobileExpenseCaptureModal: React.FC<MobileExpenseCaptureModalProps>
                         ]);
                       }
                     }}
-                    className={`rounded-md px-2.5 py-1 text-[11px] font-semibold whitespace-nowrap ${
-                      repartoModo === m.id ? 'bg-[#0F2942] text-white' : 'text-slate-600'
+                    className={`rounded-lg px-2.5 py-1 text-[11px] font-semibold whitespace-nowrap transition-all ${
+                      repartoModo === m.id ? 'bg-[#0F2942] text-white shadow-sm' : 'text-[#475569]'
                     }`}
                   >
                     {m.label}
@@ -1040,7 +1429,7 @@ export const MobileExpenseCaptureModal: React.FC<MobileExpenseCaptureModalProps>
               <select
                 value={proyectoUnicoId}
                 onChange={(e) => setProyectoUnicoId(e.target.value)}
-                className="w-full min-h-[40px] rounded-md border border-slate-300 bg-white px-3 py-2 text-xs text-slate-900"
+                className="w-full min-h-[40px] rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs text-[#0F2942] focus:border-[#0284C7] focus:outline-none"
               >
                 {proyectos.map((p) => (
                   <option key={p.id} value={p.id}>
@@ -1070,7 +1459,7 @@ export const MobileExpenseCaptureModal: React.FC<MobileExpenseCaptureModalProps>
                           prev.map((item, i) => (i === idx ? { ...item, proyectoId: val } : item))
                         );
                       }}
-                      className="flex-1 min-h-[40px] rounded-md border border-slate-300 bg-white px-2.5 py-1.5 text-xs"
+                      className="flex-1 min-h-[40px] rounded-xl border border-slate-200 bg-white px-2.5 py-1.5 text-xs focus:border-[#0284C7] focus:outline-none"
                     >
                       {proyectos.map((p) => (
                         <option key={p.id} value={p.id}>
@@ -1090,7 +1479,7 @@ export const MobileExpenseCaptureModal: React.FC<MobileExpenseCaptureModalProps>
                           prev.map((item, i) => (i === idx ? { ...item, montoRD: val } : item))
                         );
                       }}
-                      className="w-28 min-h-[40px] rounded-md border border-slate-300 bg-white px-2.5 py-1.5 font-mono text-xs tabular-nums"
+                      className="w-28 min-h-[40px] rounded-xl border border-slate-200 bg-white px-2.5 py-1.5 font-mono text-xs tabular-nums focus:border-[#0284C7] focus:outline-none"
                     />
                     {repartosMultiples.length > 1 && (
                       <button
@@ -1098,7 +1487,7 @@ export const MobileExpenseCaptureModal: React.FC<MobileExpenseCaptureModalProps>
                         onClick={() =>
                           setRepartosMultiples((prev) => prev.filter((_, i) => i !== idx))
                         }
-                        className="min-h-[40px] min-w-[40px] flex items-center justify-center rounded-md text-[#DC2626] hover:bg-rose-50"
+                        className="min-h-[40px] min-w-[40px] flex items-center justify-center rounded-xl text-[#DC2626] hover:bg-rose-50 transition-colors"
                         aria-label="Eliminar línea"
                       >
                         <Trash2 className="h-4 w-4" />
@@ -1119,7 +1508,7 @@ export const MobileExpenseCaptureModal: React.FC<MobileExpenseCaptureModalProps>
                         { proyectoId: libre, montoRD: saldo },
                       ]);
                     }}
-                    className="min-h-[36px] inline-flex items-center gap-1 rounded-md border border-slate-300 bg-white px-2.5 py-1 text-xs font-semibold text-[#0F2942] hover:bg-slate-100 whitespace-nowrap"
+                    className="min-h-[36px] inline-flex items-center gap-1 rounded-xl border border-slate-200 bg-white px-2.5 py-1 text-xs font-semibold text-[#0F2942] hover:bg-slate-100 whitespace-nowrap transition-colors"
                   >
                     <Plus className="h-3.5 w-3.5" />
                     Agregar proyecto
@@ -1135,7 +1524,7 @@ export const MobileExpenseCaptureModal: React.FC<MobileExpenseCaptureModalProps>
                         <button
                           type="button"
                           onClick={handleCompletarConSinAsignar}
-                          className="rounded-md bg-amber-100 px-2.5 py-1 font-semibold text-amber-900 hover:bg-amber-200 whitespace-nowrap"
+                          className="rounded-xl bg-amber-100 px-2.5 py-1 font-semibold text-amber-900 hover:bg-amber-200 whitespace-nowrap transition-colors"
                         >
                           Saldo a Sin asignar
                         </button>
@@ -1146,21 +1535,27 @@ export const MobileExpenseCaptureModal: React.FC<MobileExpenseCaptureModalProps>
             )}
           </div>
 
-          <div className="flex flex-col-reverse sm:flex-row sm:justify-end gap-2.5 border-t border-slate-200 pt-4">
+          <div className="flex flex-col-reverse sm:flex-row sm:justify-end gap-2.5 border-t border-slate-200/80 pt-4">
             <button
               type="button"
               onClick={onClose}
-              className="rounded-md border border-slate-300 bg-white px-4 py-2.5 text-xs font-semibold text-slate-700 hover:bg-slate-50 min-h-[44px] whitespace-nowrap"
+              className="rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-xs font-semibold text-slate-700 hover:bg-slate-50 min-h-[44px] whitespace-nowrap transition-colors"
             >
               Cancelar
             </button>
             <button
               type="submit"
-              disabled={isSaving}
-              className="inline-flex items-center justify-center gap-2 rounded-md bg-[#0F2942] px-5 py-2.5 text-xs font-semibold text-white hover:bg-[#0284C7] disabled:opacity-50 transition-colors min-h-[44px] whitespace-nowrap"
+              disabled={isSaving || isAnalyzing}
+              className="inline-flex items-center justify-center gap-2 rounded-xl bg-[#0F2942] px-5 py-2.5 text-xs font-semibold text-white hover:bg-[#0284C7] disabled:opacity-50 transition-colors min-h-[44px] whitespace-nowrap shadow-sm"
             >
-              <Receipt className="h-4 w-4" />
-              {isSaving
+              {isAnalyzing ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <Receipt className="h-4 w-4" />
+              )}
+              {isAnalyzing
+                ? 'Esperando análisis IA...'
+                : isSaving
                 ? 'Registrando...'
                 : editingViatico
                 ? 'Actualizar viático'

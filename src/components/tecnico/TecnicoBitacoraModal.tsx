@@ -189,24 +189,24 @@ export const TecnicoBitacoraModal: React.FC<TecnicoBitacoraModalProps> = ({
       aria-modal="true"
       aria-labelledby="titulo-bitacora-tecnico"
     >
-      <div className="w-full sm:max-w-lg rounded-t-2xl sm:rounded-xl border border-slate-200 bg-white shadow-2xl max-h-[92vh] flex flex-col">
-        <div className="sm:hidden pt-2.5 pb-1 flex justify-center">
+      <div className="w-full sm:max-w-lg rounded-t-2xl sm:rounded-2xl border border-slate-200/90 bg-white shadow-2xl max-h-[92vh] flex flex-col overflow-hidden">
+        <div className="sm:hidden pt-2.5 pb-1 flex justify-center bg-[#F8FAFC]">
           <div className="h-1.5 w-10 rounded-full bg-slate-300" />
         </div>
 
-        <div className="flex items-center justify-between border-b border-slate-200 px-5 py-3.5">
+        <div className="flex items-center justify-between border-b border-slate-200/80 bg-[#F8FAFC] px-5 py-3.5">
           <div>
-            <h2 id="titulo-bitacora-tecnico" className="text-base font-bold text-slate-900">
+            <h2 id="titulo-bitacora-tecnico" className="text-base font-bold tracking-tight text-[#0F2942]">
               Bitácora de Campo
             </h2>
-            <p className="text-xs text-slate-500">
+            <p className="text-xs text-[#475569]">
               Registro cronológico en hora local RD (AST) con evidencia fotográfica.
             </p>
           </div>
           <button
             type="button"
             onClick={onClose}
-            className="min-h-[44px] min-w-[44px] flex items-center justify-center rounded-md text-slate-500 hover:bg-slate-100"
+            className="min-h-[44px] min-w-[44px] flex items-center justify-center rounded-xl text-[#475569] hover:bg-slate-200/70 transition-colors"
             aria-label="Cerrar bitácora"
           >
             <X className="h-4 w-4" />
@@ -215,7 +215,7 @@ export const TecnicoBitacoraModal: React.FC<TecnicoBitacoraModalProps> = ({
 
         <div className="overflow-y-auto p-5 space-y-4">
           {!isOnline && (
-            <div className="flex items-start gap-2 rounded-lg border border-amber-300 bg-amber-50 px-3.5 py-2.5 text-xs text-amber-900">
+            <div className="flex items-start gap-2 rounded-xl border border-amber-300 bg-amber-50 px-3.5 py-2.5 text-xs text-amber-900">
               <WifiOff className="h-4 w-4 shrink-0 mt-0.5 text-[#B45309]" />
               <span>
                 Modo sin conexión: las notas y fotos se guardan localmente y suben automáticamente al volver a tener señal.
@@ -224,7 +224,7 @@ export const TecnicoBitacoraModal: React.FC<TecnicoBitacoraModalProps> = ({
           )}
 
           {snapshot.servicios.length === 0 ? (
-            <div className="rounded-lg bg-slate-50 p-5 text-xs text-slate-500 text-center">
+            <div className="rounded-2xl border border-slate-200/70 bg-[#F8FAFC] p-5 text-xs text-[#475569] text-center">
               No tienes servicios asignados disponibles para registrar bitácora.
             </div>
           ) : (
@@ -240,7 +240,7 @@ export const TecnicoBitacoraModal: React.FC<TecnicoBitacoraModalProps> = ({
                     setSuccessMsg(null);
                     setErrorMsg(null);
                   }}
-                  className="w-full rounded-md border border-slate-300 bg-white px-3 py-2.5 text-xs text-slate-900 min-h-[44px]"
+                  className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-xs text-[#0F2942] min-h-[44px] focus:border-[#0284C7] focus:outline-none"
                 >
                   {snapshot.servicios.map((s) => {
                     const r = snapshot.rutas.find((x) => x.id === s.rutaId);
@@ -252,7 +252,7 @@ export const TecnicoBitacoraModal: React.FC<TecnicoBitacoraModalProps> = ({
                   })}
                 </select>
                 {rutaActual && (
-                  <p className="mt-1 text-[11px] text-slate-500">
+                  <p className="mt-1 text-[11px] text-[#475569]">
                     {rutaActual.nombre} · {rutaActual.ubicacion}
                   </p>
                 )}
@@ -268,7 +268,7 @@ export const TecnicoBitacoraModal: React.FC<TecnicoBitacoraModalProps> = ({
                   value={nota}
                   onChange={(e) => setNota(e.target.value)}
                   placeholder="Ej. Base RTK fijada en vértice V1 con PDOP 1.3; replanteo completado sin obstrucciones."
-                  className="w-full rounded-md border border-slate-300 px-3 py-2.5 text-xs text-slate-900 focus:border-[#0284C7] focus:outline-none"
+                  className="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-xs text-[#0F2942] focus:border-[#0284C7] focus:outline-none"
                 />
               </div>
 
@@ -283,7 +283,7 @@ export const TecnicoBitacoraModal: React.FC<TecnicoBitacoraModalProps> = ({
                   value={kmRecorridos}
                   onChange={(e) => setKmRecorridos(e.target.value)}
                   placeholder="Ej. 84.5 (para control de rendimiento de flota)"
-                  className="w-full rounded-md border border-slate-300 px-3 py-2.5 font-mono text-xs text-slate-900 min-h-[44px] tabular-nums"
+                  className="w-full rounded-xl border border-slate-200 px-3 py-2.5 font-mono text-xs text-[#0F2942] min-h-[44px] tabular-nums focus:border-[#0284C7] focus:outline-none"
                 />
               </div>
 
@@ -300,7 +300,7 @@ export const TecnicoBitacoraModal: React.FC<TecnicoBitacoraModalProps> = ({
                   type="button"
                   onClick={() => fileInputRef.current?.click()}
                   disabled={isProcessingPhoto}
-                  className="inline-flex items-center gap-2 rounded-md border border-slate-300 bg-white px-4 py-2 text-xs font-semibold text-[#0F2942] hover:bg-slate-50 disabled:opacity-60 min-h-[44px] whitespace-nowrap"
+                  className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2 text-xs font-semibold text-[#0F2942] hover:bg-slate-50 disabled:opacity-60 min-h-[44px] whitespace-nowrap transition-colors"
                 >
                   {isProcessingPhoto ? (
                     <Loader2 className="h-4 w-4 animate-spin" />
@@ -310,7 +310,7 @@ export const TecnicoBitacoraModal: React.FC<TecnicoBitacoraModalProps> = ({
                   {isProcessingPhoto ? 'Procesando foto...' : 'Adjuntar foto'}
                 </button>
 
-                <span className="inline-flex items-center gap-1 text-[11px] font-mono text-slate-500">
+                <span className="inline-flex items-center gap-1 text-[11px] font-mono text-[#475569]">
                   <Clock className="h-3.5 w-3.5 text-[#0284C7]" />
                   {formatSantoDomingoAST(new Date())}
                 </span>
@@ -333,30 +333,30 @@ export const TecnicoBitacoraModal: React.FC<TecnicoBitacoraModalProps> = ({
               )}
 
               {errorMsg && (
-                <div className="rounded-md border border-rose-200 bg-rose-50 px-3.5 py-2.5 text-xs text-rose-800">
+                <div className="rounded-xl border border-rose-200 bg-rose-50 px-3.5 py-2.5 text-xs text-rose-800">
                   {errorMsg}
                 </div>
               )}
 
               {successMsg && (
-                <div className="flex items-start gap-2 rounded-md border border-emerald-200 bg-emerald-50 px-3.5 py-2.5 text-xs text-[#15803D]">
+                <div className="flex items-start gap-2 rounded-xl border border-emerald-200 bg-emerald-50 px-3.5 py-2.5 text-xs text-[#15803D]">
                   <CheckCircle2 className="h-4 w-4 shrink-0 mt-0.5" />
                   <span>{successMsg}</span>
                 </div>
               )}
 
-              <div className="flex flex-col-reverse sm:flex-row sm:justify-end gap-2.5 pt-2 border-t border-slate-200">
+              <div className="flex flex-col-reverse sm:flex-row sm:justify-end gap-2.5 pt-2 border-t border-slate-200/80">
                 <button
                   type="button"
                   onClick={onClose}
-                  className="rounded-md border border-slate-300 bg-white px-4 py-2.5 text-xs font-semibold text-slate-700 hover:bg-slate-50 min-h-[44px]"
+                  className="rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-xs font-semibold text-slate-700 hover:bg-slate-50 min-h-[44px] transition-colors"
                 >
                   Cancelar
                 </button>
                 <button
                   type="submit"
                   disabled={isSaving}
-                  className="inline-flex items-center justify-center gap-2 rounded-md bg-[#0F2942] px-4 py-2.5 text-xs font-semibold text-white hover:bg-[#0284C7] disabled:opacity-50 min-h-[44px]"
+                  className="inline-flex items-center justify-center gap-2 rounded-xl bg-[#0F2942] px-4 py-2.5 text-xs font-semibold text-white hover:bg-[#0284C7] disabled:opacity-50 min-h-[44px] transition-colors shadow-sm"
                 >
                   <ClipboardList className="h-4 w-4" />
                   {isSaving

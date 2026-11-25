@@ -15,7 +15,7 @@ export const PWAInstallButton: React.FC = () => {
       <button
         type="button"
         onClick={install}
-        className="inline-flex items-center gap-1.5 rounded-md border border-[#0284C7] bg-[#0284C7]/10 px-3 py-1.5 text-xs font-semibold text-[#0284C7] hover:bg-[#0284C7] hover:text-white transition-colors whitespace-nowrap shrink-0 min-h-[38px]"
+        className="inline-flex items-center gap-1.5 rounded-xl border border-[#0284C7] bg-[#0284C7]/10 px-3 py-1.5 text-xs font-semibold text-[#0284C7] hover:bg-[#0284C7] hover:text-white transition-colors whitespace-nowrap shrink-0 min-h-[38px]"
       >
         <Download className="w-3.5 h-3.5" />
         Instalar PWA
@@ -28,7 +28,7 @@ export const PWAInstallButton: React.FC = () => {
       <button
         type="button"
         onClick={() => setShowGuide(true)}
-        className="inline-flex items-center gap-1.5 rounded-md border border-slate-300 bg-white px-2.5 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50 transition-colors whitespace-nowrap shrink-0 min-h-[38px]"
+        className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-[#0F2942] hover:bg-slate-50 transition-colors whitespace-nowrap shrink-0 min-h-[38px]"
         title="Instalar en móvil o escritorio como PWA offline"
       >
         <Smartphone className="w-3.5 h-3.5 text-[#0284C7]" />
@@ -42,20 +42,20 @@ export const PWAInstallButton: React.FC = () => {
           aria-modal="true"
           aria-labelledby="titulo-pwa-guide"
         >
-          <div className="w-full max-w-md rounded-xl border border-slate-200 bg-white p-6 shadow-2xl">
+          <div className="w-full max-w-md rounded-2xl border border-slate-200/90 bg-white p-6 shadow-2xl">
             <div className="flex items-start justify-between gap-4">
               <div>
-                <h3 id="titulo-pwa-guide" className="text-base font-bold text-slate-900">
+                <h3 id="titulo-pwa-guide" className="text-base font-bold tracking-tight text-[#0F2942]">
                   Instalar SIRIUS en tu dispositivo
                 </h3>
-                <p className="mt-1 text-xs text-slate-600">
+                <p className="mt-1 text-xs text-[#475569]">
                   Operación en campo sin señal y acceso directo desde la pantalla de inicio.
                 </p>
               </div>
               <button
                 type="button"
                 onClick={() => setShowGuide(false)}
-                className="min-h-[40px] min-w-[40px] flex items-center justify-center rounded-md text-slate-500 hover:bg-slate-100"
+                className="min-h-[40px] min-w-[40px] flex items-center justify-center rounded-xl text-[#475569] hover:bg-slate-100 transition-colors"
                 aria-label="Cerrar guía"
               >
                 <X className="w-4 h-4" />
@@ -93,7 +93,7 @@ export const PWAInstallButton: React.FC = () => {
               <button
                 type="button"
                 onClick={() => setShowGuide(false)}
-                className="rounded-md bg-[#0F2942] px-4 py-2 text-xs font-semibold text-white hover:bg-[#0284C7] transition-colors min-h-[40px] whitespace-nowrap"
+                className="rounded-xl bg-[#0F2942] px-4 py-2 text-xs font-semibold text-white hover:bg-[#0284C7] transition-colors min-h-[40px] whitespace-nowrap shadow-sm"
               >
                 Cerrar guía
               </button>

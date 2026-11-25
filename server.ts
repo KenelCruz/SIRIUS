@@ -5,6 +5,7 @@ import http from 'http';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { GoogleGenAI, Type } from '@google/genai';
+import { normalizarResultadoAnalisisRecibo } from './src/domain/viaticos';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -177,83 +178,158 @@ async function startServer() {
         });
       }
 
-      const cleanBase64 = imageBase64.includes(',') ? imageBase64.split(',')[1] : imageBase64;
+      const cleanBase64 = (imageBase64.includes(',') ? imageBase64.split(',')[1] : imageBase64).trim();
+      if (!cleanBase64 || cleanBase64.length > 10_500_000) {
+        return res.status(400).json({
+          error: 'La imagen del comprobante es inválida o supera el tamaño máximo permitido.',
+        });
+      }
+
+      const allowedMimes = new Set(['image/jpeg', 'image/jpg', 'image/png', 'image/webp']);
       const safeMime =
-        typeof mimeType === 'string' && mimeType.startsWith('image/') ? mimeType : 'image/jpeg';
+        typeof mimeType === 'string' && allowedMimes.has(mimeType.toLowerCase())
+          ? mimeType.toLowerCase() === 'image/jpg'
+            ? 'image/jpeg'
+            : mimeType.toLowerCase()
+          : 'image/jpeg';
+
+      const safeSurveyCode =
+        typeof surveyCode === 'string' ? surveyCode.trim().slice(0, 60) : '';
 
       const prompt = `Analiza este comprobante de gasto o factura de campo en República Dominicana${
-        surveyCode ? ` asociado al levantamiento ${surveyCode}` : ''
-      }. Extrae el comercio, monto total en pesos dominicanos (RD$), ITBIS si aparece, número de comprobante fiscal (NCF como B01, B02, E31, etc.), fecha (YYYY-MM-DD), categoría operativa más probable y un resumen breve de los conceptos.`;
+        safeSurveyCode ? ` asociado al levantamiento ${safeSurveyCode}` : ''
+      }. Extrae:
+1. Comercio / establecimiento.
+2. Monto total pagado en pesos dominicanos (RD$).
+3. Subtotal antes de impuestos y cargos adicionales, ITBIS (impuesto) si aparece, y otros cargos adicionales (propina legal 10%, cargo por servicio, flete, recargo).
+4. Desglose de los cargos o conceptos principales del recibo (descripcion y montoRD).
+5. Número de Comprobante Fiscal (NCF como B01, B02, E31, E32, etc.) únicamente si aparece o es necesario en el documento; si no existe, devuelve cadena vacía y requiereNcf en false.
+6. Fecha del recibo en formato YYYY-MM-DD.
+7. Categoría operativa más probable (Combustible, Dieta, Hospedaje, Peaje, Materiales, Otro).`;
 
-      const response = await ai.models.generateContent({
-        model: 'gemini-4-hydrogen',
-        contents: {
-          parts: [
-            {
-              inlineData: {
-                mimeType: safeMime,
-                data: cleanBase64,
+      let responseText: string | undefined;
+      let lastErr: unknown;
+      for (let intento = 0; intento < 3; intento += 1) {
+        try {
+          const response = await ai.models.generateContent({
+            model: 'gemini-4-hydrogen',
+            contents: {
+              parts: [
+                {
+                  inlineData: {
+                    mimeType: safeMime,
+                    data: cleanBase64,
+                  },
+                },
+                { text: prompt },
+              ],
+            },
+            config: {
+              systemInstruction:
+                'Eres un asistente contable especializado en viáticos de ingeniería topográfica en República Dominicana. Extrae montos, cargos desglosados, NCF (si aplica) y fecha con exactitud. Devuelve únicamente JSON válido según el esquema.',
+              responseMimeType: 'application/json',
+              responseSchema: {
+                type: Type.OBJECT,
+                properties: {
+                  merchant: {
+                    type: Type.STRING,
+                    description: 'Nombre del establecimiento, estación de combustible, peaje o proveedor.',
+                  },
+                  amountRD: {
+                    type: Type.NUMBER,
+                    description: 'Monto total pagado en pesos dominicanos (RD$).',
+                  },
+                  subtotalRD: {
+                    type: Type.NUMBER,
+                    description: 'Subtotal antes de ITBIS y cargos adicionales en RD$, o 0 si no aparece.',
+                  },
+                  itbisRD: {
+                    type: Type.NUMBER,
+                    description: 'Impuesto ITBIS en RD$, o 0 si no está desglosado.',
+                  },
+                  otrosCargosRD: {
+                    type: Type.NUMBER,
+                    description: 'Suma de cargos adicionales (propina legal 10%, servicio, envío, recargos) en RD$, o 0.',
+                  },
+                  cargos: {
+                    type: Type.ARRAY,
+                    description: 'Lista de cargos o renglones facturados en el comprobante.',
+                    items: {
+                      type: Type.OBJECT,
+                      properties: {
+                        descripcion: {
+                          type: Type.STRING,
+                          description: 'Nombre del cargo o concepto (ej. Gasolina Premium, ITBIS 18%, Propina 10%).',
+                        },
+                        montoRD: {
+                          type: Type.NUMBER,
+                          description: 'Monto de este cargo en RD$.',
+                        },
+                      },
+                      required: ['descripcion', 'montoRD'],
+                    },
+                  },
+                  ncf: {
+                    type: Type.STRING,
+                    description: 'Número de Comprobante Fiscal (ej. B0100004512) o cadena vacía si no aplica.',
+                  },
+                  requiereNcf: {
+                    type: Type.BOOLEAN,
+                    description: 'true si el comprobante contiene o requiere NCF fiscal; false en caso contrario.',
+                  },
+                  category: {
+                    type: Type.STRING,
+                    description: 'Una de: Combustible, Dieta, Hospedaje, Peaje, Materiales, Otro',
+                  },
+                  dateIso: {
+                    type: Type.STRING,
+                    description: 'Fecha del recibo en formato YYYY-MM-DD.',
+                  },
+                  notes: {
+                    type: Type.STRING,
+                    description: 'Detalle breve de los artículos, cargos o servicio facturado.',
+                  },
+                  confidence: {
+                    type: Type.STRING,
+                    description: 'Nivel de legibilidad: alta, media, o baja.',
+                  },
+                },
+                required: [
+                  'merchant',
+                  'amountRD',
+                  'subtotalRD',
+                  'itbisRD',
+                  'otrosCargosRD',
+                  'cargos',
+                  'ncf',
+                  'requiereNcf',
+                  'category',
+                  'dateIso',
+                  'notes',
+                  'confidence',
+                ],
               },
             },
-            { text: prompt },
-          ],
-        },
-        config: {
-          systemInstruction:
-            'Eres un asistente contable especializado en viáticos de ingeniería topográfica en República Dominicana. Devuelve únicamente JSON válido según el esquema.',
-          responseMimeType: 'application/json',
-          responseSchema: {
-            type: Type.OBJECT,
-            properties: {
-              merchant: {
-                type: Type.STRING,
-                description: 'Nombre del establecimiento, estación de combustible, peaje o proveedor.',
-              },
-              amountRD: {
-                type: Type.NUMBER,
-                description: 'Monto total pagado en pesos dominicanos (RD$).',
-              },
-              itbisRD: {
-                type: Type.NUMBER,
-                description: 'Impuesto ITBIS en RD$, o 0 si no está desglosado.',
-              },
-              ncf: {
-                type: Type.STRING,
-                description: 'Número de Comprobante Fiscal (ej. B0100004512) o cadena vacía si no aplica.',
-              },
-              category: {
-                type: Type.STRING,
-                description: 'Una de: Combustible, Dieta, Hospedaje, Peaje, Materiales, Otro',
-              },
-              dateIso: {
-                type: Type.STRING,
-                description: 'Fecha del recibo en formato YYYY-MM-DD.',
-              },
-              notes: {
-                type: Type.STRING,
-                description: 'Detalle breve de los artículos o servicio facturado.',
-              },
-              confidence: {
-                type: Type.STRING,
-                description: 'Nivel de legibilidad: alta, media, o baja.',
-              },
-            },
-            required: [
-              'merchant',
-              'amountRD',
-              'itbisRD',
-              'ncf',
-              'category',
-              'dateIso',
-              'notes',
-              'confidence',
-            ],
-          },
-        },
-      });
+          });
+          responseText = response.text;
+          break;
+        } catch (err) {
+          lastErr = err;
+          if (intento < 2) {
+            await new Promise((r) => setTimeout(r, 400 * (intento + 1)));
+          }
+        }
+      }
 
-      const parsed = JSON.parse((response.text ?? '{}').trim());
-      return res.json({ ok: true, extracted: parsed });
+      if (responseText === undefined) {
+        throw lastErr instanceof Error
+          ? lastErr
+          : new Error('No se recibió respuesta del servicio de análisis de recibos.');
+      }
+
+      const rawParsed = JSON.parse(responseText.trim());
+      const extracted = normalizarResultadoAnalisisRecibo(rawParsed);
+      return res.json({ ok: true, extracted });
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : 'Error analizando el comprobante.';
       console.error('Receipt analysis error:', message);

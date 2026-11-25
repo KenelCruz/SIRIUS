@@ -43,7 +43,7 @@ const CustomChartTooltip: React.FC<CustomTooltipProps> = ({ active, payload }) =
   const diff = item.presupuesto - item.gastoReal;
 
   return (
-    <div className="rounded-lg border border-slate-200 bg-white p-3.5 shadow-xl text-xs min-w-[230px]">
+    <div className="rounded-2xl border border-slate-200/90 bg-white p-3.5 shadow-xl text-xs min-w-[230px]">
       <div className="font-mono text-[11px] font-bold text-[#0284C7]">{item.codigoContrato}</div>
       <div className="font-semibold text-slate-900 mt-0.5 truncate max-w-[250px]">
         {item.nombre}
@@ -110,13 +110,13 @@ export const ViaticosComparisonChart: React.FC<ViaticosComparisonChartProps> = (
   }, [proyectos, viaticos]);
 
   return (
-    <div className="rounded-lg border border-slate-200 bg-white p-5 flex flex-col justify-between h-full">
+    <div className="rounded-2xl border border-slate-200/90 bg-white p-5 flex flex-col justify-between h-full">
       <div className="flex flex-wrap items-center justify-between gap-2 mb-3">
         <div>
-          <h2 className="text-sm font-bold text-slate-900">
+          <h2 className="text-sm font-bold text-[#0F2942]">
             Presupuesto Viáticos vs. Gasto Real (Proyectos Activos)
           </h2>
-          <p className="text-xs text-slate-500">
+          <p className="text-xs text-[#475569]">
             Comparativa según reparto exacto en RD$ (excluye rechazados)
           </p>
         </div>
@@ -128,11 +128,11 @@ export const ViaticosComparisonChart: React.FC<ViaticosComparisonChartProps> = (
       </div>
 
       {data.length === 0 ? (
-        <div className="flex-1 flex items-center justify-center py-8 text-xs text-slate-500">
+        <div className="flex-1 flex items-center justify-center rounded-xl border border-slate-200/70 bg-[#F8FAFC] py-8 text-xs text-[#475569]">
           No hay proyectos activos para comparar viáticos.
         </div>
       ) : (
-        <div className="w-full h-[195px] min-w-0">
+        <div className="w-full h-[205px] min-w-0 rounded-xl border border-slate-200/70 bg-[#F8FAFC] p-3">
           <ResponsiveContainer width="100%" height="100%">
             <BarChart
               data={data}
@@ -161,7 +161,7 @@ export const ViaticosComparisonChart: React.FC<ViaticosComparisonChartProps> = (
                 tickLine={false}
                 width={42}
               />
-              <Tooltip content={<CustomChartTooltip />} cursor={{ fill: '#F1F5F9' }} />
+              <Tooltip content={<CustomChartTooltip />} cursor={{ fill: '#E2E8F0', opacity: 0.45 }} />
               <Legend
                 wrapperStyle={{ fontSize: '11px', paddingTop: '6px' }}
                 iconType="square"

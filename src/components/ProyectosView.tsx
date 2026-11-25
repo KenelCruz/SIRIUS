@@ -514,51 +514,62 @@ export const ProyectosView: React.FC<ProyectosViewProps> = ({
 
   return (
     <section className="space-y-6">
+      <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-2">
+        <div>
+          <h2 className="text-2xl sm:text-[26px] font-bold tracking-tight text-[#0F2942]">
+            Proyectos y Contratos
+          </h2>
+          <p className="text-sm text-[#475569] mt-0.5">
+            Cartera de clientes, rutas KMZ/GeoJSON, estados de servicio y bitácoras de campo.
+          </p>
+        </div>
+      </div>
+
       {/* KPI Strip + Recharts Budget vs Actual Chart */}
       <div className="grid grid-cols-1 xl:grid-cols-12 gap-4 items-stretch">
         <div className="xl:col-span-5 grid grid-cols-2 gap-4">
-          <div className="rounded-lg border border-slate-200 bg-white p-5 flex flex-col justify-between">
-            <div className="text-xs font-medium text-[#43474D]">Proyectos Activos</div>
-            <div className="mt-2 flex items-baseline justify-between">
-              <span className="font-mono text-2xl font-bold text-[#0F2942] tabular-nums">
+          <div className="rounded-2xl bg-gradient-to-br from-[#0F2942] to-[#0284C7] p-5 text-white shadow-sm flex flex-col justify-between">
+            <div className="text-xs font-medium text-sky-100">Proyectos Activos</div>
+            <div className="mt-2 flex items-baseline justify-between gap-2">
+              <span className="font-mono text-2xl font-bold text-white tabular-nums">
                 {kpis.activos}
               </span>
-              <span className="text-xs text-[#43474D]">{proyectos.length} totales</span>
+              <span className="text-xs text-sky-100/90">{proyectos.length} totales</span>
             </div>
           </div>
 
-          <div className="rounded-lg border border-slate-200 bg-white p-5 flex flex-col justify-between">
-            <div className="text-xs font-medium text-[#43474D]">Superficie en Rutas</div>
+          <div className="rounded-2xl border border-slate-200/90 bg-white p-5 flex flex-col justify-between">
+            <div className="text-xs font-medium text-[#475569]">Superficie en Rutas</div>
             <div className="mt-2 font-mono text-xl font-bold text-[#0284C7] tabular-nums">
               {formatArea(kpis.totalAreaM2, areaUnit)}
             </div>
           </div>
 
           {canViewFinances && (
-            <div className="rounded-lg border border-slate-200 bg-white p-5 flex flex-col justify-between">
-              <div className="text-xs font-medium text-[#43474D]">Viáticos Ejecutados</div>
+            <div className="rounded-2xl border border-slate-200/90 bg-white p-5 flex flex-col justify-between">
+              <div className="text-xs font-medium text-[#475569]">Viáticos Ejecutados</div>
               <div>
                 <div className="mt-1 font-mono text-lg sm:text-xl font-bold text-[#0F2942] tabular-nums truncate">
                   {formatRD(kpis.totalEjecutado)}
                 </div>
-                <div className="mt-0.5 font-mono text-[11px] text-[#43474D] tabular-nums">
+                <div className="mt-0.5 font-mono text-[11px] text-[#475569] tabular-nums">
                   Presup.: {formatRD(kpis.totalPresupViaticos)}
                 </div>
               </div>
             </div>
           )}
 
-          <div className="rounded-lg border border-slate-200 bg-white p-5 flex flex-col justify-between">
-            <div className="text-xs font-medium text-[#43474D]">Cola Offline / Sync</div>
+          <div className="rounded-2xl border border-slate-200/90 bg-white p-5 flex flex-col justify-between">
+            <div className="text-xs font-medium text-[#475569]">Cola Offline / Sync</div>
             <div className="mt-2 flex items-baseline justify-between">
               <span
                 className={`font-mono text-2xl font-bold tabular-nums ${
-                  pendingSyncCount > 0 ? 'text-[#D97706]' : 'text-[#15803D]'
+                  pendingSyncCount > 0 ? 'text-[#B45309]' : 'text-[#15803D]'
                 }`}
               >
                 {pendingSyncCount}
               </span>
-              <span className="text-xs text-[#43474D]">
+              <span className="text-xs text-[#475569]">
                 {pendingSyncCount === 0 ? 'Al día' : 'Pendientes'}
               </span>
             </div>
@@ -580,21 +591,21 @@ export const ProyectosView: React.FC<ProyectosViewProps> = ({
       </div>
 
       {actionError && (
-        <div className="rounded-lg border border-[#FCA5A5] bg-[#FEE2E2] px-4 py-3 text-xs font-medium text-[#93000A]">
+        <div className="rounded-2xl border border-[#FCA5A5] bg-[#FEE2E2] px-4 py-3 text-xs font-medium text-[#93000A]">
           {actionError}
         </div>
       )}
 
       {/* Toolbar & F2 Quick Create Actions */}
-      <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3 rounded-lg border border-slate-200 bg-white p-4">
+      <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3 rounded-2xl border border-slate-200/90 bg-white p-4">
         <div className="relative flex-1 min-w-[200px]">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-[#74777E]" />
+          <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
           <input
             type="text"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             placeholder="Buscar cliente, contrato, ruta KMZ o provincia..."
-            className="w-full rounded-md border border-slate-200 bg-[#F8FAFC] pl-9 pr-3 py-2 text-xs text-[#0D1C2F] focus:border-[#0284C7] focus:bg-white focus:outline-none min-h-[40px]"
+            className="w-full rounded-xl border border-slate-200 bg-[#F8FAFC] pl-10 pr-3 py-2 text-xs text-[#0F2942] focus:border-[#0284C7] focus:bg-white focus:outline-none min-h-[42px]"
           />
         </div>
 
@@ -602,7 +613,7 @@ export const ProyectosView: React.FC<ProyectosViewProps> = ({
           <select
             value={estadoFiltro}
             onChange={(e) => setEstadoFiltro(e.target.value as EstadoServicio | 'ALL')}
-            className="rounded-md border border-slate-200 bg-white px-3 py-2 text-xs text-[#334155] min-h-[40px]"
+            className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs text-[#334155] min-h-[42px] focus:border-[#0284C7] focus:outline-none"
             aria-label="Filtrar por estado"
           >
             <option value="ALL">Todos los estados</option>
@@ -613,7 +624,7 @@ export const ProyectosView: React.FC<ProyectosViewProps> = ({
             ))}
           </select>
 
-          <div className="inline-flex rounded-md border border-slate-200 bg-[#F8FAFC] p-0.5">
+          <div className="inline-flex rounded-2xl border border-slate-200/70 bg-[#F1F5F9] p-1">
             {(
               [
                 { id: 'm2', label: 'm²' },
@@ -625,10 +636,10 @@ export const ProyectosView: React.FC<ProyectosViewProps> = ({
                 key={u.id}
                 type="button"
                 onClick={() => onChangeAreaUnit(u.id)}
-                className={`rounded-md px-3 py-1.5 text-xs font-semibold transition-colors whitespace-nowrap shrink-0 min-h-[34px] ${
+                className={`rounded-xl px-3 py-1.5 text-xs font-semibold transition-colors whitespace-nowrap shrink-0 min-h-[34px] ${
                   areaUnit === u.id
-                    ? 'bg-[#0F2942] text-white'
-                    : 'text-[#43474D] hover:bg-white'
+                    ? 'bg-[#0F2942] text-white shadow-sm'
+                    : 'text-[#475569] hover:text-[#0F2942]'
                 }`}
               >
                 {u.label}
@@ -640,7 +651,7 @@ export const ProyectosView: React.FC<ProyectosViewProps> = ({
             <button
               type="button"
               onClick={onAbrirPanelPresupuestos}
-              className="inline-flex items-center gap-1.5 rounded-md border border-slate-200 bg-white px-3.5 py-2 text-xs font-semibold text-[#0F2942] hover:bg-slate-50 whitespace-nowrap shrink-0 min-h-[40px]"
+              className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3.5 py-2 text-xs font-semibold text-[#0F2942] hover:bg-slate-50 whitespace-nowrap shrink-0 min-h-[42px]"
             >
               <Calculator className="h-3.5 w-3.5 text-[#0284C7]" />
               Panel de presupuestos
@@ -655,7 +666,7 @@ export const ProyectosView: React.FC<ProyectosViewProps> = ({
                   setModalError(null);
                   setShowClienteModal(true);
                 }}
-                className="inline-flex items-center gap-1.5 rounded-md border border-slate-200 bg-white px-3.5 py-2 text-xs font-semibold text-[#0F2942] hover:bg-slate-50 whitespace-nowrap shrink-0 min-h-[40px]"
+                className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3.5 py-2 text-xs font-semibold text-[#0F2942] hover:bg-slate-50 whitespace-nowrap shrink-0 min-h-[42px]"
               >
                 <UserPlus className="h-3.5 w-3.5" />
                 Nuevo cliente
@@ -667,7 +678,7 @@ export const ProyectosView: React.FC<ProyectosViewProps> = ({
                   setProyClienteId(clientes[0]?.id || '');
                   setShowProyectoModal(true);
                 }}
-                className="inline-flex items-center gap-1.5 rounded-md bg-[#0F2942] px-4 py-2 text-xs font-semibold text-white hover:bg-[#0284C7] whitespace-nowrap shrink-0 min-h-[40px]"
+                className="inline-flex items-center gap-1.5 rounded-xl bg-[#0F2942] px-4 py-2 text-xs font-semibold text-white hover:bg-[#0284C7] whitespace-nowrap shrink-0 min-h-[42px] transition-colors"
               >
                 <FolderPlus className="h-3.5 w-3.5" />
                 Nuevo proyecto
@@ -679,7 +690,7 @@ export const ProyectosView: React.FC<ProyectosViewProps> = ({
 
       {/* Hierarchy List: Cliente -> Proyecto -> Rutas -> Servicios -> Bitácora */}
       {proyectosVisibles.length === 0 ? (
-        <div className="rounded-lg border border-slate-200 bg-white p-8 text-center text-xs text-[#43474D]">
+        <div className="rounded-2xl border border-slate-200/90 bg-white p-10 text-center text-xs text-[#475569]">
           {rol === 'tecnico'
             ? 'No tienes rutas asignadas en tus cuadrillas activas todavía.'
             : 'No hay proyectos que coincidan con los filtros seleccionados.'}
@@ -702,10 +713,10 @@ export const ProyectosView: React.FC<ProyectosViewProps> = ({
             return (
               <div
                 key={proyecto.id}
-                className="rounded-lg border border-slate-200 bg-white overflow-hidden"
+                className="rounded-2xl border border-slate-200/90 bg-white overflow-hidden"
               >
                 {/* Project Header */}
-                <div className="border-b border-slate-200 bg-[#F8FAFC] px-5 py-4 space-y-3">
+                <div className="border-b border-slate-200/80 bg-[#F8FAFC] px-5 py-4 space-y-3">
                   <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                     <div className="min-w-0 space-y-1">
                       <div className="flex flex-wrap items-center gap-2 text-xs">
@@ -715,11 +726,11 @@ export const ProyectosView: React.FC<ProyectosViewProps> = ({
                         <span aria-hidden="true" className="text-slate-300">·</span>
                         <WorkflowBadge status={estadoActual} />
                         <span aria-hidden="true" className="text-slate-300">·</span>
-                        <span className="text-[#43474D]">
+                        <span className="text-[#475569]">
                           {cliente ? `${cliente.nombre} (RNC ${cliente.rnc})` : 'Cliente sin asignar'}
                         </span>
                       </div>
-                      <h3 className="text-base font-bold tracking-tight text-[#0D1C2F] text-balance">
+                      <h3 className="text-base font-bold tracking-tight text-[#0F2942] text-balance">
                         {proyecto.nombre}
                       </h3>
                     </div>
@@ -729,7 +740,7 @@ export const ProyectosView: React.FC<ProyectosViewProps> = ({
                         <button
                           type="button"
                           onClick={() => setPresupuestoModalProyectoId(proyecto.id)}
-                          className="inline-flex items-center gap-1.5 rounded-md border border-slate-300 bg-white px-3.5 py-2 text-xs font-semibold text-[#0F2942] hover:bg-slate-50 whitespace-nowrap shrink-0 min-h-[40px]"
+                          className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3.5 py-2 text-xs font-semibold text-[#0F2942] hover:bg-slate-50 whitespace-nowrap shrink-0 min-h-[40px]"
                         >
                           <Calculator className="h-3.5 w-3.5 text-[#0284C7]" />
                           Ver presupuesto
@@ -739,7 +750,7 @@ export const ProyectosView: React.FC<ProyectosViewProps> = ({
                         <button
                           type="button"
                           onClick={() => onAbrirNuevaRutaKmz(proyecto.id)}
-                          className="inline-flex items-center gap-1.5 rounded-md border border-[#0284C7] bg-white px-3.5 py-2 text-xs font-semibold text-[#0284C7] hover:bg-sky-50 whitespace-nowrap shrink-0 min-h-[40px]"
+                          className="inline-flex items-center gap-1.5 rounded-xl border border-[#0284C7] bg-white px-3.5 py-2 text-xs font-semibold text-[#0284C7] hover:bg-sky-50 whitespace-nowrap shrink-0 min-h-[40px]"
                         >
                           <Plus className="h-3.5 w-3.5" />
                           Agregar ruta KMZ
@@ -851,7 +862,7 @@ export const ProyectosView: React.FC<ProyectosViewProps> = ({
                               <button
                                 type="button"
                                 onClick={() => onVerRutaEnMapa(ruta.id)}
-                                className="inline-flex items-center gap-1.5 rounded-md border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-[#0F2942] hover:bg-slate-50 whitespace-nowrap shrink-0 min-h-[36px]"
+                                className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-[#0F2942] hover:bg-slate-50 whitespace-nowrap shrink-0 min-h-[36px]"
                               >
                                 <Layers className="h-3.5 w-3.5" />
                                 Ver mapa
@@ -859,7 +870,7 @@ export const ProyectosView: React.FC<ProyectosViewProps> = ({
                               <button
                                 type="button"
                                 onClick={() => onCalcularRuta(ruta.id)}
-                                className="inline-flex items-center gap-1.5 rounded-md border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-[#334155] hover:bg-slate-50 whitespace-nowrap shrink-0 min-h-[36px]"
+                                className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-[#334155] hover:bg-slate-50 whitespace-nowrap shrink-0 min-h-[36px]"
                               >
                                 <RouteIcon className="h-3.5 w-3.5" />
                                 Cotizar ruta
@@ -867,7 +878,7 @@ export const ProyectosView: React.FC<ProyectosViewProps> = ({
                               <button
                                 type="button"
                                 onClick={() => onReportarViaticoEnRuta(ruta.id, proyecto.id)}
-                                className="inline-flex items-center gap-1.5 rounded-md bg-[#0284C7] px-3 py-1.5 text-xs font-semibold text-white hover:bg-[#006398] whitespace-nowrap shrink-0 min-h-[36px]"
+                                className="inline-flex items-center gap-1.5 rounded-xl bg-[#0284C7] px-3 py-1.5 text-xs font-semibold text-white hover:bg-[#0369A1] whitespace-nowrap shrink-0 min-h-[36px] transition-colors"
                               >
                                 <Camera className="h-3.5 w-3.5" />
                                 Registrar viático
@@ -879,7 +890,7 @@ export const ProyectosView: React.FC<ProyectosViewProps> = ({
                                     setModalError(null);
                                     setRutaParaServicio(ruta);
                                   }}
-                                  className="inline-flex items-center gap-1 rounded-md border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-[#0F2942] hover:bg-slate-50 whitespace-nowrap shrink-0 min-h-[36px]"
+                                  className="inline-flex items-center gap-1 rounded-xl border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-[#0F2942] hover:bg-slate-50 whitespace-nowrap shrink-0 min-h-[36px]"
                                 >
                                   <Plus className="h-3.5 w-3.5" />
                                   Agregar servicio
@@ -890,10 +901,10 @@ export const ProyectosView: React.FC<ProyectosViewProps> = ({
 
                           {/* Servicios de la Ruta */}
                           {serviciosRuta.length > 0 && (
-                            <div className="rounded-lg border border-slate-200 overflow-x-auto">
+                            <div className="rounded-xl border border-slate-200/80 overflow-x-auto">
                               <table className="w-full text-left text-xs border-collapse">
                                 <thead>
-                                  <tr className="bg-[#F8FAFC] border-b border-slate-200 text-[11px] font-semibold text-[#43474D]">
+                                  <tr className="bg-[#F8FAFC] border-b border-slate-200/80 text-[11px] font-semibold uppercase tracking-wider text-[#475569]">
                                     <th className="px-3.5 py-2.5">Servicio</th>
                                     <th className="px-3.5 py-2.5 text-right">Cotización</th>
                                     <th className="px-3.5 py-2.5">Fechas / Cobro</th>
@@ -901,7 +912,7 @@ export const ProyectosView: React.FC<ProyectosViewProps> = ({
                                     <th className="px-3.5 py-2.5 text-right">Acciones</th>
                                   </tr>
                                 </thead>
-                                <tbody className="divide-y divide-slate-200">
+                                <tbody className="divide-y divide-slate-100">
                                   {serviciosRuta.map((srv) => {
                                     const siguientes = obtenerEstadosSiguientesPermitidos({
                                       rol,
@@ -918,14 +929,14 @@ export const ProyectosView: React.FC<ProyectosViewProps> = ({
                                     });
 
                                     return (
-                                      <tr key={srv.id} className="hover:bg-[#F8FAFC]">
-                                        <td className="px-3.5 py-2.5 font-medium text-[#0D1C2F]">
+                                      <tr key={srv.id} className="hover:bg-[#F8FAFC] transition-colors">
+                                        <td className="px-3.5 py-2.5 font-medium text-[#0F2942]">
                                           {srv.nombre}
                                         </td>
                                         <td className="px-3.5 py-2.5 text-right font-mono tabular-nums">
                                           {formatRD(srv.cotizacionRD)}
                                         </td>
-                                        <td className="px-3.5 py-2.5 font-mono text-[11px] text-[#43474D]">
+                                        <td className="px-3.5 py-2.5 font-mono text-[11px] text-[#475569]">
                                           <div>
                                             {srv.fechaRealInicio
                                               ? `Inicio: ${srv.fechaRealInicio}`
@@ -951,7 +962,7 @@ export const ProyectosView: React.FC<ProyectosViewProps> = ({
                                                 key={nextSt}
                                                 type="button"
                                                 onClick={() => handleIniciarTransicion(srv, nextSt)}
-                                                className={`rounded-md px-2.5 py-1.5 text-[11px] font-semibold transition-colors whitespace-nowrap shrink-0 ${
+                                                className={`rounded-xl px-2.5 py-1.5 text-[11px] font-semibold transition-colors whitespace-nowrap shrink-0 ${
                                                   nextSt === 'cobrado'
                                                     ? 'bg-[#15803D] text-white hover:bg-[#166534]'
                                                     : 'border border-slate-200 bg-white text-[#0F2942] hover:bg-sky-50'
@@ -968,7 +979,7 @@ export const ProyectosView: React.FC<ProyectosViewProps> = ({
                                                   setModalError(null);
                                                   setBitacoraServicio(srv);
                                                 }}
-                                                className="inline-flex items-center gap-1 rounded-md border border-slate-200 bg-white px-2.5 py-1.5 text-[11px] font-semibold text-[#334155] hover:bg-slate-100 whitespace-nowrap shrink-0"
+                                                className="inline-flex items-center gap-1 rounded-xl border border-slate-200 bg-white px-2.5 py-1.5 text-[11px] font-semibold text-[#334155] hover:bg-slate-100 whitespace-nowrap shrink-0"
                                               >
                                                 <ClipboardList className="h-3 w-3" />
                                                 Bitácora ({countBitacora})
@@ -997,19 +1008,19 @@ export const ProyectosView: React.FC<ProyectosViewProps> = ({
       {/* MODAL F2: NUEVO CLIENTE */}
       {showClienteModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-[#0F2942]/65 backdrop-blur-[2px] p-4">
-          <div className="w-full max-w-md rounded-xl border border-slate-200 bg-white p-5 space-y-4 shadow-xl">
+          <div className="w-full max-w-md rounded-2xl border border-slate-200 bg-white p-5 space-y-4 shadow-xl">
             <div className="flex items-center justify-between border-b border-slate-200 pb-3">
-              <h3 className="text-sm font-bold text-[#0D1C2F]">Registrar nuevo cliente</h3>
+              <h3 className="text-sm font-bold text-[#0F2942]">Registrar nuevo cliente</h3>
               <button
                 type="button"
                 onClick={() => setShowClienteModal(false)}
-                className="rounded-md p-1.5 text-[#43474D] hover:bg-slate-100"
+                className="rounded-xl p-1.5 text-[#475569] hover:bg-slate-100"
               >
                 <X className="h-4 w-4" />
               </button>
             </div>
             {modalError && (
-              <div className="rounded-md border border-[#FCA5A5] bg-[#FEE2E2] px-3 py-2 text-xs text-[#93000A]">
+              <div className="rounded-xl border border-[#FCA5A5] bg-[#FEE2E2] px-3 py-2 text-xs text-[#93000A]">
                 {modalError}
               </div>
             )}
@@ -1023,7 +1034,7 @@ export const ProyectosView: React.FC<ProyectosViewProps> = ({
                   required
                   value={cliNombre}
                   onChange={(e) => setCliNombre(e.target.value)}
-                  className="w-full rounded-md border border-slate-200 px-3 py-2 min-h-[40px]"
+                  className="w-full rounded-xl border border-slate-200 px-3 py-2 min-h-[42px] focus:border-[#0284C7] focus:outline-none"
                 />
               </div>
               <div>
@@ -1034,7 +1045,7 @@ export const ProyectosView: React.FC<ProyectosViewProps> = ({
                   value={cliRnc}
                   onChange={(e) => setCliRnc(e.target.value)}
                   placeholder="1-31-00000-0"
-                  className="w-full rounded-md border border-slate-200 px-3 py-2 font-mono min-h-[40px]"
+                  className="w-full rounded-xl border border-slate-200 px-3 py-2 font-mono min-h-[42px] focus:border-[#0284C7] focus:outline-none"
                 />
               </div>
               <div>
@@ -1044,7 +1055,7 @@ export const ProyectosView: React.FC<ProyectosViewProps> = ({
                   required
                   value={cliContacto}
                   onChange={(e) => setCliContacto(e.target.value)}
-                  className="w-full rounded-md border border-slate-200 px-3 py-2 min-h-[40px]"
+                  className="w-full rounded-xl border border-slate-200 px-3 py-2 min-h-[42px] focus:border-[#0284C7] focus:outline-none"
                 />
               </div>
               <div>
@@ -1054,20 +1065,20 @@ export const ProyectosView: React.FC<ProyectosViewProps> = ({
                   value={cliTelefono}
                   onChange={(e) => setCliTelefono(e.target.value)}
                   placeholder="809-555-0000"
-                  className="w-full rounded-md border border-slate-200 px-3 py-2 font-mono min-h-[40px]"
+                  className="w-full rounded-xl border border-slate-200 px-3 py-2 font-mono min-h-[42px] focus:border-[#0284C7] focus:outline-none"
                 />
               </div>
               <div className="flex justify-end gap-2 pt-2">
                 <button
                   type="button"
                   onClick={() => setShowClienteModal(false)}
-                  className="rounded-md border border-slate-200 px-4 py-2 font-semibold min-h-[40px]"
+                  className="rounded-xl border border-slate-200 px-4 py-2 font-semibold min-h-[42px] hover:bg-slate-50"
                 >
                   Cancelar
                 </button>
                 <button
                   type="submit"
-                  className="rounded-md bg-[#0F2942] px-4 py-2 font-semibold text-white hover:bg-[#0284C7] min-h-[40px]"
+                  className="rounded-xl bg-[#0F2942] px-4 py-2 font-semibold text-white hover:bg-[#0284C7] min-h-[42px] transition-colors"
                 >
                   Registrar cliente
                 </button>
@@ -1080,19 +1091,19 @@ export const ProyectosView: React.FC<ProyectosViewProps> = ({
       {/* MODAL NUEVO PROYECTO (INICIA EN COTIZADO) */}
       {showProyectoModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-[#0F2942]/65 backdrop-blur-[2px] p-4">
-          <div className="w-full max-w-md rounded-xl border border-slate-200 bg-white p-5 space-y-4 shadow-xl">
+          <div className="w-full max-w-md rounded-2xl border border-slate-200 bg-white p-5 space-y-4 shadow-xl">
             <div className="flex items-center justify-between border-b border-slate-200 pb-3">
-              <h3 className="text-sm font-bold text-[#0D1C2F]">Nuevo proyecto</h3>
+              <h3 className="text-sm font-bold text-[#0F2942]">Nuevo proyecto</h3>
               <button
                 type="button"
                 onClick={() => setShowProyectoModal(false)}
-                className="rounded-md p-1.5 text-[#43474D] hover:bg-slate-100"
+                className="rounded-xl p-1.5 text-[#475569] hover:bg-slate-100"
               >
                 <X className="h-4 w-4" />
               </button>
             </div>
             {modalError && (
-              <div className="rounded-md border border-[#FCA5A5] bg-[#FEE2E2] px-3 py-2 text-xs text-[#93000A]">
+              <div className="rounded-xl border border-[#FCA5A5] bg-[#FEE2E2] px-3 py-2 text-xs text-[#93000A]">
                 {modalError}
               </div>
             )}
@@ -1102,7 +1113,7 @@ export const ProyectosView: React.FC<ProyectosViewProps> = ({
                 <select
                   value={proyClienteId}
                   onChange={(e) => setProyClienteId(e.target.value)}
-                  className="w-full rounded-md border border-slate-200 bg-white px-3 py-2 min-h-[40px]"
+                  className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 min-h-[42px]"
                 >
                   {clientes.map((c) => (
                     <option key={c.id} value={c.id}>
@@ -1119,7 +1130,7 @@ export const ProyectosView: React.FC<ProyectosViewProps> = ({
                   value={proyNombre}
                   onChange={(e) => setProyNombre(e.target.value)}
                   placeholder="Ej. Saneamiento y Deslinde Parcela 44"
-                  className="w-full rounded-md border border-slate-200 px-3 py-2 min-h-[40px]"
+                  className="w-full rounded-xl border border-slate-200 px-3 py-2 min-h-[42px]"
                 />
               </div>
               <div>
@@ -1129,7 +1140,7 @@ export const ProyectosView: React.FC<ProyectosViewProps> = ({
                   required
                   value={proyCodigo}
                   onChange={(e) => setProyCodigo(e.target.value)}
-                  className="w-full rounded-md border border-slate-200 px-3 py-2 font-mono min-h-[40px]"
+                  className="w-full rounded-xl border border-slate-200 px-3 py-2 font-mono min-h-[42px]"
                 />
               </div>
               <div className="grid grid-cols-2 gap-2.5">
@@ -1143,7 +1154,7 @@ export const ProyectosView: React.FC<ProyectosViewProps> = ({
                     required
                     value={proyPresupuesto}
                     onChange={(e) => setProyPresupuesto(e.target.value)}
-                    className="w-full rounded-md border border-slate-200 px-3 py-2 font-mono min-h-[40px]"
+                    className="w-full rounded-xl border border-slate-200 px-3 py-2 font-mono min-h-[42px]"
                   />
                 </div>
                 <div>
@@ -1156,7 +1167,7 @@ export const ProyectosView: React.FC<ProyectosViewProps> = ({
                     required
                     value={proyValor}
                     onChange={(e) => setProyValor(e.target.value)}
-                    className="w-full rounded-md border border-slate-200 px-3 py-2 font-mono min-h-[40px]"
+                    className="w-full rounded-xl border border-slate-200 px-3 py-2 font-mono min-h-[42px]"
                   />
                 </div>
               </div>
@@ -1166,20 +1177,20 @@ export const ProyectosView: React.FC<ProyectosViewProps> = ({
                   type="text"
                   value={proyNotas}
                   onChange={(e) => setProyNotas(e.target.value)}
-                  className="w-full rounded-md border border-slate-200 px-3 py-2 min-h-[40px]"
+                  className="w-full rounded-xl border border-slate-200 px-3 py-2 min-h-[42px]"
                 />
               </div>
               <div className="flex justify-end gap-2 pt-2">
                 <button
                   type="button"
                   onClick={() => setShowProyectoModal(false)}
-                  className="rounded-md border border-slate-200 px-4 py-2 font-semibold min-h-[40px]"
+                  className="rounded-xl border border-slate-200 px-4 py-2 font-semibold min-h-[42px] hover:bg-slate-50"
                 >
                   Cancelar
                 </button>
                 <button
                   type="submit"
-                  className="rounded-md bg-[#0F2942] px-4 py-2 font-semibold text-white hover:bg-[#0284C7] min-h-[40px]"
+                  className="rounded-xl bg-[#0F2942] px-4 py-2 font-semibold text-white hover:bg-[#0284C7] min-h-[42px] transition-colors"
                 >
                   Crear proyecto
                 </button>
@@ -1192,15 +1203,15 @@ export const ProyectosView: React.FC<ProyectosViewProps> = ({
       {/* MODAL F4: NUEVO SERVICIO EN RUTA */}
       {rutaParaServicio && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-[#0F2942]/65 backdrop-blur-[2px] p-4">
-          <div className="w-full max-w-md rounded-xl border border-slate-200 bg-white p-5 space-y-4 shadow-xl">
+          <div className="w-full max-w-md rounded-2xl border border-slate-200 bg-white p-5 space-y-4 shadow-xl">
             <div className="flex items-center justify-between border-b border-slate-200 pb-3">
-              <h3 className="text-sm font-bold text-[#0D1C2F]">
+              <h3 className="text-sm font-bold text-[#0F2942]">
                 Añadir Servicio a {rutaParaServicio.codigoParcela}
               </h3>
               <button
                 type="button"
                 onClick={() => setRutaParaServicio(null)}
-                className="rounded-md p-1.5 text-[#43474D] hover:bg-slate-100"
+                className="rounded-xl p-1.5 text-[#475569] hover:bg-slate-100"
               >
                 <X className="h-4 w-4" />
               </button>
@@ -1228,7 +1239,7 @@ export const ProyectosView: React.FC<ProyectosViewProps> = ({
                       setSrvCotizacion(String(calc.totalRD));
                     }
                   }}
-                  className="w-full rounded-md border border-slate-200 bg-white px-3 py-2 min-h-[40px]"
+                  className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 min-h-[42px]"
                 >
                   {serviciosActivos.map((s) => (
                     <option key={s.codigo} value={s.codigo}>
@@ -1246,7 +1257,7 @@ export const ProyectosView: React.FC<ProyectosViewProps> = ({
                   required
                   value={srvNombre}
                   onChange={(e) => setSrvNombre(e.target.value)}
-                  className="w-full rounded-md border border-slate-200 px-3 py-2 min-h-[40px]"
+                  className="w-full rounded-xl border border-slate-200 px-3 py-2 min-h-[42px]"
                 />
               </div>
               <div>
@@ -1259,20 +1270,20 @@ export const ProyectosView: React.FC<ProyectosViewProps> = ({
                   required
                   value={srvCotizacion}
                   onChange={(e) => setSrvCotizacion(e.target.value)}
-                  className="w-full rounded-md border border-slate-200 px-3 py-2 font-mono min-h-[40px]"
+                  className="w-full rounded-xl border border-slate-200 px-3 py-2 font-mono min-h-[42px]"
                 />
               </div>
               <div className="flex justify-end gap-2 pt-2">
                 <button
                   type="button"
                   onClick={() => setRutaParaServicio(null)}
-                  className="rounded-md border border-slate-200 px-4 py-2 font-semibold min-h-[40px]"
+                  className="rounded-xl border border-slate-200 px-4 py-2 font-semibold min-h-[42px] hover:bg-slate-50"
                 >
                   Cancelar
                 </button>
                 <button
                   type="submit"
-                  className="rounded-md bg-[#0F2942] px-4 py-2 font-semibold text-white hover:bg-[#0284C7] min-h-[40px]"
+                  className="rounded-xl bg-[#0F2942] px-4 py-2 font-semibold text-white hover:bg-[#0284C7] min-h-[42px] transition-colors"
                 >
                   Agregar servicio
                 </button>
@@ -1285,9 +1296,9 @@ export const ProyectosView: React.FC<ProyectosViewProps> = ({
       {/* MODAL TRANSICIÓN DE ESTADO (FECHAS REALES / COBRO F9) */}
       {transicionTarget && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-[#0F2942]/65 backdrop-blur-[2px] p-4">
-          <div className="w-full max-w-md rounded-xl border border-slate-200 bg-white p-5 space-y-4 shadow-xl">
+          <div className="w-full max-w-md rounded-2xl border border-slate-200 bg-white p-5 space-y-4 shadow-xl">
             <div className="flex items-center justify-between border-b border-slate-200 pb-3">
-              <h3 className="flex items-center gap-2 text-sm font-bold text-[#0D1C2F]">
+              <h3 className="flex items-center gap-2 text-sm font-bold text-[#0F2942]">
                 {transicionTarget.nuevoEstado === 'cobrado' ? (
                   <DollarSign className="h-4 w-4 text-[#15803D]" />
                 ) : (
@@ -1299,14 +1310,14 @@ export const ProyectosView: React.FC<ProyectosViewProps> = ({
               <button
                 type="button"
                 onClick={() => setTransicionTarget(null)}
-                className="rounded-md p-1.5 text-[#43474D] hover:bg-slate-100"
+                className="rounded-xl p-1.5 text-[#475569] hover:bg-slate-100"
               >
                 <X className="h-4 w-4" />
               </button>
             </div>
 
             {modalError && (
-              <div className="rounded-md border border-[#FCA5A5] bg-[#FEE2E2] px-3 py-2 text-xs text-[#93000A]">
+              <div className="rounded-xl border border-[#FCA5A5] bg-[#FEE2E2] px-3 py-2 text-xs text-[#93000A]">
                 {modalError}
               </div>
             )}
@@ -1324,7 +1335,7 @@ export const ProyectosView: React.FC<ProyectosViewProps> = ({
                     required
                     value={montoCobradoInput}
                     onChange={(e) => setMontoCobradoInput(e.target.value)}
-                    className="w-full rounded-md border border-slate-200 px-3 py-2 font-mono min-h-[40px]"
+                    className="w-full rounded-xl border border-slate-200 px-3 py-2 font-mono min-h-[42px]"
                   />
                 </div>
               )}
@@ -1342,7 +1353,7 @@ export const ProyectosView: React.FC<ProyectosViewProps> = ({
                   required
                   value={fechaInput}
                   onChange={(e) => setFechaInput(e.target.value)}
-                  className="w-full rounded-md border border-slate-200 px-3 py-2 font-mono min-h-[40px]"
+                  className="w-full rounded-xl border border-slate-200 px-3 py-2 font-mono min-h-[42px]"
                 />
               </div>
 
@@ -1350,13 +1361,13 @@ export const ProyectosView: React.FC<ProyectosViewProps> = ({
                 <button
                   type="button"
                   onClick={() => setTransicionTarget(null)}
-                  className="rounded-md border border-slate-200 px-4 py-2 font-semibold min-h-[40px]"
+                  className="rounded-xl border border-slate-200 px-4 py-2 font-semibold min-h-[42px] hover:bg-slate-50"
                 >
                   Cancelar
                 </button>
                 <button
                   type="submit"
-                  className="rounded-md bg-[#0F2942] px-4 py-2 font-semibold text-white hover:bg-[#0284C7] min-h-[40px]"
+                  className="rounded-xl bg-[#0F2942] px-4 py-2 font-semibold text-white hover:bg-[#0284C7] min-h-[42px] transition-colors"
                 >
                   Confirmar transición
                 </button>
@@ -1369,20 +1380,20 @@ export const ProyectosView: React.FC<ProyectosViewProps> = ({
       {/* MODAL BITÁCORA (NOTAS Y FOTOS) */}
       {bitacoraServicio && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-[#0F2942]/65 backdrop-blur-[2px] p-4">
-          <div className="w-full max-w-lg rounded-xl border border-slate-200 bg-white shadow-2xl max-h-[90vh] flex flex-col">
+          <div className="w-full max-w-lg rounded-2xl border border-slate-200 bg-white shadow-2xl max-h-[90vh] flex flex-col">
             <div className="flex items-center justify-between border-b border-slate-200 px-5 py-3.5">
               <div>
-                <h3 className="text-sm font-bold text-[#0D1C2F]">
+                <h3 className="text-sm font-bold text-[#0F2942]">
                   Bitácora de Campo — {bitacoraServicio.nombre}
                 </h3>
-                <p className="text-[11px] text-[#43474D]">
+                <p className="text-[11px] text-[#475569]">
                   Registra avances, puntos monumentados y evidencia fotográfica.
                 </p>
               </div>
               <button
                 type="button"
                 onClick={() => setBitacoraServicio(null)}
-                className="rounded-md p-1.5 text-[#43474D] hover:bg-slate-100"
+                className="rounded-xl p-1.5 text-[#475569] hover:bg-slate-100"
               >
                 <X className="h-4 w-4" />
               </button>
@@ -1390,7 +1401,7 @@ export const ProyectosView: React.FC<ProyectosViewProps> = ({
 
             <div className="overflow-y-auto p-5 space-y-4 flex-1">
               {modalError && (
-                <div className="rounded-md border border-[#FCA5A5] bg-[#FEE2E2] px-3 py-2 text-xs text-[#93000A]">
+                <div className="rounded-xl border border-[#FCA5A5] bg-[#FEE2E2] px-3 py-2 text-xs text-[#93000A]">
                   {modalError}
                 </div>
               )}
@@ -1406,12 +1417,12 @@ export const ProyectosView: React.FC<ProyectosViewProps> = ({
                     value={notaBitacora}
                     onChange={(e) => setNotaBitacora(e.target.value)}
                     placeholder="Ej. Monumentados vértices V-1 al V-4 con solución RTK fija..."
-                    className="w-full rounded-md border border-slate-200 px-3 py-2"
+                    className="w-full rounded-xl border border-slate-200 px-3 py-2 focus:border-[#0284C7] focus:outline-none"
                   />
                 </div>
 
                 <div className="flex flex-wrap items-center justify-between gap-2">
-                  <label className="inline-flex items-center gap-1.5 cursor-pointer rounded-md border border-slate-200 bg-[#F8FAFC] px-3 py-2 font-semibold text-[#0F2942] hover:bg-sky-50 min-h-[40px]">
+                  <label className="inline-flex items-center gap-1.5 cursor-pointer rounded-xl border border-slate-200 bg-[#F8FAFC] px-3 py-2 font-semibold text-[#0F2942] hover:bg-sky-50 min-h-[42px]">
                     <Camera className="h-3.5 w-3.5 text-[#0284C7]" />
                     Adjuntar foto ({fotosBitacora.length}/3)
                     <input
@@ -1434,7 +1445,7 @@ export const ProyectosView: React.FC<ProyectosViewProps> = ({
 
                   <button
                     type="submit"
-                    className="inline-flex items-center gap-1.5 rounded-md bg-[#0F2942] px-4 py-2 font-semibold text-white hover:bg-[#0284C7] min-h-[40px] whitespace-nowrap shrink-0"
+                    className="inline-flex items-center gap-1.5 rounded-xl bg-[#0F2942] px-4 py-2 font-semibold text-white hover:bg-[#0284C7] min-h-[42px] whitespace-nowrap shrink-0 transition-colors"
                   >
                     <MessageSquarePlus className="h-3.5 w-3.5" />
                     Registrar nota
@@ -1461,18 +1472,18 @@ export const ProyectosView: React.FC<ProyectosViewProps> = ({
 
               <div className="space-y-3">
                 {bitacorasDelServicio.length === 0 ? (
-                  <p className="text-xs text-[#43474D]">Aún no hay entradas en esta bitácora.</p>
+                  <p className="text-xs text-[#475569]">Aún no hay entradas en esta bitácora.</p>
                 ) : (
                   bitacorasDelServicio.map((b) => (
                     <div
                       key={b.id}
-                      className="rounded-lg border border-slate-200 bg-[#F8FAFC] p-3.5 space-y-2 text-xs"
+                      className="rounded-xl border border-slate-200/80 bg-[#F8FAFC] p-3.5 space-y-2 text-xs"
                     >
-                      <div className="flex items-center justify-between text-[11px] text-[#43474D]">
+                      <div className="flex items-center justify-between text-[11px] text-[#475569]">
                         <span className="font-semibold text-[#0F2942]">{b.autorNombre}</span>
                         <span className="font-mono">{b.fechaAST}</span>
                       </div>
-                      <p className="text-[#0D1C2F]">{b.nota}</p>
+                      <p className="text-[#0F2942]">{b.nota}</p>
                       {b.fotos.length > 0 && (
                         <div className="flex flex-wrap gap-2.5 pt-1">
                           {b.fotos.map((src, idx) => (

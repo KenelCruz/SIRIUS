@@ -439,42 +439,55 @@ export const CatalogosView: React.FC<CatalogosViewProps> = ({
 
   return (
     <section className="space-y-6">
-      <div className="flex flex-wrap items-center gap-1.5 rounded-lg border border-slate-200 bg-white p-2.5">
-        {(
-          [
-            { id: 'personal', label: `Personal (${personal.length})`, icon: UserCheck },
-            { id: 'cuadrillas', label: `Cuadrillas (${cuadrillas.length})`, icon: Users },
-            { id: 'vehiculos', label: `Vehículos (${vehiculos.length})`, icon: Car },
-            { id: 'equipos', label: `Equipos GNSS (${equipos.length})`, icon: Compass },
-            { id: 'rentas', label: `Rentas y misiones (${rentas.length})`, icon: CalendarRange },
-            { id: 'clientes', label: `Clientes (${clientes.length})`, icon: Building2 },
-          ] as const
-        ).map((tab) => {
-          const Icon = tab.icon;
-          const active = subTab === tab.id;
-          return (
-            <button
-              key={tab.id}
-              type="button"
-              onClick={() => setSubTab(tab.id)}
-              className={`inline-flex min-h-[40px] shrink-0 items-center gap-1.5 rounded-md px-3.5 py-2 text-xs font-semibold transition-colors whitespace-nowrap ${
-                active ? 'bg-[#0F2942] text-white' : 'text-slate-700 hover:bg-slate-100'
-              }`}
-            >
-              <Icon className="h-3.5 w-3.5" />
-              {tab.label}
-            </button>
-          );
-        })}
+      <div>
+        <h2 className="text-2xl sm:text-[26px] font-bold tracking-tight text-[#0F2942]">
+          Catálogos y Flota
+        </h2>
+        <p className="text-sm text-[#475569] mt-0.5">
+          Gestión de personal, brigadas, flota vehicular, equipos GNSS, rentas por misión y clientes.
+        </p>
+      </div>
+
+      <div className="rounded-2xl border border-slate-200/90 bg-white p-2">
+        <div className="flex flex-wrap items-center gap-1 rounded-2xl bg-[#F1F5F9] p-1">
+          {(
+            [
+              { id: 'personal', label: `Personal (${personal.length})`, icon: UserCheck },
+              { id: 'cuadrillas', label: `Cuadrillas (${cuadrillas.length})`, icon: Users },
+              { id: 'vehiculos', label: `Vehículos (${vehiculos.length})`, icon: Car },
+              { id: 'equipos', label: `Equipos GNSS (${equipos.length})`, icon: Compass },
+              { id: 'rentas', label: `Rentas y misiones (${rentas.length})`, icon: CalendarRange },
+              { id: 'clientes', label: `Clientes (${clientes.length})`, icon: Building2 },
+            ] as const
+          ).map((tab) => {
+            const Icon = tab.icon;
+            const active = subTab === tab.id;
+            return (
+              <button
+                key={tab.id}
+                type="button"
+                onClick={() => setSubTab(tab.id)}
+                className={`inline-flex min-h-[40px] shrink-0 items-center gap-1.5 rounded-xl px-3.5 py-2 text-xs font-semibold transition-colors whitespace-nowrap ${
+                  active
+                    ? 'bg-[#0F2942] text-white shadow-sm'
+                    : 'text-[#475569] hover:text-[#0F2942]'
+                }`}
+              >
+                <Icon className="h-3.5 w-3.5" />
+                {tab.label}
+              </button>
+            );
+          })}
+        </div>
       </div>
 
       {error && (
-        <div className="rounded-lg border border-rose-200 bg-rose-50 px-4 py-3 text-xs font-medium text-rose-800">
+        <div className="rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-xs font-medium text-rose-800">
           {error}
         </div>
       )}
       {okMsg && (
-        <div className="rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-xs font-medium text-[#15803D]">
+        <div className="rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-xs font-medium text-[#15803D]">
           {okMsg}
         </div>
       )}
@@ -482,7 +495,7 @@ export const CatalogosView: React.FC<CatalogosViewProps> = ({
       {/* PERSONAL */}
       {subTab === 'personal' && (
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
-          <div className="lg:col-span-8 rounded-lg border border-slate-200 bg-white divide-y divide-slate-200 overflow-hidden">
+          <div className="lg:col-span-8 rounded-2xl border border-slate-200/90 bg-white divide-y divide-slate-200 overflow-hidden">
             {personal.map((p) => (
               <div key={p.id} className="p-4 flex flex-wrap items-center justify-between gap-3 text-xs">
                 <div>
@@ -508,7 +521,7 @@ export const CatalogosView: React.FC<CatalogosViewProps> = ({
                           setError(err instanceof Error ? err.message : 'Error actualizando cargo.');
                         }
                       }}
-                      className="min-h-[40px] rounded-md border border-slate-300 bg-white px-2.5 py-1.5 text-xs font-medium text-slate-900 focus:border-[#0284C7] focus:outline-none"
+                      className="min-h-[40px] rounded-xl border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-medium text-slate-900 focus:border-[#0284C7] focus:outline-none"
                     >
                       {cargosActivos.map((c) => (
                         <option key={c.codigo} value={c.codigo}>
@@ -533,7 +546,7 @@ export const CatalogosView: React.FC<CatalogosViewProps> = ({
                     <button
                       type="button"
                       onClick={() => handleTogglePersonalActivo(p)}
-                      className="min-h-[40px] rounded-md border border-slate-300 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50 whitespace-nowrap shrink-0"
+                      className="min-h-[40px] rounded-xl border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50 whitespace-nowrap shrink-0"
                     >
                       {p.activo ? 'Dar de baja' : 'Reactivar'}
                     </button>
@@ -561,7 +574,7 @@ export const CatalogosView: React.FC<CatalogosViewProps> = ({
                   setError(err instanceof Error ? err.message : 'Error guardando personal.');
                 }
               }}
-              className="lg:col-span-4 rounded-lg border border-slate-200 bg-white p-5 space-y-3.5 text-xs"
+              className="lg:col-span-4 rounded-2xl border border-slate-200/90 bg-white p-5 space-y-3.5 text-xs"
             >
               <h3 className="text-sm font-bold text-[#0F2942]">Agregar personal</h3>
               <input
@@ -570,12 +583,12 @@ export const CatalogosView: React.FC<CatalogosViewProps> = ({
                 placeholder="Nombre completo"
                 value={perNombre}
                 onChange={(e) => setPerNombre(e.target.value)}
-                className="w-full min-h-[40px] rounded-md border border-slate-300 px-3 py-2 focus:border-[#0284C7] focus:outline-none"
+                className="w-full min-h-[40px] rounded-xl border border-slate-200 px-3 py-2 focus:border-[#0284C7] focus:outline-none"
               />
               <select
                 value={perCargo}
                 onChange={(e) => setPerCargo(e.target.value as CargoPersonal)}
-                className="w-full min-h-[40px] rounded-md border border-slate-300 bg-white px-3 py-2 focus:border-[#0284C7] focus:outline-none"
+                className="w-full min-h-[40px] rounded-xl border border-slate-200 bg-white px-3 py-2 focus:border-[#0284C7] focus:outline-none"
               >
                 {cargosActivos.map((c) => (
                   <option key={c.codigo} value={c.codigo}>
@@ -588,11 +601,11 @@ export const CatalogosView: React.FC<CatalogosViewProps> = ({
                 placeholder="Teléfono (ej. 809-555-0000)"
                 value={perTelefono}
                 onChange={(e) => setPerTelefono(e.target.value)}
-                className="w-full min-h-[40px] rounded-md border border-slate-300 px-3 py-2 font-mono tabular-nums focus:border-[#0284C7] focus:outline-none"
+                className="w-full min-h-[40px] rounded-xl border border-slate-200 px-3 py-2 font-mono tabular-nums focus:border-[#0284C7] focus:outline-none"
               />
               <button
                 type="submit"
-                className="w-full min-h-[42px] inline-flex items-center justify-center gap-1.5 rounded-md bg-[#0F2942] py-2 font-semibold text-white hover:bg-[#0284C7] transition-colors whitespace-nowrap"
+                className="w-full min-h-[42px] inline-flex items-center justify-center gap-1.5 rounded-xl bg-[#0F2942] py-2 font-semibold text-white hover:bg-[#0284C7] transition-colors whitespace-nowrap"
               >
                 <Plus className="h-3.5 w-3.5" />
                 Registrar personal
@@ -614,7 +627,7 @@ export const CatalogosView: React.FC<CatalogosViewProps> = ({
               return (
                 <div
                   key={c.id}
-                  className="rounded-lg border border-slate-200 bg-white p-5 space-y-3 text-xs flex flex-col justify-between"
+                  className="rounded-2xl border border-slate-200/90 bg-white p-5 space-y-3 text-xs flex flex-col justify-between"
                 >
                   <div className="space-y-1.5">
                     <div className="flex items-start justify-between gap-2">
@@ -641,7 +654,7 @@ export const CatalogosView: React.FC<CatalogosViewProps> = ({
                       <button
                         type="button"
                         onClick={() => handleToggleCuadrillaActiva(c)}
-                        className="min-h-[40px] rounded-md border border-slate-300 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50 whitespace-nowrap"
+                        className="min-h-[40px] rounded-xl border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50 whitespace-nowrap"
                       >
                         {c.activa ? 'Dar de baja' : 'Reactivar'}
                       </button>
@@ -670,7 +683,7 @@ export const CatalogosView: React.FC<CatalogosViewProps> = ({
                   setError(err instanceof Error ? err.message : 'Error guardando cuadrilla.');
                 }
               }}
-              className="lg:col-span-4 rounded-lg border border-slate-200 bg-white p-5 space-y-3.5 text-xs"
+              className="lg:col-span-4 rounded-2xl border border-slate-200/90 bg-white p-5 space-y-3.5 text-xs"
             >
               <h3 className="text-sm font-bold text-[#0F2942]">Nueva cuadrilla</h3>
               <input
@@ -679,14 +692,14 @@ export const CatalogosView: React.FC<CatalogosViewProps> = ({
                 placeholder="Ej. Brigada Cibao Norte"
                 value={cuaNombre}
                 onChange={(e) => setCuaNombre(e.target.value)}
-                className="w-full min-h-[40px] rounded-md border border-slate-300 px-3 py-2 focus:border-[#0284C7] focus:outline-none"
+                className="w-full min-h-[40px] rounded-xl border border-slate-200 px-3 py-2 focus:border-[#0284C7] focus:outline-none"
               />
               <div>
                 <label className="block font-semibold text-slate-700 mb-1.5">Jefe de Brigada</label>
                 <select
                   value={cuaJefeId}
                   onChange={(e) => setCuaJefeId(e.target.value)}
-                  className="w-full min-h-[40px] rounded-md border border-slate-300 bg-white px-3 py-2 focus:border-[#0284C7] focus:outline-none"
+                  className="w-full min-h-[40px] rounded-xl border border-slate-200 bg-white px-3 py-2 focus:border-[#0284C7] focus:outline-none"
                 >
                   {personal
                     .filter((p) => p.activo)
@@ -699,7 +712,7 @@ export const CatalogosView: React.FC<CatalogosViewProps> = ({
               </div>
               <div>
                 <label className="block font-semibold text-slate-700 mb-1.5">Integrantes</label>
-                <div className="space-y-1.5 max-h-36 overflow-y-auto border border-slate-200 rounded-md p-2.5">
+                <div className="space-y-1.5 max-h-36 overflow-y-auto border border-slate-200/70 bg-[#F8FAFC] rounded-xl p-2.5">
                   {personal
                     .filter((p) => p.activo)
                     .map((p) => (
@@ -721,7 +734,7 @@ export const CatalogosView: React.FC<CatalogosViewProps> = ({
               </div>
               <button
                 type="submit"
-                className="w-full min-h-[42px] inline-flex items-center justify-center gap-1.5 rounded-md bg-[#0F2942] py-2 font-semibold text-white hover:bg-[#0284C7] transition-colors whitespace-nowrap"
+                className="w-full min-h-[42px] inline-flex items-center justify-center gap-1.5 rounded-xl bg-[#0F2942] py-2 font-semibold text-white hover:bg-[#0284C7] transition-colors whitespace-nowrap"
               >
                 <Plus className="h-3.5 w-3.5" />
                 Crear cuadrilla
@@ -734,7 +747,7 @@ export const CatalogosView: React.FC<CatalogosViewProps> = ({
       {/* VEHICULOS + RENDIMIENTO DE FLOTA (B4) */}
       {subTab === 'vehiculos' && (
         <div className="space-y-6">
-          <div className="rounded-lg border border-slate-200 bg-white p-4 flex flex-wrap items-center justify-between gap-3 text-xs">
+          <div className="rounded-2xl border border-slate-200/90 bg-white p-4 flex flex-wrap items-center justify-between gap-3 text-xs">
             <div className="flex items-center gap-2.5">
               <Fuel className="h-4 w-4 text-[#0284C7] shrink-0" />
               <div>
@@ -769,7 +782,7 @@ export const CatalogosView: React.FC<CatalogosViewProps> = ({
                 return (
                   <div
                     key={v.id}
-                    className="rounded-lg border border-slate-200 bg-white p-5 space-y-3 text-xs"
+                    className="rounded-2xl border border-slate-200/90 bg-white p-5 space-y-3 text-xs"
                   >
                     <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                       <div>
@@ -802,7 +815,7 @@ export const CatalogosView: React.FC<CatalogosViewProps> = ({
                                 setEditVehMantKm(String(v.mantenimientoPorKmRD));
                               }
                             }}
-                            className="min-h-[40px] rounded-md border border-slate-300 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50 whitespace-nowrap shrink-0"
+                            className="min-h-[40px] rounded-xl border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50 whitespace-nowrap shrink-0"
                           >
                             {isEditing ? 'Cancelar edición' : 'Editar tarifas'}
                           </button>
@@ -813,7 +826,7 @@ export const CatalogosView: React.FC<CatalogosViewProps> = ({
                               onChange={(e) =>
                                 handleToggleVehiculoEstado(v, e.target.value as EstadoRecurso)
                               }
-                              className="min-h-[40px] rounded-md border border-slate-300 bg-white px-3 py-1.5 text-xs font-semibold text-slate-900 focus:border-[#0284C7] focus:outline-none"
+                              className="min-h-[40px] rounded-xl border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-900 focus:border-[#0284C7] focus:outline-none"
                             >
                               <option value="disponible">Disponible</option>
                               <option value="en_mantenimiento">En mantenimiento</option>
@@ -828,7 +841,7 @@ export const CatalogosView: React.FC<CatalogosViewProps> = ({
 
                     {/* Panel de rendimiento real por vehículo (B4) */}
                     {rend && (
-                      <div className="rounded-md border border-slate-200 bg-slate-50 p-3 flex flex-wrap items-center justify-between gap-2 text-xs">
+                      <div className="rounded-xl border border-slate-200/70 bg-[#F8FAFC] p-3 flex flex-wrap items-center justify-between gap-2 text-xs">
                         <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-slate-600">
                           <span>
                             Cargas aprobadas:{' '}
@@ -877,7 +890,7 @@ export const CatalogosView: React.FC<CatalogosViewProps> = ({
                                     [v.id]: Number(e.target.value) || 0,
                                   }))
                                 }
-                                className="w-20 rounded-md border border-slate-300 bg-white px-2 py-1 font-mono text-xs tabular-nums"
+                                className="w-20 rounded-xl border border-slate-200 bg-white px-2 py-1 font-mono text-xs tabular-nums"
                               />
                             </label>
                           )}
@@ -910,7 +923,7 @@ export const CatalogosView: React.FC<CatalogosViewProps> = ({
                           <select
                             value={editVehCombId}
                             onChange={(e) => setEditVehCombId(e.target.value)}
-                            className="mt-1 w-full min-h-[40px] rounded-md border border-slate-300 bg-white px-2.5 py-1.5 text-xs"
+                            className="mt-1 w-full min-h-[40px] rounded-xl border border-slate-200 bg-white px-2.5 py-1.5 text-xs"
                           >
                             {combustiblesVigentes.map((c) => (
                               <option key={c.id} value={c.id}>
@@ -927,7 +940,7 @@ export const CatalogosView: React.FC<CatalogosViewProps> = ({
                             min={1}
                             value={editVehKmGal}
                             onChange={(e) => setEditVehKmGal(e.target.value)}
-                            className="mt-1 w-full min-h-[40px] rounded-md border border-slate-300 px-2.5 py-1.5 font-mono text-xs tabular-nums"
+                            className="mt-1 w-full min-h-[40px] rounded-xl border border-slate-200 px-2.5 py-1.5 font-mono text-xs tabular-nums focus:border-[#0284C7] focus:outline-none"
                           />
                         </label>
                         <label className="block">
@@ -938,7 +951,7 @@ export const CatalogosView: React.FC<CatalogosViewProps> = ({
                             min={0}
                             value={editVehMantKm}
                             onChange={(e) => setEditVehMantKm(e.target.value)}
-                            className="mt-1 w-full min-h-[40px] rounded-md border border-slate-300 px-2.5 py-1.5 font-mono text-xs tabular-nums"
+                            className="mt-1 w-full min-h-[40px] rounded-xl border border-slate-200 px-2.5 py-1.5 font-mono text-xs tabular-nums focus:border-[#0284C7] focus:outline-none"
                           />
                         </label>
                         <button
@@ -960,7 +973,7 @@ export const CatalogosView: React.FC<CatalogosViewProps> = ({
                               setError(err instanceof Error ? err.message : 'Error actualizando vehículo.');
                             }
                           }}
-                          className="min-h-[40px] rounded-md bg-[#0F2942] px-3 py-2 font-semibold text-white hover:bg-[#0284C7] transition-colors whitespace-nowrap"
+                          className="min-h-[40px] rounded-xl bg-[#0F2942] px-3 py-2 font-semibold text-white hover:bg-[#0284C7] transition-colors whitespace-nowrap"
                         >
                           Actualizar tarifas
                         </button>
@@ -999,7 +1012,7 @@ export const CatalogosView: React.FC<CatalogosViewProps> = ({
                     setError(err instanceof Error ? err.message : 'Error guardando vehículo.');
                   }
                 }}
-                className="lg:col-span-4 rounded-lg border border-slate-200 bg-white p-5 space-y-3.5 text-xs self-start"
+                className="lg:col-span-4 rounded-2xl border border-slate-200/90 bg-white p-5 space-y-3.5 text-xs self-start"
               >
                 <h3 className="text-sm font-bold text-[#0F2942]">Agregar vehículo</h3>
                 <input
@@ -1008,7 +1021,7 @@ export const CatalogosView: React.FC<CatalogosViewProps> = ({
                   placeholder="Ej. Toyota Hilux 4x4 Blanco"
                   value={vehEtiqueta}
                   onChange={(e) => setVehEtiqueta(e.target.value)}
-                  className="w-full min-h-[40px] rounded-md border border-slate-300 px-3 py-2 focus:border-[#0284C7] focus:outline-none"
+                  className="w-full min-h-[40px] rounded-xl border border-slate-200 px-3 py-2 focus:border-[#0284C7] focus:outline-none"
                 />
                 <input
                   type="text"
@@ -1016,14 +1029,14 @@ export const CatalogosView: React.FC<CatalogosViewProps> = ({
                   placeholder="Placa (ej. L412890)"
                   value={vehPlaca}
                   onChange={(e) => setVehPlaca(e.target.value)}
-                  className="w-full min-h-[40px] rounded-md border border-slate-300 px-3 py-2 font-mono focus:border-[#0284C7] focus:outline-none"
+                  className="w-full min-h-[40px] rounded-xl border border-slate-200 px-3 py-2 font-mono focus:border-[#0284C7] focus:outline-none"
                 />
                 <label className="block">
                   <span className="text-xs font-semibold text-slate-700">Tipo de combustible vigente</span>
                   <select
                     value={vehCombId}
                     onChange={(e) => setVehCombId(e.target.value)}
-                    className="mt-1 w-full min-h-[40px] rounded-md border border-slate-300 bg-white px-3 py-2 focus:border-[#0284C7] focus:outline-none"
+                    className="mt-1 w-full min-h-[40px] rounded-xl border border-slate-200 bg-white px-3 py-2 focus:border-[#0284C7] focus:outline-none"
                   >
                     {combustiblesActivos.map((c) => (
                       <option key={c.id} value={c.id}>
@@ -1042,7 +1055,7 @@ export const CatalogosView: React.FC<CatalogosViewProps> = ({
                       required
                       value={vehKmGal}
                       onChange={(e) => setVehKmGal(e.target.value)}
-                      className="mt-1 w-full min-h-[40px] rounded-md border border-slate-300 px-3 py-2 font-mono tabular-nums"
+                      className="mt-1 w-full min-h-[40px] rounded-xl border border-slate-200 px-3 py-2 font-mono tabular-nums"
                     />
                   </label>
                   <label className="block">
@@ -1054,13 +1067,13 @@ export const CatalogosView: React.FC<CatalogosViewProps> = ({
                       required
                       value={vehMantKm}
                       onChange={(e) => setVehMantKm(e.target.value)}
-                      className="mt-1 w-full min-h-[40px] rounded-md border border-slate-300 px-3 py-2 font-mono tabular-nums"
+                      className="mt-1 w-full min-h-[40px] rounded-xl border border-slate-200 px-3 py-2 font-mono tabular-nums"
                     />
                   </label>
                 </div>
                 <button
                   type="submit"
-                  className="w-full min-h-[42px] inline-flex items-center justify-center gap-1.5 rounded-md bg-[#0F2942] py-2 font-semibold text-white hover:bg-[#0284C7] transition-colors whitespace-nowrap"
+                  className="w-full min-h-[42px] inline-flex items-center justify-center gap-1.5 rounded-xl bg-[#0F2942] py-2 font-semibold text-white hover:bg-[#0284C7] transition-colors whitespace-nowrap"
                 >
                   <Plus className="h-3.5 w-3.5" />
                   Registrar vehículo
@@ -1078,7 +1091,7 @@ export const CatalogosView: React.FC<CatalogosViewProps> = ({
             {equipos.map((eq) => (
               <div
                 key={eq.id}
-                className="rounded-lg border border-slate-200 bg-white p-4 sm:p-5 flex items-center justify-between gap-3 text-xs"
+                className="rounded-2xl border border-slate-200/90 bg-white p-4 sm:p-5 flex items-center justify-between gap-3 text-xs"
               >
                 <div>
                   <div className="text-sm font-bold text-slate-900">{eq.nombre}</div>
@@ -1090,7 +1103,7 @@ export const CatalogosView: React.FC<CatalogosViewProps> = ({
                     onChange={(e) =>
                       handleToggleEquipoEstado(eq, e.target.value as EstadoRecurso)
                     }
-                    className="min-h-[40px] rounded-md border border-slate-300 bg-white px-3 py-1.5 text-xs font-semibold text-slate-900 focus:border-[#0284C7] focus:outline-none"
+                    className="min-h-[40px] rounded-xl border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-900 focus:border-[#0284C7] focus:outline-none"
                   >
                     <option value="disponible">Disponible</option>
                     <option value="en_mantenimiento">En mantenimiento</option>
@@ -1120,7 +1133,7 @@ export const CatalogosView: React.FC<CatalogosViewProps> = ({
                   setError(err instanceof Error ? err.message : 'Error guardando equipo.');
                 }
               }}
-              className="lg:col-span-4 rounded-lg border border-slate-200 bg-white p-5 space-y-3.5 text-xs"
+              className="lg:col-span-4 rounded-2xl border border-slate-200/90 bg-white p-5 space-y-3.5 text-xs"
             >
               <h3 className="text-sm font-bold text-[#0F2942]">Agregar equipo GNSS</h3>
               <input
@@ -1129,7 +1142,7 @@ export const CatalogosView: React.FC<CatalogosViewProps> = ({
                 placeholder="Ej. Trimble R12i Rover"
                 value={eqNombre}
                 onChange={(e) => setEqNombre(e.target.value)}
-                className="w-full min-h-[40px] rounded-md border border-slate-300 px-3 py-2 focus:border-[#0284C7] focus:outline-none"
+                className="w-full min-h-[40px] rounded-xl border border-slate-200 px-3 py-2 focus:border-[#0284C7] focus:outline-none"
               />
               <input
                 type="text"
@@ -1137,11 +1150,11 @@ export const CatalogosView: React.FC<CatalogosViewProps> = ({
                 placeholder="Serial (ej. TR-8842)"
                 value={eqSerial}
                 onChange={(e) => setEqSerial(e.target.value)}
-                className="w-full min-h-[40px] rounded-md border border-slate-300 px-3 py-2 font-mono focus:border-[#0284C7] focus:outline-none"
+                className="w-full min-h-[40px] rounded-xl border border-slate-200 px-3 py-2 font-mono focus:border-[#0284C7] focus:outline-none"
               />
               <button
                 type="submit"
-                className="w-full min-h-[42px] inline-flex items-center justify-center gap-1.5 rounded-md bg-[#0F2942] py-2 font-semibold text-white hover:bg-[#0284C7] transition-colors whitespace-nowrap"
+                className="w-full min-h-[42px] inline-flex items-center justify-center gap-1.5 rounded-xl bg-[#0F2942] py-2 font-semibold text-white hover:bg-[#0284C7] transition-colors whitespace-nowrap"
               >
                 <Plus className="h-3.5 w-3.5" />
                 Registrar equipo
@@ -1154,7 +1167,7 @@ export const CatalogosView: React.FC<CatalogosViewProps> = ({
       {/* RENTAS Y MISIONES (B3) */}
       {subTab === 'rentas' && (
         <div className="space-y-6">
-          <div className="rounded-lg border border-slate-200 bg-white p-4 flex flex-wrap items-center justify-between gap-3 text-xs">
+          <div className="rounded-2xl border border-slate-200/90 bg-white p-4 flex flex-wrap items-center justify-between gap-3 text-xs">
             <div>
               <span className="font-bold text-[#0F2942]">
                 Renta de vehículos y equipos por misión o ruta
@@ -1174,8 +1187,8 @@ export const CatalogosView: React.FC<CatalogosViewProps> = ({
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
             <div className="lg:col-span-7 space-y-4">
               {/* Lista de Rentas */}
-              <div className="rounded-lg border border-slate-200 bg-white divide-y divide-slate-200 overflow-hidden">
-                <div className="px-5 py-3.5 bg-slate-50 flex items-center justify-between">
+              <div className="rounded-2xl border border-slate-200/90 bg-white divide-y divide-slate-200 overflow-hidden">
+                <div className="px-5 py-3.5 bg-[#F8FAFC] flex items-center justify-between">
                   <h3 className="text-xs font-bold uppercase tracking-wide text-[#0F2942]">
                     Rentas registradas ({rentas.length})
                   </h3>
@@ -1299,7 +1312,7 @@ export const CatalogosView: React.FC<CatalogosViewProps> = ({
                                   );
                                 }
                               }}
-                              className="min-h-[40px] inline-flex items-center gap-1.5 rounded-md border border-[#0F2942] bg-white px-3 py-1.5 text-xs font-semibold text-[#0F2942] hover:bg-[#0F2942] hover:text-white transition-colors whitespace-nowrap shrink-0"
+                              className="min-h-[40px] inline-flex items-center gap-1.5 rounded-xl border border-[#0F2942] bg-white px-3 py-1.5 text-xs font-semibold text-[#0F2942] hover:bg-[#0F2942] hover:text-white transition-colors whitespace-nowrap shrink-0"
                             >
                               <RotateCcw className="h-3.5 w-3.5" />
                               Marcar como devuelta
@@ -1319,8 +1332,8 @@ export const CatalogosView: React.FC<CatalogosViewProps> = ({
               </div>
 
               {/* Lista de Misiones */}
-              <div className="rounded-lg border border-slate-200 bg-white divide-y divide-slate-200 overflow-hidden">
-                <div className="px-5 py-3.5 bg-slate-50">
+              <div className="rounded-2xl border border-slate-200/90 bg-white divide-y divide-slate-200 overflow-hidden">
+                <div className="px-5 py-3.5 bg-[#F8FAFC]">
                   <h3 className="text-xs font-bold uppercase tracking-wide text-[#0F2942]">
                     Misiones activas ({misiones.length})
                   </h3>
@@ -1352,7 +1365,7 @@ export const CatalogosView: React.FC<CatalogosViewProps> = ({
                 {onGuardarRenta && (
                   <form
                     onSubmit={handleSubmitRenta}
-                    className="rounded-lg border border-slate-200 bg-white p-5 space-y-3.5 text-xs"
+                    className="rounded-2xl border border-slate-200/90 bg-white p-5 space-y-3.5 text-xs"
                   >
                     <h3 className="text-sm font-bold text-[#0F2942]">Registrar renta (sin chofer)</h3>
 
@@ -1370,7 +1383,7 @@ export const CatalogosView: React.FC<CatalogosViewProps> = ({
                                 : equipos[0]?.id ?? ''
                             );
                           }}
-                          className="mt-1 w-full min-h-[40px] rounded-md border border-slate-300 bg-white px-2.5 py-2"
+                          className="mt-1 w-full min-h-[40px] rounded-xl border border-slate-200 bg-white px-2.5 py-2"
                         >
                           <option value="vehiculo">Vehículo</option>
                           <option value="equipo">Equipo GNSS</option>
@@ -1382,7 +1395,7 @@ export const CatalogosView: React.FC<CatalogosViewProps> = ({
                           value={rentaRecursoId}
                           onChange={(e) => setRentaRecursoId(e.target.value)}
                           required
-                          className="mt-1 w-full min-h-[40px] rounded-md border border-slate-300 bg-white px-2.5 py-2"
+                          className="mt-1 w-full min-h-[40px] rounded-xl border border-slate-200 bg-white px-2.5 py-2"
                         >
                           {rentaTipo === 'vehiculo'
                             ? vehiculos.map((v) => (
@@ -1408,7 +1421,7 @@ export const CatalogosView: React.FC<CatalogosViewProps> = ({
                           placeholder="Ej. Rent-a-Car Cibao"
                           value={rentaProveedor}
                           onChange={(e) => setRentaProveedor(e.target.value)}
-                          className="mt-1 w-full min-h-[40px] rounded-md border border-slate-300 px-2.5 py-2"
+                          className="mt-1 w-full min-h-[40px] rounded-xl border border-slate-200 px-2.5 py-2"
                         />
                       </label>
                       <label className="block">
@@ -1418,7 +1431,7 @@ export const CatalogosView: React.FC<CatalogosViewProps> = ({
                           onChange={(e) =>
                             setRentaEstadoInicial(e.target.value as 'reservada' | 'activa')
                           }
-                          className="mt-1 w-full min-h-[40px] rounded-md border border-slate-300 bg-white px-2.5 py-2"
+                          className="mt-1 w-full min-h-[40px] rounded-xl border border-slate-200 bg-white px-2.5 py-2"
                         >
                           <option value="activa">Activa</option>
                           <option value="reservada">Reservada</option>
@@ -1432,7 +1445,7 @@ export const CatalogosView: React.FC<CatalogosViewProps> = ({
                         <select
                           value={rentaMisionId}
                           onChange={(e) => setRentaMisionId(e.target.value)}
-                          className="mt-1 w-full min-h-[40px] rounded-md border border-slate-300 bg-white px-2.5 py-2"
+                          className="mt-1 w-full min-h-[40px] rounded-xl border border-slate-200 bg-white px-2.5 py-2"
                         >
                           <option value="">Sin misión específica</option>
                           {misiones.map((m) => (
@@ -1447,7 +1460,7 @@ export const CatalogosView: React.FC<CatalogosViewProps> = ({
                         <select
                           value={rentaRutaId}
                           onChange={(e) => setRentaRutaId(e.target.value)}
-                          className="mt-1 w-full min-h-[40px] rounded-md border border-slate-300 bg-white px-2.5 py-2"
+                          className="mt-1 w-full min-h-[40px] rounded-xl border border-slate-200 bg-white px-2.5 py-2"
                         >
                           <option value="">Sin ruta directa</option>
                           {rutas.map((rt) => (
@@ -1467,7 +1480,7 @@ export const CatalogosView: React.FC<CatalogosViewProps> = ({
                           required
                           value={rentaFechaInicio}
                           onChange={(e) => setRentaFechaInicio(e.target.value)}
-                          className="mt-1 w-full min-h-[40px] rounded-md border border-slate-300 px-2.5 py-2 font-mono"
+                          className="mt-1 w-full min-h-[40px] rounded-xl border border-slate-200 px-2.5 py-2 font-mono"
                         />
                       </label>
                       <label className="block">
@@ -1477,7 +1490,7 @@ export const CatalogosView: React.FC<CatalogosViewProps> = ({
                           required
                           value={rentaFechaFin}
                           onChange={(e) => setRentaFechaFin(e.target.value)}
-                          className="mt-1 w-full min-h-[40px] rounded-md border border-slate-300 px-2.5 py-2 font-mono"
+                          className="mt-1 w-full min-h-[40px] rounded-xl border border-slate-200 px-2.5 py-2 font-mono"
                         />
                       </label>
                     </div>
@@ -1490,7 +1503,7 @@ export const CatalogosView: React.FC<CatalogosViewProps> = ({
                           onChange={(e) =>
                             setRentaModalidad(e.target.value as ModalidadTarifaRenta)
                           }
-                          className="mt-1 w-full min-h-[40px] rounded-md border border-slate-300 bg-white px-2 py-2"
+                          className="mt-1 w-full min-h-[40px] rounded-xl border border-slate-200 bg-white px-2 py-2"
                         >
                           <option value="por_dia">Por día</option>
                           <option value="por_km">Por km</option>
@@ -1505,7 +1518,7 @@ export const CatalogosView: React.FC<CatalogosViewProps> = ({
                           required
                           value={rentaTarifa}
                           onChange={(e) => setRentaTarifa(e.target.value)}
-                          className="mt-1 w-full min-h-[40px] rounded-md border border-slate-300 px-2 py-2 font-mono tabular-nums"
+                          className="mt-1 w-full min-h-[40px] rounded-xl border border-slate-200 px-2 py-2 font-mono tabular-nums"
                         />
                       </label>
                       <label className="block">
@@ -1519,12 +1532,12 @@ export const CatalogosView: React.FC<CatalogosViewProps> = ({
                           required
                           value={rentaCantidad}
                           onChange={(e) => setRentaCantidad(e.target.value)}
-                          className="mt-1 w-full min-h-[40px] rounded-md border border-slate-300 px-2 py-2 font-mono tabular-nums"
+                          className="mt-1 w-full min-h-[40px] rounded-xl border border-slate-200 px-2 py-2 font-mono tabular-nums"
                         />
                       </label>
                     </div>
 
-                    <div className="flex items-center justify-between rounded-md border border-slate-200 bg-slate-50 px-3 py-2.5">
+                    <div className="flex items-center justify-between rounded-xl border border-slate-200/70 bg-[#F8FAFC] px-3 py-2.5">
                       <label className="inline-flex items-center gap-2 cursor-pointer font-semibold text-slate-700">
                         <input
                           type="checkbox"
@@ -1552,7 +1565,7 @@ export const CatalogosView: React.FC<CatalogosViewProps> = ({
                         <select
                           value={rentaProyectoId}
                           onChange={(e) => setRentaProyectoId(e.target.value)}
-                          className="mt-1 w-full min-h-[40px] rounded-md border border-slate-300 bg-white px-2.5 py-2"
+                          className="mt-1 w-full min-h-[40px] rounded-xl border border-slate-200 bg-white px-2.5 py-2"
                         >
                           <option value="sin_asignar">Sin asignar a proyecto</option>
                           {proyectos.map((p) => (
@@ -1569,7 +1582,7 @@ export const CatalogosView: React.FC<CatalogosViewProps> = ({
                             <select
                               value={rentaProyectoSecundarioId}
                               onChange={(e) => setRentaProyectoSecundarioId(e.target.value)}
-                              className="mt-1 w-full min-h-[40px] rounded-md border border-slate-300 bg-white px-1.5 py-2 text-[11px]"
+                              className="mt-1 w-full min-h-[40px] rounded-xl border border-slate-200 bg-white px-1.5 py-2 text-[11px]"
                             >
                               <option value="">Ninguno</option>
                               {proyectos
@@ -1589,7 +1602,7 @@ export const CatalogosView: React.FC<CatalogosViewProps> = ({
                               step="1"
                               value={rentaMontoProyectoSecundario}
                               onChange={(e) => setRentaMontoProyectoSecundario(e.target.value)}
-                              className="mt-1 w-full min-h-[40px] rounded-md border border-slate-300 px-2 py-2 font-mono text-[11px] tabular-nums"
+                              className="mt-1 w-full min-h-[40px] rounded-xl border border-slate-200 px-2 py-2 font-mono text-[11px] tabular-nums"
                             />
                           </label>
                         </div>
@@ -1618,12 +1631,12 @@ export const CatalogosView: React.FC<CatalogosViewProps> = ({
                       placeholder="Notas de entrega o condiciones (opcional)"
                       value={rentaNotas}
                       onChange={(e) => setRentaNotas(e.target.value)}
-                      className="w-full min-h-[40px] rounded-md border border-slate-300 px-2.5 py-2"
+                      className="w-full min-h-[40px] rounded-xl border border-slate-200 px-2.5 py-2"
                     />
 
                     <button
                       type="submit"
-                      className="w-full min-h-[42px] inline-flex items-center justify-center gap-1.5 rounded-md bg-[#0F2942] py-2 font-semibold text-white hover:bg-[#0284C7] transition-colors whitespace-nowrap"
+                      className="w-full min-h-[42px] inline-flex items-center justify-center gap-1.5 rounded-xl bg-[#0F2942] py-2 font-semibold text-white hover:bg-[#0284C7] transition-colors whitespace-nowrap"
                     >
                       <Plus className="h-3.5 w-3.5" />
                       Registrar renta
@@ -1656,7 +1669,7 @@ export const CatalogosView: React.FC<CatalogosViewProps> = ({
                         );
                       }
                     }}
-                    className="rounded-lg border border-slate-200 bg-white p-5 space-y-3 text-xs"
+                    className="rounded-2xl border border-slate-200/90 bg-white p-5 space-y-3 text-xs"
                   >
                     <h3 className="text-sm font-bold text-[#0F2942]">Nueva misión de campo</h3>
                     <input
@@ -1665,7 +1678,7 @@ export const CatalogosView: React.FC<CatalogosViewProps> = ({
                       placeholder="Nombre (ej. Misión Deslinde Norte)"
                       value={misionNombre}
                       onChange={(e) => setMisionNombre(e.target.value)}
-                      className="w-full min-h-[40px] rounded-md border border-slate-300 px-2.5 py-2"
+                      className="w-full min-h-[40px] rounded-xl border border-slate-200 px-2.5 py-2"
                     />
                     <div className="grid grid-cols-2 gap-2.5">
                       <input
@@ -1674,7 +1687,7 @@ export const CatalogosView: React.FC<CatalogosViewProps> = ({
                         placeholder="Zona (ej. Región Cibao)"
                         value={misionZona}
                         onChange={(e) => setMisionZona(e.target.value)}
-                        className="w-full min-h-[40px] rounded-md border border-slate-300 px-2.5 py-2"
+                        className="w-full min-h-[40px] rounded-xl border border-slate-200 px-2.5 py-2"
                       />
                       <input
                         type="text"
@@ -1682,7 +1695,7 @@ export const CatalogosView: React.FC<CatalogosViewProps> = ({
                         placeholder="Provincia"
                         value={misionProvincia}
                         onChange={(e) => setMisionProvincia(e.target.value)}
-                        className="w-full min-h-[40px] rounded-md border border-slate-300 px-2.5 py-2"
+                        className="w-full min-h-[40px] rounded-xl border border-slate-200 px-2.5 py-2"
                       />
                     </div>
                     <div className="grid grid-cols-2 gap-2.5">
@@ -1691,14 +1704,14 @@ export const CatalogosView: React.FC<CatalogosViewProps> = ({
                         required
                         value={misionFechaInicio}
                         onChange={(e) => setMisionFechaInicio(e.target.value)}
-                        className="w-full min-h-[40px] rounded-md border border-slate-300 px-2.5 py-2 font-mono"
+                        className="w-full min-h-[40px] rounded-xl border border-slate-200 px-2.5 py-2 font-mono"
                       />
                       <input
                         type="date"
                         required
                         value={misionFechaFin}
                         onChange={(e) => setMisionFechaFin(e.target.value)}
-                        className="w-full min-h-[40px] rounded-md border border-slate-300 px-2.5 py-2 font-mono"
+                        className="w-full min-h-[40px] rounded-xl border border-slate-200 px-2.5 py-2 font-mono"
                       />
                     </div>
                     {rutas.length > 0 && (
@@ -1706,7 +1719,7 @@ export const CatalogosView: React.FC<CatalogosViewProps> = ({
                         <span className="block text-[11px] font-semibold text-slate-700 mb-1.5">
                           Rutas agrupadas
                         </span>
-                        <div className="max-h-24 overflow-y-auto space-y-1 border border-slate-200 rounded-md p-2.5">
+                        <div className="max-h-24 overflow-y-auto space-y-1 border border-slate-200/70 bg-[#F8FAFC] rounded-xl p-2.5">
                           {rutas.map((rt) => (
                             <label key={rt.id} className="flex items-center gap-2 cursor-pointer">
                               <input
@@ -1731,7 +1744,7 @@ export const CatalogosView: React.FC<CatalogosViewProps> = ({
                     )}
                     <button
                       type="submit"
-                      className="w-full min-h-[42px] inline-flex items-center justify-center gap-1.5 rounded-md border border-[#0F2942] bg-white py-2 font-semibold text-[#0F2942] hover:bg-[#0F2942] hover:text-white transition-colors whitespace-nowrap"
+                      className="w-full min-h-[42px] inline-flex items-center justify-center gap-1.5 rounded-xl border border-[#0F2942] bg-white py-2 font-semibold text-[#0F2942] hover:bg-[#0F2942] hover:text-white transition-colors whitespace-nowrap"
                     >
                       <Plus className="h-3.5 w-3.5" />
                       Crear misión
@@ -1747,7 +1760,7 @@ export const CatalogosView: React.FC<CatalogosViewProps> = ({
       {/* CLIENTES */}
       {subTab === 'clientes' && (
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
-          <div className="lg:col-span-8 rounded-lg border border-slate-200 bg-white divide-y divide-slate-200 overflow-hidden">
+          <div className="lg:col-span-8 rounded-2xl border border-slate-200/90 bg-white divide-y divide-slate-200 overflow-hidden">
             {clientes.map((c) => (
               <div key={c.id} className="p-4 flex items-center justify-between gap-3 text-xs">
                 <div>
@@ -1781,7 +1794,7 @@ export const CatalogosView: React.FC<CatalogosViewProps> = ({
                   setError(err instanceof Error ? err.message : 'Error guardando cliente.');
                 }
               }}
-              className="lg:col-span-4 rounded-lg border border-slate-200 bg-white p-5 space-y-3.5 text-xs"
+              className="lg:col-span-4 rounded-2xl border border-slate-200/90 bg-white p-5 space-y-3.5 text-xs"
             >
               <h3 className="text-sm font-bold text-[#0F2942]">Nuevo cliente</h3>
               <input
@@ -1790,7 +1803,7 @@ export const CatalogosView: React.FC<CatalogosViewProps> = ({
                 placeholder="Razón social"
                 value={cliNombre}
                 onChange={(e) => setCliNombre(e.target.value)}
-                className="w-full min-h-[40px] rounded-md border border-slate-300 px-3 py-2 focus:border-[#0284C7] focus:outline-none"
+                className="w-full min-h-[40px] rounded-xl border border-slate-200 px-3 py-2 focus:border-[#0284C7] focus:outline-none"
               />
               <input
                 type="text"
@@ -1798,7 +1811,7 @@ export const CatalogosView: React.FC<CatalogosViewProps> = ({
                 placeholder="RNC"
                 value={cliRnc}
                 onChange={(e) => setCliRnc(e.target.value)}
-                className="w-full min-h-[40px] rounded-md border border-slate-300 px-3 py-2 font-mono focus:border-[#0284C7] focus:outline-none"
+                className="w-full min-h-[40px] rounded-xl border border-slate-200 px-3 py-2 font-mono focus:border-[#0284C7] focus:outline-none"
               />
               <input
                 type="text"
@@ -1806,11 +1819,11 @@ export const CatalogosView: React.FC<CatalogosViewProps> = ({
                 placeholder="Contacto principal"
                 value={cliContacto}
                 onChange={(e) => setCliContacto(e.target.value)}
-                className="w-full min-h-[40px] rounded-md border border-slate-300 px-3 py-2 focus:border-[#0284C7] focus:outline-none"
+                className="w-full min-h-[40px] rounded-xl border border-slate-200 px-3 py-2 focus:border-[#0284C7] focus:outline-none"
               />
               <button
                 type="submit"
-                className="w-full min-h-[42px] inline-flex items-center justify-center gap-1.5 rounded-md bg-[#0F2942] py-2 font-semibold text-white hover:bg-[#0284C7] transition-colors whitespace-nowrap"
+                className="w-full min-h-[42px] inline-flex items-center justify-center gap-1.5 rounded-xl bg-[#0F2942] py-2 font-semibold text-white hover:bg-[#0284C7] transition-colors whitespace-nowrap"
               >
                 <Plus className="h-3.5 w-3.5" />
                 Registrar cliente

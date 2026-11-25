@@ -6,9 +6,9 @@
 }
 
 :root {
-  --sirius-canvas: #f8fafc;
+  --sirius-canvas: #f1f5f9;
   --sirius-surface: #ffffff;
-  --sirius-surface-muted: #f1f5f9;
+  --sirius-surface-muted: #f8fafc;
   --sirius-border: #e2e8f0;
   --sirius-border-strong: #cbd5e1;
   --sirius-brand: #0f2942;

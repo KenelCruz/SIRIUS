@@ -722,22 +722,22 @@ export const KmzImportModal: React.FC<KmzImportModalProps> = ({
       aria-modal="true"
       aria-labelledby="titulo-modal-kmz"
     >
-      <div className="w-full max-w-3xl rounded-xl border border-slate-200 bg-white shadow-2xl my-auto max-h-[94vh] flex flex-col overflow-hidden">
+      <div className="w-full max-w-3xl rounded-2xl border border-slate-200/90 bg-white shadow-2xl my-auto max-h-[94vh] flex flex-col overflow-hidden">
         {/* Header + 3-Step Flow Progress */}
-        <div className="border-b border-slate-200 px-5 py-4 space-y-3">
+        <div className="border-b border-slate-200/80 bg-[#F8FAFC] px-5 py-4 space-y-3">
           <div className="flex items-center justify-between gap-3">
             <div>
-              <h2 id="titulo-modal-kmz" className="text-base font-bold text-slate-900">
+              <h2 id="titulo-modal-kmz" className="text-base font-bold tracking-tight text-[#0F2942]">
                 Nueva Ruta desde Archivo KMZ / KML / GeoJSON
               </h2>
-              <p className="text-xs text-slate-500">
+              <p className="text-xs text-[#475569]">
                 Importa geometría, suma servicios al proyecto, calcula ruta OSM y adjunta viáticos.
               </p>
             </div>
             <button
               type="button"
               onClick={onClose}
-              className="min-h-[40px] min-w-[40px] flex items-center justify-center rounded-md text-slate-500 hover:bg-slate-100 shrink-0"
+              className="min-h-[40px] min-w-[40px] flex items-center justify-center rounded-xl text-[#475569] hover:bg-slate-200/70 shrink-0 transition-colors"
               aria-label="Cerrar modal"
             >
               <X className="h-4 w-4" />
@@ -761,12 +761,12 @@ export const KmzImportModal: React.FC<KmzImportModalProps> = ({
                   type="button"
                   disabled={!canJump}
                   onClick={() => canJump && setStep(item.num)}
-                  className={`min-h-[40px] rounded-md border px-3 py-2 text-left text-xs font-semibold transition-colors disabled:opacity-40 ${
+                  className={`min-h-[40px] rounded-xl border px-3 py-2 text-left text-xs font-semibold transition-all disabled:opacity-40 ${
                     isActive
-                      ? 'border-[#0F2942] bg-[#0F2942] text-white'
+                      ? 'border-[#0F2942] bg-[#0F2942] text-white shadow-sm'
                       : isDone
                       ? 'border-emerald-200 bg-emerald-50 text-[#15803D]'
-                      : 'border-slate-200 bg-slate-50 text-slate-600'
+                      : 'border-slate-200 bg-white text-[#475569]'
                   }`}
                 >
                   {item.label}
@@ -779,7 +779,7 @@ export const KmzImportModal: React.FC<KmzImportModalProps> = ({
         {/* Scrollable Step Body */}
         <div className="overflow-y-auto p-5 space-y-4 flex-1">
           {error && (
-            <div className="rounded-lg border border-rose-200 bg-rose-50 px-3.5 py-2.5 text-xs font-medium text-rose-800">
+            <div className="rounded-xl border border-rose-200 bg-rose-50 px-3.5 py-2.5 text-xs font-medium text-rose-800">
               {error}
             </div>
           )}
@@ -788,21 +788,21 @@ export const KmzImportModal: React.FC<KmzImportModalProps> = ({
           {step === 1 && (
             <div className="space-y-4">
               {/* Proyecto selector / inline creator */}
-              <div className="rounded-lg border border-slate-200 bg-slate-50 p-4 space-y-3 text-xs">
+              <div className="rounded-2xl border border-slate-200/70 bg-[#F8FAFC] p-4 space-y-3 text-xs">
                 <div className="flex flex-wrap items-center justify-between gap-2">
                   <span className="inline-flex items-center gap-1.5 font-bold text-[#0F2942]">
                     <Building2 className="h-3.5 w-3.5 text-[#0284C7]" />
                     Proyecto al que pertenece esta Ruta
                   </span>
-                  <div className="inline-flex rounded-md border border-slate-300 bg-white p-0.5">
+                  <div className="inline-flex rounded-xl border border-slate-200 bg-[#F1F5F9] p-1">
                     <button
                       type="button"
                       disabled={proyectos.length === 0}
                       onClick={() => setModoProyecto('existente')}
-                      className={`rounded-md px-2.5 py-1 text-[11px] font-semibold disabled:opacity-40 whitespace-nowrap ${
+                      className={`rounded-lg px-2.5 py-1 text-[11px] font-semibold disabled:opacity-40 whitespace-nowrap transition-all ${
                         modoProyecto === 'existente'
-                          ? 'bg-[#0F2942] text-white'
-                          : 'text-slate-600'
+                          ? 'bg-[#0F2942] text-white shadow-sm'
+                          : 'text-[#475569]'
                       }`}
                     >
                       Proyecto existente
@@ -810,8 +810,8 @@ export const KmzImportModal: React.FC<KmzImportModalProps> = ({
                     <button
                       type="button"
                       onClick={() => setModoProyecto('nuevo')}
-                      className={`rounded-md px-2.5 py-1 text-[11px] font-semibold whitespace-nowrap ${
-                        modoProyecto === 'nuevo' ? 'bg-[#0F2942] text-white' : 'text-slate-600'
+                      className={`rounded-lg px-2.5 py-1 text-[11px] font-semibold whitespace-nowrap transition-all ${
+                        modoProyecto === 'nuevo' ? 'bg-[#0F2942] text-white shadow-sm' : 'text-[#475569]'
                       }`}
                     >
                       + Nuevo proyecto
@@ -823,7 +823,7 @@ export const KmzImportModal: React.FC<KmzImportModalProps> = ({
                   <select
                     value={proyectoId}
                     onChange={(e) => setProyectoId(e.target.value)}
-                    className="w-full min-h-[40px] rounded-md border border-slate-300 bg-white px-3 py-2 text-xs text-slate-900"
+                    className="w-full min-h-[40px] rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs text-[#0F2942] focus:border-[#0284C7] focus:outline-none"
                   >
                     {proyectos.map((p) => (
                       <option key={p.id} value={p.id}>
@@ -842,7 +842,7 @@ export const KmzImportModal: React.FC<KmzImportModalProps> = ({
                         value={nuevoProyectoNombre}
                         onChange={(e) => setNuevoProyectoNombre(e.target.value)}
                         placeholder="Ej. Deslinde Costa Este"
-                        className="w-full min-h-[40px] rounded-md border border-slate-300 bg-white px-3 py-1.5 text-xs"
+                        className="w-full min-h-[40px] rounded-xl border border-slate-200 bg-white px-3 py-1.5 text-xs focus:border-[#0284C7] focus:outline-none"
                       />
                     </div>
                     <div>
@@ -853,7 +853,7 @@ export const KmzImportModal: React.FC<KmzImportModalProps> = ({
                         type="text"
                         value={nuevoCodigoContrato}
                         onChange={(e) => setNuevoCodigoContrato(e.target.value)}
-                        className="w-full min-h-[40px] rounded-md border border-slate-300 bg-white px-3 py-1.5 font-mono text-xs"
+                        className="w-full min-h-[40px] rounded-xl border border-slate-200 bg-white px-3 py-1.5 font-mono text-xs focus:border-[#0284C7] focus:outline-none"
                       />
                     </div>
                     {clientes.length > 0 && (
@@ -864,7 +864,7 @@ export const KmzImportModal: React.FC<KmzImportModalProps> = ({
                         <select
                           value={clienteIdExistente}
                           onChange={(e) => setClienteIdExistente(e.target.value)}
-                          className="w-full min-h-[40px] rounded-md border border-slate-300 bg-white px-3 py-1.5 text-xs"
+                          className="w-full min-h-[40px] rounded-xl border border-slate-200 bg-white px-3 py-1.5 text-xs focus:border-[#0284C7] focus:outline-none"
                         >
                           <option value="">-- Crear cliente nuevo --</option>
                           {clientes.map((c) => (
@@ -886,7 +886,7 @@ export const KmzImportModal: React.FC<KmzImportModalProps> = ({
                             value={nuevoClienteNombre}
                             onChange={(e) => setNuevoClienteNombre(e.target.value)}
                             placeholder="Razón social o propietario"
-                            className="w-full min-h-[40px] rounded-md border border-slate-300 bg-white px-3 py-1.5 text-xs"
+                            className="w-full min-h-[40px] rounded-xl border border-slate-200 bg-white px-3 py-1.5 text-xs focus:border-[#0284C7] focus:outline-none"
                           />
                         </div>
                         <div>
@@ -896,7 +896,7 @@ export const KmzImportModal: React.FC<KmzImportModalProps> = ({
                             value={nuevoClienteRnc}
                             onChange={(e) => setNuevoClienteRnc(e.target.value)}
                             placeholder="1-31-00000-0"
-                            className="w-full min-h-[40px] rounded-md border border-slate-300 bg-white px-3 py-1.5 font-mono text-xs"
+                            className="w-full min-h-[40px] rounded-xl border border-slate-200 bg-white px-3 py-1.5 font-mono text-xs focus:border-[#0284C7] focus:outline-none"
                           />
                         </div>
                         <div>
@@ -906,7 +906,7 @@ export const KmzImportModal: React.FC<KmzImportModalProps> = ({
                             value={nuevoClienteContacto}
                             onChange={(e) => setNuevoClienteContacto(e.target.value)}
                             placeholder="Nombre de contacto"
-                            className="w-full min-h-[40px] rounded-md border border-slate-300 bg-white px-3 py-1.5 text-xs"
+                            className="w-full min-h-[40px] rounded-xl border border-slate-200 bg-white px-3 py-1.5 text-xs focus:border-[#0284C7] focus:outline-none"
                           />
                         </div>
                       </>
@@ -923,7 +923,7 @@ export const KmzImportModal: React.FC<KmzImportModalProps> = ({
                   if (f) handleFile(f);
                 }}
                 onClick={() => fileInputRef.current?.click()}
-                className="cursor-pointer rounded-lg border-2 border-dashed border-[#0284C7] bg-slate-50 p-5 text-center hover:bg-sky-50/70 transition-colors"
+                className="cursor-pointer rounded-2xl border-2 border-dashed border-[#0284C7] bg-[#F8FAFC] p-5 text-center hover:bg-sky-50/70 transition-colors"
               >
                 <input
                   ref={fileInputRef}
@@ -942,7 +942,7 @@ export const KmzImportModal: React.FC<KmzImportModalProps> = ({
                     ? 'Procesando geometría, proyectando UTM 19N y consultando OpenStreetMap...'
                     : 'Arrastra tu archivo .KMZ, .KML o .GeoJSON aquí'}
                 </p>
-                <p className="mt-1 text-xs text-slate-500">
+                <p className="mt-1 text-xs text-[#475569]">
                   Extrae polígonos/líneas, código parcelario, fecha, provincia y área automáticamente
                 </p>
               </div>
@@ -951,7 +951,7 @@ export const KmzImportModal: React.FC<KmzImportModalProps> = ({
                 {SAMPLE_KMZ_TEMPLATES.map((tpl) => (
                   <div
                     key={tpl.key}
-                    className="flex items-center justify-between gap-2 rounded-lg border border-slate-200 bg-white px-3.5 py-2.5"
+                    className="flex items-center justify-between gap-2 rounded-xl border border-slate-200/90 bg-white px-3.5 py-2.5"
                   >
                     <button
                       type="button"
@@ -965,7 +965,7 @@ export const KmzImportModal: React.FC<KmzImportModalProps> = ({
                       type="button"
                       onClick={() => handleDownloadSampleKmz(tpl)}
                       title="Descargar archivo .kmz real"
-                      className="min-h-[36px] min-w-[36px] flex items-center justify-center rounded-md text-slate-500 hover:bg-slate-100 shrink-0"
+                      className="min-h-[36px] min-w-[36px] flex items-center justify-center rounded-xl text-[#475569] hover:bg-slate-100 shrink-0 transition-colors"
                     >
                       <Download className="h-3.5 w-3.5" />
                     </button>
@@ -975,7 +975,7 @@ export const KmzImportModal: React.FC<KmzImportModalProps> = ({
 
               {parsed && (
                 <>
-                  <div className="rounded-lg border border-emerald-200 bg-emerald-50 p-3.5 text-xs space-y-1.5">
+                  <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-3.5 text-xs space-y-1.5">
                     <div className="flex items-center justify-between font-semibold text-[#15803D]">
                       <span className="inline-flex items-center gap-1.5">
                         <CheckCircle2 className="h-4 w-4" />
@@ -1016,7 +1016,7 @@ export const KmzImportModal: React.FC<KmzImportModalProps> = ({
                         type="text"
                         value={parcelCode}
                         onChange={(e) => setParcelCode(e.target.value)}
-                        className="w-full min-h-[40px] rounded-md border border-slate-300 px-3 py-2 font-mono text-xs text-slate-900"
+                        className="w-full min-h-[40px] rounded-xl border border-slate-200 px-3 py-2 font-mono text-xs text-[#0F2942] focus:border-[#0284C7] focus:outline-none"
                       />
                     </div>
                     <div>
@@ -1027,7 +1027,7 @@ export const KmzImportModal: React.FC<KmzImportModalProps> = ({
                         type="text"
                         value={nombreRuta}
                         onChange={(e) => setNombreRuta(e.target.value)}
-                        className="w-full min-h-[40px] rounded-md border border-slate-300 px-3 py-2 text-xs text-slate-900"
+                        className="w-full min-h-[40px] rounded-xl border border-slate-200 px-3 py-2 text-xs text-[#0F2942] focus:border-[#0284C7] focus:outline-none"
                       />
                     </div>
                     <div>
@@ -1038,7 +1038,7 @@ export const KmzImportModal: React.FC<KmzImportModalProps> = ({
                         type="text"
                         value={ubicacion}
                         onChange={(e) => setUbicacion(e.target.value)}
-                        className="w-full min-h-[40px] rounded-md border border-slate-300 px-3 py-2 text-xs text-slate-900"
+                        className="w-full min-h-[40px] rounded-xl border border-slate-200 px-3 py-2 text-xs text-[#0F2942] focus:border-[#0284C7] focus:outline-none"
                       />
                     </div>
                     <div>
@@ -1047,7 +1047,7 @@ export const KmzImportModal: React.FC<KmzImportModalProps> = ({
                         type="text"
                         value={province}
                         onChange={(e) => setProvince(e.target.value)}
-                        className="w-full min-h-[40px] rounded-md border border-slate-300 px-3 py-2 text-xs text-slate-900"
+                        className="w-full min-h-[40px] rounded-xl border border-slate-200 px-3 py-2 text-xs text-[#0F2942] focus:border-[#0284C7] focus:outline-none"
                       />
                     </div>
                     <div>
@@ -1061,7 +1061,7 @@ export const KmzImportModal: React.FC<KmzImportModalProps> = ({
                           setFechaPrevista(e.target.value);
                           setFechaFinAsignacion(e.target.value);
                         }}
-                        className="w-full min-h-[40px] rounded-md border border-slate-300 px-3 py-2 font-mono text-xs text-slate-900"
+                        className="w-full min-h-[40px] rounded-xl border border-slate-200 px-3 py-2 font-mono text-xs text-[#0F2942] focus:border-[#0284C7] focus:outline-none"
                       />
                     </div>
                   </div>
@@ -1096,10 +1096,10 @@ export const KmzImportModal: React.FC<KmzImportModalProps> = ({
                               : [...prev, svc.codigo]
                           )
                         }
-                        className={`flex items-center justify-between gap-3 rounded-lg border px-3.5 py-2.5 text-left transition-colors min-h-[44px] ${
+                        className={`flex items-center justify-between gap-3 rounded-xl border px-3.5 py-2.5 text-left transition-colors min-h-[44px] ${
                           checked
-                            ? 'border-[#0F2942] bg-[#0F2942] text-white'
-                            : 'border-slate-200 bg-white text-slate-900 hover:bg-slate-50 hover:border-slate-300'
+                            ? 'border-[#0F2942] bg-[#0F2942] text-white shadow-sm'
+                            : 'border-slate-200 bg-white text-[#0F2942] hover:bg-[#F8FAFC] hover:border-slate-300'
                         }`}
                       >
                         <div className="flex items-center gap-2.5 min-w-0">
@@ -1116,7 +1116,7 @@ export const KmzImportModal: React.FC<KmzImportModalProps> = ({
                             <div className="text-xs font-bold">{svc.nombre}</div>
                             <div
                               className={`text-[11px] ${
-                                checked ? 'text-slate-300' : 'text-slate-500'
+                                checked ? 'text-slate-300' : 'text-[#475569]'
                               }`}
                             >
                               {svc.subtitulo}
@@ -1138,7 +1138,7 @@ export const KmzImportModal: React.FC<KmzImportModalProps> = ({
                 {activeServicios.some(
                   (s) => selectedServiceIds.includes(s.codigo) && s.recargoCorredorPorKmRD > 0
                 ) && (
-                  <div className="mt-3 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-slate-200 bg-slate-50 px-3.5 py-2.5 text-xs">
+                  <div className="mt-3 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-slate-200/70 bg-[#F8FAFC] px-3.5 py-2.5 text-xs">
                     <span className="font-semibold text-[#0F2942]">
                       Longitud corredor vial (km @{' '}
                       {formatRD(
@@ -1156,7 +1156,7 @@ export const KmzImportModal: React.FC<KmzImportModalProps> = ({
                       step={0.5}
                       value={corridorKm}
                       onChange={(e) => setCorridorKm(Math.max(0, Number(e.target.value)))}
-                      className="w-28 rounded-md border border-slate-300 bg-white px-3 py-2 font-mono text-xs text-slate-900 tabular-nums min-h-[40px]"
+                      className="w-28 rounded-xl border border-slate-200 bg-white px-3 py-2 font-mono text-xs text-[#0F2942] tabular-nums min-h-[40px] focus:border-[#0284C7] focus:outline-none"
                     />
                   </div>
                 )}
@@ -1172,10 +1172,10 @@ export const KmzImportModal: React.FC<KmzImportModalProps> = ({
                         key={t}
                         type="button"
                         onClick={() => setTerrain(t)}
-                        className={`rounded-md border px-2 py-2 font-semibold transition-colors min-h-[40px] whitespace-nowrap ${
+                        className={`rounded-xl border px-2 py-2 font-semibold transition-colors min-h-[40px] whitespace-nowrap ${
                           terrain === t
-                            ? 'border-[#0F2942] bg-[#0F2942] text-white'
-                            : 'border-slate-300 bg-white text-slate-700 hover:bg-slate-50'
+                            ? 'border-[#0F2942] bg-[#0F2942] text-white shadow-sm'
+                            : 'border-slate-200 bg-white text-slate-700 hover:bg-[#F8FAFC]'
                         }`}
                       >
                         {t}
@@ -1204,7 +1204,7 @@ export const KmzImportModal: React.FC<KmzImportModalProps> = ({
                         }
                       }
                     }}
-                    className="w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-xs text-slate-900 min-h-[40px]"
+                    className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs text-[#0F2942] min-h-[40px] focus:border-[#0284C7] focus:outline-none"
                   >
                     {vehiculos.length > 0
                       ? vehiculos.map((v) => (
@@ -1222,7 +1222,7 @@ export const KmzImportModal: React.FC<KmzImportModalProps> = ({
               </div>
 
               {/* Routes Comparison */}
-              <div className="rounded-lg border border-slate-200 bg-slate-50 p-4 space-y-3">
+              <div className="rounded-2xl border border-slate-200/70 bg-[#F8FAFC] p-4 space-y-3">
                 <div className="flex flex-wrap items-center justify-between gap-2 text-xs">
                   <span className="inline-flex items-center gap-1.5 font-bold text-[#0F2942]">
                     <Route className="h-4 w-4 text-[#0284C7]" />
@@ -1234,7 +1234,7 @@ export const KmzImportModal: React.FC<KmzImportModalProps> = ({
                 </div>
 
                 {/* Punto de Partida (calle o pin en mapa) */}
-                <div className="rounded-lg border border-slate-200 bg-white p-3 space-y-2.5 text-xs">
+                <div className="rounded-xl border border-slate-200/90 bg-white p-3 space-y-2.5 text-xs">
                   <div className="flex flex-wrap items-center justify-between gap-2">
                     <div className="flex items-center gap-2 min-w-0">
                       <span className="inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-md bg-[#0284C7] font-mono text-[10px] font-bold text-white">
@@ -1256,7 +1256,7 @@ export const KmzImportModal: React.FC<KmzImportModalProps> = ({
                             source: 'empresa',
                           });
                         }}
-                        className="inline-flex items-center gap-1 rounded-md border border-slate-300 bg-white px-2.5 py-1 text-[11px] font-semibold text-slate-700 hover:bg-slate-50 whitespace-nowrap shrink-0"
+                        className="inline-flex items-center gap-1 rounded-xl border border-slate-200 bg-white px-2.5 py-1 text-[11px] font-semibold text-slate-700 hover:bg-slate-50 whitespace-nowrap shrink-0"
                       >
                         <RotateCcw className="h-3 w-3" />
                         Base
@@ -1283,7 +1283,7 @@ export const KmzImportModal: React.FC<KmzImportModalProps> = ({
                             }
                           }}
                           placeholder="Buscar calle o sector de partida..."
-                          className="w-full rounded-md border border-slate-300 bg-white pl-8 pr-3 py-2 text-xs text-slate-900 min-h-[40px]"
+                          className="w-full rounded-xl border border-slate-200 bg-white pl-8 pr-3 py-2 text-xs text-[#0F2942] min-h-[40px] focus:border-[#0284C7] focus:outline-none"
                         />
                       </div>
                       <button
@@ -1296,7 +1296,7 @@ export const KmzImportModal: React.FC<KmzImportModalProps> = ({
                           setOriginResults(list);
                           setIsSearchingOrigin(false);
                         }}
-                        className="inline-flex items-center gap-1.5 rounded-md bg-[#0F2942] px-3 py-2 text-xs font-semibold text-white hover:bg-[#0284C7] disabled:opacity-50 whitespace-nowrap shrink-0 min-h-[40px] transition-colors"
+                        className="inline-flex items-center gap-1.5 rounded-xl bg-[#0F2942] px-3 py-2 text-xs font-semibold text-white hover:bg-[#0284C7] disabled:opacity-50 whitespace-nowrap shrink-0 min-h-[40px] transition-colors"
                       >
                         <Search className="h-3.5 w-3.5" />
                         {isSearchingOrigin ? '...' : 'Calle'}
@@ -1306,7 +1306,7 @@ export const KmzImportModal: React.FC<KmzImportModalProps> = ({
                     <button
                       type="button"
                       onClick={() => setShowOriginPinMap((prev) => !prev)}
-                      className={`inline-flex items-center justify-center gap-1.5 rounded-md border px-3 py-2 text-xs font-semibold whitespace-nowrap shrink-0 min-h-[40px] transition-colors ${
+                      className={`inline-flex items-center justify-center gap-1.5 rounded-xl border px-3 py-2 text-xs font-semibold whitespace-nowrap shrink-0 min-h-[40px] transition-colors ${
                         showOriginPinMap
                           ? 'border-[#0F2942] bg-[#0F2942] text-white'
                           : 'border-[#0284C7] bg-white text-[#0284C7] hover:bg-sky-50'
@@ -1318,7 +1318,7 @@ export const KmzImportModal: React.FC<KmzImportModalProps> = ({
                   </div>
 
                   {originResults.length > 0 && (
-                    <div className="rounded-md border border-slate-200 divide-y divide-slate-200 max-h-36 overflow-y-auto bg-white">
+                    <div className="rounded-xl border border-slate-200 divide-y divide-slate-200 max-h-36 overflow-y-auto bg-white">
                       {originResults.map((res, idx) => (
                         <button
                           key={`${res.lat}-${res.lon}-${idx}`}
@@ -1334,7 +1334,7 @@ export const KmzImportModal: React.FC<KmzImportModalProps> = ({
                           }}
                           className="w-full flex items-center justify-between gap-2 px-3 py-2 text-left text-xs hover:bg-sky-50 transition-colors"
                         >
-                          <span className="truncate text-slate-900">{res.label}</span>
+                          <span className="truncate text-[#0F2942]">{res.label}</span>
                           <span className="font-mono text-[10px] font-semibold text-[#0284C7] uppercase shrink-0">
                             {res.source}
                           </span>
@@ -1344,9 +1344,9 @@ export const KmzImportModal: React.FC<KmzImportModalProps> = ({
                   )}
 
                   {showOriginPinMap && (
-                    <div className="relative overflow-hidden rounded-lg border border-slate-200">
+                    <div className="relative overflow-hidden rounded-xl border border-slate-200">
                       <div className="pointer-events-none absolute top-2.5 left-2.5 right-2.5 z-[400] flex items-center justify-between gap-2">
-                        <div className="inline-flex items-center gap-2 rounded-md border border-white/15 bg-[#091A2C]/92 px-3 py-1.5 text-[11px] font-medium text-white shadow-lg backdrop-blur-md">
+                        <div className="inline-flex items-center gap-2 rounded-xl border border-white/15 bg-[#091A2C]/92 px-3 py-1.5 text-[11px] font-medium text-white shadow-lg backdrop-blur-md">
                           <MapPin className="h-3.5 w-3.5 shrink-0 text-[#38BDF8]" />
                           <span>Haz clic o arrastra el pin azul (A) para fijar salida</span>
                         </div>
@@ -1381,7 +1381,7 @@ export const KmzImportModal: React.FC<KmzImportModalProps> = ({
                         key={r.id}
                         type="button"
                         onClick={() => setSelectedRouteId(r.id)}
-                        className={`rounded-lg border p-3.5 text-left transition-colors ${
+                        className={`rounded-xl border p-3.5 text-left transition-all ${
                           active
                             ? 'border-2 border-[#0F2942] bg-white shadow-sm'
                             : 'border-slate-200 bg-white/80 hover:bg-white hover:border-slate-300'
@@ -1393,8 +1393,8 @@ export const KmzImportModal: React.FC<KmzImportModalProps> = ({
                             {formatRD(b.totalViaticosRD)}
                           </span>
                         </div>
-                        <div className="text-xs font-bold text-slate-900 mt-1">{r.name}</div>
-                        <div className="font-mono text-[11px] text-slate-500 mt-0.5 tabular-nums">
+                        <div className="text-xs font-bold text-[#0F2942] mt-1">{r.name}</div>
+                        <div className="font-mono text-[11px] text-[#475569] mt-0.5 tabular-nums">
                           {r.distanceOneWayKm} km ida · {r.tollNote}
                         </div>
                       </button>
@@ -1429,7 +1429,7 @@ export const KmzImportModal: React.FC<KmzImportModalProps> = ({
           {/* STEP 3: BRIGADE SCHEDULING (OPTIONAL) & ATTACH VIATICOS */}
           {step === 3 && parsed && (
             <div className="space-y-5">
-              <div className="rounded-lg border border-slate-200 bg-white p-4 space-y-4 text-xs">
+              <div className="rounded-2xl border border-slate-200/90 bg-white p-4 space-y-4 text-xs">
                 <label className="flex items-center gap-2.5 font-bold text-[#0F2942] cursor-pointer min-h-[36px]">
                   <input
                     type="checkbox"
@@ -1449,7 +1449,7 @@ export const KmzImportModal: React.FC<KmzImportModalProps> = ({
                       <select
                         value={cuadrillaId}
                         onChange={(e) => setCuadrillaId(e.target.value)}
-                        className="w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-xs text-slate-900 min-h-[40px]"
+                        className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs text-[#0F2942] min-h-[40px] focus:border-[#0284C7] focus:outline-none"
                       >
                         {cuadrillas.map((c) => (
                           <option key={c.id} value={c.id}>
@@ -1466,7 +1466,7 @@ export const KmzImportModal: React.FC<KmzImportModalProps> = ({
                       <select
                         value={equipoId}
                         onChange={(e) => setEquipoId(e.target.value)}
-                        className="w-full rounded-md border border-slate-300 bg-white px-3 py-2 font-mono text-xs text-slate-900 min-h-[40px]"
+                        className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 font-mono text-xs text-[#0F2942] min-h-[40px] focus:border-[#0284C7] focus:outline-none"
                       >
                         <option value="">Sin equipo asignado</option>
                         {equipos.map((eq) => (
@@ -1486,7 +1486,7 @@ export const KmzImportModal: React.FC<KmzImportModalProps> = ({
                         min={fechaPrevista}
                         value={fechaFinAsignacion}
                         onChange={(e) => setFechaFinAsignacion(e.target.value)}
-                        className="w-full rounded-md border border-slate-300 bg-white px-3 py-2 font-mono text-xs text-slate-900 min-h-[40px]"
+                        className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 font-mono text-xs text-[#0F2942] min-h-[40px] focus:border-[#0284C7] focus:outline-none"
                       />
                     </div>
                     <div>
@@ -1496,7 +1496,7 @@ export const KmzImportModal: React.FC<KmzImportModalProps> = ({
                       <select
                         value={estadoInicialServicio}
                         onChange={(e) => setEstadoInicialServicio(e.target.value as EstadoServicio)}
-                        className="w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-xs text-slate-900 min-h-[40px]"
+                        className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs text-[#0F2942] min-h-[40px] focus:border-[#0284C7] focus:outline-none"
                       >
                         <option value="cotizado">Cotizado</option>
                         <option value="aprobado">Aprobado</option>
@@ -1508,18 +1508,18 @@ export const KmzImportModal: React.FC<KmzImportModalProps> = ({
               </div>
 
               {/* Financial Summary */}
-              <div className="rounded-lg border border-slate-200 bg-slate-50 p-4 space-y-2.5 text-xs">
+              <div className="rounded-2xl border border-slate-200/70 bg-[#F8FAFC] p-4 space-y-2.5 text-xs">
                 <div className="flex justify-between gap-4">
-                  <span className="text-slate-600">
+                  <span className="text-[#475569]">
                     Servicios Sumatorios (
                     {servicesSummary.items.map((i) => i.name).join(' + ') || 'Ninguno'})
                   </span>
-                  <span className="font-mono font-semibold text-slate-900 tabular-nums whitespace-nowrap shrink-0">
+                  <span className="font-mono font-semibold text-[#0F2942] tabular-nums whitespace-nowrap shrink-0">
                     {formatRD(servicesSummary.totalServicesRD)}
                   </span>
                 </div>
                 <div className="flex justify-between gap-4">
-                  <span className="text-slate-600">
+                  <span className="text-[#475569]">
                     Viáticos de Ruta ({activeRoute?.name || 'Ruta'} · {routeBreakdown.roundTripKm}{' '}
                     km)
                   </span>
@@ -1536,7 +1536,7 @@ export const KmzImportModal: React.FC<KmzImportModalProps> = ({
               </div>
 
               {/* Attach Viáticos Option */}
-              <div className="rounded-lg border border-sky-200 bg-sky-50/70 p-4 space-y-2">
+              <div className="rounded-2xl border border-sky-200 bg-sky-50/70 p-4 space-y-2">
                 <label className="flex items-start gap-3 cursor-pointer text-xs">
                   <input
                     type="checkbox"
@@ -1548,7 +1548,7 @@ export const KmzImportModal: React.FC<KmzImportModalProps> = ({
                     <div className="font-bold text-[#0F2942]">
                       Generar viáticos iniciales de ruta repartidos al proyecto
                     </div>
-                    <p className="mt-1 text-slate-600 leading-relaxed">
+                    <p className="mt-1 text-[#475569] leading-relaxed">
                       Combustible (<span className="font-mono tabular-nums">{formatRD(routeBreakdown.fuelRD)}</span>), Peajes (
                       <span className="font-mono tabular-nums">{formatRD(routeBreakdown.tollsRD)}</span>) y Dieta (
                       <span className="font-mono tabular-nums">{formatRD(routeBreakdown.perDiemRD)}</span>) con método GPS Ruta.
@@ -1561,13 +1561,13 @@ export const KmzImportModal: React.FC<KmzImportModalProps> = ({
         </div>
 
         {/* Stepper Footer Actions */}
-        <div className="flex flex-wrap items-center justify-between gap-3 border-t border-slate-200 px-6 py-4 bg-slate-50">
+        <div className="flex flex-wrap items-center justify-between gap-3 border-t border-slate-200/80 px-6 py-4 bg-[#F8FAFC]">
           <div>
             {step > 1 && (
               <button
                 type="button"
                 onClick={() => setStep((s) => (s === 3 ? 2 : 1))}
-                className="inline-flex items-center gap-1.5 rounded-md border border-slate-300 bg-white px-4 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-100 min-h-[40px] whitespace-nowrap transition-colors"
+                className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-4 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-100 min-h-[40px] whitespace-nowrap transition-colors"
               >
                 <ArrowLeft className="h-3.5 w-3.5" />
                 Paso anterior
@@ -1579,7 +1579,7 @@ export const KmzImportModal: React.FC<KmzImportModalProps> = ({
             <button
               type="button"
               onClick={onClose}
-              className="rounded-md border border-slate-300 bg-white px-4 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-100 min-h-[40px] whitespace-nowrap transition-colors"
+              className="rounded-xl border border-slate-200 bg-white px-4 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-100 min-h-[40px] whitespace-nowrap transition-colors"
             >
               Cancelar
             </button>
@@ -1595,7 +1595,7 @@ export const KmzImportModal: React.FC<KmzImportModalProps> = ({
                   }
                   setStep((s) => (s === 1 ? 2 : 3));
                 }}
-                className="inline-flex items-center gap-1.5 rounded-md bg-[#0F2942] px-4 py-2 text-xs font-semibold text-white hover:bg-[#0284C7] disabled:opacity-40 transition-colors min-h-[40px] whitespace-nowrap"
+                className="inline-flex items-center gap-1.5 rounded-xl bg-[#0F2942] px-4 py-2 text-xs font-semibold text-white hover:bg-[#0284C7] disabled:opacity-40 transition-colors min-h-[40px] whitespace-nowrap shadow-sm"
               >
                 <span>
                   {step === 1 ? 'Continuar a servicios y ruta' : 'Continuar a cuadrilla y viáticos'}
@@ -1608,7 +1608,7 @@ export const KmzImportModal: React.FC<KmzImportModalProps> = ({
                   type="button"
                   disabled={isSaving}
                   onClick={() => finalizeRuta(false)}
-                  className="inline-flex items-center gap-1.5 rounded-md bg-[#0F2942] px-4 py-2 text-xs font-semibold text-white hover:bg-[#0284C7] disabled:opacity-50 transition-colors min-h-[40px] whitespace-nowrap"
+                  className="inline-flex items-center gap-1.5 rounded-xl bg-[#0F2942] px-4 py-2 text-xs font-semibold text-white hover:bg-[#0284C7] disabled:opacity-50 transition-colors min-h-[40px] whitespace-nowrap shadow-sm"
                 >
                   <Receipt className="h-3.5 w-3.5" />
                   {isSaving ? 'Creando...' : 'Crear ruta KMZ'}
@@ -1617,7 +1617,7 @@ export const KmzImportModal: React.FC<KmzImportModalProps> = ({
                   type="button"
                   disabled={isSaving}
                   onClick={() => finalizeRuta(true)}
-                  className="inline-flex items-center gap-1.5 rounded-md bg-[#0284C7] px-4 py-2 text-xs font-semibold text-white hover:bg-[#006398] disabled:opacity-50 transition-colors min-h-[40px] whitespace-nowrap"
+                  className="inline-flex items-center gap-1.5 rounded-xl bg-[#0284C7] px-4 py-2 text-xs font-semibold text-white hover:bg-[#006398] disabled:opacity-50 transition-colors min-h-[40px] whitespace-nowrap shadow-sm"
                 >
                   <Camera className="h-3.5 w-3.5" />
                   Crear ruta y adjuntar recibo

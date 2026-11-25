@@ -117,7 +117,7 @@ const ProjectBarTooltip: React.FC<CustomTooltipProps> = ({ active, payload, mone
   const diffCosto = item.planificado - item.ejecutado;
 
   return (
-    <div className="rounded-lg border border-slate-200 bg-white p-3.5 shadow-xl text-xs min-w-[240px]">
+    <div className="rounded-2xl border border-slate-200/90 bg-white p-3.5 shadow-xl text-xs min-w-[240px]">
       <div className="font-mono text-[11px] font-bold text-[#0284C7]">{item.codigoContrato}</div>
       <div className="font-semibold text-[#0D1C2F] mt-0.5 truncate max-w-[260px]">
         {item.nombre}
@@ -199,7 +199,7 @@ const CategoryChartTooltip: React.FC<CategoryTooltipProps> = ({ active, payload,
   const item = payload[0].payload;
   const saldo = item.planificado - item.ejecutado;
   return (
-    <div className="rounded-lg border border-slate-200 bg-white p-3 shadow-xl text-xs min-w-[210px]">
+    <div className="rounded-2xl border border-slate-200/90 bg-white p-3 shadow-xl text-xs min-w-[210px]">
       <div className="font-bold text-[#0D1C2F]">{item.etiqueta}</div>
       <div className="mt-1.5 space-y-1 border-t border-slate-100 pt-1.5">
         <div className="flex items-center justify-between gap-4">
@@ -406,16 +406,27 @@ export const PresupuestosView: React.FC<PresupuestosViewProps> = ({
 
   return (
     <section className="space-y-6">
+      <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-2">
+        <div>
+          <h2 className="text-2xl sm:text-[26px] font-bold tracking-tight text-[#0F2942]">
+            Presupuestos y Márgenes
+          </h2>
+          <p className="text-sm text-[#475569] mt-0.5">
+            Control presupuestario por versión vigente, ejecución por categoría y rentabilidad de contratos.
+          </p>
+        </div>
+      </div>
+
       {/* Filter & Actions Bar */}
-      <div className="flex flex-col xl:flex-row xl:items-center justify-between gap-3 rounded-lg border border-slate-200 bg-white p-4">
+      <div className="flex flex-col xl:flex-row xl:items-center justify-between gap-3 rounded-2xl border border-slate-200/90 bg-white p-4">
         <div className="relative flex-1 min-w-[220px]">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-[#74777E]" />
+          <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
           <input
             type="text"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             placeholder="Buscar por código de contrato o nombre de proyecto..."
-            className="w-full rounded-md border border-slate-200 bg-[#F8FAFC] pl-9 pr-3 py-2 text-xs text-[#0D1C2F] focus:border-[#0284C7] focus:bg-white focus:outline-none min-h-[40px]"
+            className="w-full rounded-xl border border-slate-200 bg-[#F8FAFC] pl-10 pr-3 py-2 text-xs text-[#0F2942] focus:border-[#0284C7] focus:bg-white focus:outline-none min-h-[42px]"
           />
         </div>
 
@@ -426,7 +437,7 @@ export const PresupuestosView: React.FC<PresupuestosViewProps> = ({
               setEstadoFiltro(e.target.value as EstadoPresupuestoProyecto | 'ALL')
             }
             aria-label="Filtrar por estado de presupuesto"
-            className="rounded-md border border-slate-200 bg-white px-3 py-2 text-xs text-[#334155] min-h-[40px]"
+            className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs text-[#334155] min-h-[42px] focus:border-[#0284C7] focus:outline-none"
           >
             <option value="ALL">Todos los estados</option>
             <option value="borrador">En borrador</option>
@@ -434,20 +445,20 @@ export const PresupuestosView: React.FC<PresupuestosViewProps> = ({
             <option value="cerrado">Cerrados</option>
           </select>
 
-          <label className="inline-flex items-center gap-1.5 rounded-md border border-slate-200 bg-[#F8FAFC] px-3 py-1.5 min-h-[40px]">
-            <span className="text-[11px] font-semibold text-[#43474D]">Vigencia al:</span>
+          <label className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 bg-[#F8FAFC] px-3 py-1.5 min-h-[42px]">
+            <span className="text-[11px] font-semibold text-[#475569]">Vigencia al:</span>
             <input
               type="date"
               value={fechaCalculoIso}
               onChange={(e) => setFechaCalculoIso(e.target.value || obtenerFechaHoyAST())}
-              className="bg-transparent font-mono text-xs text-[#0D1C2F] focus:outline-none"
+              className="bg-transparent font-mono text-xs text-[#0F2942] focus:outline-none"
             />
           </label>
 
           <button
             type="button"
             onClick={() => setSoloExcedidos((prev) => !prev)}
-            className={`inline-flex items-center gap-1.5 rounded-md border px-3 py-2 text-xs font-semibold transition-colors whitespace-nowrap shrink-0 min-h-[40px] ${
+            className={`inline-flex items-center gap-1.5 rounded-xl border px-3.5 py-2 text-xs font-semibold transition-colors whitespace-nowrap shrink-0 min-h-[42px] ${
               soloExcedidos
                 ? 'border-[#DC2626] bg-[#FEE2E2] text-[#93000A]'
                 : 'border-slate-200 bg-white text-[#334155] hover:bg-slate-50'
@@ -460,9 +471,9 @@ export const PresupuestosView: React.FC<PresupuestosViewProps> = ({
           <button
             type="button"
             onClick={handleExportCsv}
-            className="inline-flex items-center gap-1.5 rounded-md border border-slate-300 bg-white px-3.5 py-2 text-xs font-semibold text-[#0F2942] hover:bg-slate-50 whitespace-nowrap shrink-0 min-h-[40px]"
+            className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3.5 py-2 text-xs font-semibold text-[#0F2942] hover:bg-slate-50 whitespace-nowrap shrink-0 min-h-[42px]"
           >
-            <Download className="h-3.5 w-3.5" />
+            <Download className="h-3.5 w-3.5 text-[#0284C7]" />
             Exportar CSV
           </button>
         </div>
@@ -470,22 +481,22 @@ export const PresupuestosView: React.FC<PresupuestosViewProps> = ({
 
       {/* 4-Column KPI Strip */}
       <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
-        <div className="rounded-lg border border-slate-200 bg-white p-5">
-          <div className="text-xs font-medium text-[#43474D]">Valor contratado</div>
-          <div className="mt-1.5 font-mono text-xl font-bold text-[#0D1C2F] tabular-nums">
+        <div className="rounded-2xl bg-gradient-to-br from-[#0F2942] to-[#0284C7] p-5 text-white shadow-sm">
+          <div className="text-xs font-medium text-sky-100">Valor contratado</div>
+          <div className="mt-1.5 font-mono text-xl font-bold text-white tabular-nums">
             {formatRD(totalesFiltrados.valorContratoRD, moneda)}
           </div>
-          <div className="mt-1 text-[11px] text-[#43474D] tabular-nums">
+          <div className="mt-1 text-[11px] text-sky-100/90 tabular-nums">
             {comparacionesFiltradas.length} proyecto(s) en vista
           </div>
         </div>
 
-        <div className="rounded-lg border border-slate-200 bg-white p-5">
-          <div className="text-xs font-medium text-[#43474D]">Costo planificado</div>
+        <div className="rounded-2xl border border-slate-200/90 bg-white p-5">
+          <div className="text-xs font-medium text-[#475569]">Costo planificado</div>
           <div className="mt-1.5 font-mono text-xl font-bold text-[#0F2942] tabular-nums">
             {formatRD(totalesFiltrados.totalPlanificadoRD, moneda)}
           </div>
-          <div className="mt-1 font-mono text-[11px] text-[#43474D] tabular-nums">
+          <div className="mt-1 font-mono text-[11px] text-[#475569] tabular-nums">
             Margen plan:{' '}
             {totalesFiltrados.margenPlanificadoPct !== null
               ? `${totalesFiltrados.margenPlanificadoPct}%`
@@ -493,8 +504,8 @@ export const PresupuestosView: React.FC<PresupuestosViewProps> = ({
           </div>
         </div>
 
-        <div className="rounded-lg border border-slate-200 bg-white p-5">
-          <div className="text-xs font-medium text-[#43474D]">Costo ejecutado en vivo</div>
+        <div className="rounded-2xl border border-slate-200/90 bg-white p-5">
+          <div className="text-xs font-medium text-[#475569]">Costo ejecutado en vivo</div>
           <div
             className={`mt-1.5 font-mono text-xl font-bold tabular-nums ${
               totalesFiltrados.totalEjecutadoRD > totalesFiltrados.totalPlanificadoRD
@@ -504,7 +515,7 @@ export const PresupuestosView: React.FC<PresupuestosViewProps> = ({
           >
             {formatRD(totalesFiltrados.totalEjecutadoRD, moneda)}
           </div>
-          <div className="mt-1 font-mono text-[11px] text-[#43474D] tabular-nums">
+          <div className="mt-1 font-mono text-[11px] text-[#475569] tabular-nums">
             Uso:{' '}
             {totalesFiltrados.totalPlanificadoRD > 0
               ? `${Number(
@@ -517,8 +528,8 @@ export const PresupuestosView: React.FC<PresupuestosViewProps> = ({
           </div>
         </div>
 
-        <div className="rounded-lg border border-slate-200 bg-white p-5">
-          <div className="flex items-center justify-between text-xs font-medium text-[#43474D]">
+        <div className="rounded-2xl border border-slate-200/90 bg-white p-5">
+          <div className="flex items-center justify-between text-xs font-medium text-[#475569]">
             <span>Margen real consolidado</span>
             {totalesFiltrados.margenRealRD < 0 ? (
               <TrendingDown className="h-4 w-4 text-[#DC2626]" />
@@ -533,7 +544,7 @@ export const PresupuestosView: React.FC<PresupuestosViewProps> = ({
           >
             {formatRD(totalesFiltrados.margenRealRD, moneda)}
           </div>
-          <div className="mt-1 font-mono text-[11px] text-[#43474D] tabular-nums">
+          <div className="mt-1 font-mono text-[11px] text-[#475569] tabular-nums">
             {totalesFiltrados.margenRealPct !== null
               ? `${totalesFiltrados.margenRealPct}% sobre contratos`
               : 'Sin valor contractual'}
@@ -544,27 +555,27 @@ export const PresupuestosView: React.FC<PresupuestosViewProps> = ({
       {/* 2 Interactive Charts Row */}
       <div className="grid grid-cols-1 xl:grid-cols-12 gap-6 items-stretch">
         {/* Left Chart: Projects Cost vs Plan OR Margins */}
-        <div className="xl:col-span-7 rounded-lg border border-slate-200 bg-white p-5 flex flex-col justify-between min-w-0">
+        <div className="xl:col-span-7 rounded-2xl border border-slate-200/90 bg-white p-5 flex flex-col justify-between min-w-0">
           <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
             <div>
-              <h2 className="text-sm font-bold text-[#0D1C2F]">
+              <h2 className="text-sm font-bold text-[#0F2942]">
                 {modoGraficoProyectos === 'costos'
                   ? 'Presupuesto vs. costo ejecutado por proyecto'
                   : 'Margen planificado vs. margen real por proyecto'}
               </h2>
-              <p className="text-xs text-[#43474D]">
+              <p className="text-xs text-[#475569]">
                 Haz clic en una barra para filtrar el desglose por categoría.
               </p>
             </div>
 
-            <div className="inline-flex rounded-md bg-slate-100 p-1">
+            <div className="inline-flex rounded-2xl border border-slate-200/70 bg-[#F1F5F9] p-1">
               <button
                 type="button"
                 onClick={() => setModoGraficoProyectos('costos')}
-                className={`rounded-md px-3 py-1.5 text-xs font-semibold transition-colors whitespace-nowrap shrink-0 ${
+                className={`rounded-xl px-3 py-1.5 text-xs font-semibold transition-colors whitespace-nowrap shrink-0 ${
                   modoGraficoProyectos === 'costos'
                     ? 'bg-white text-[#0F2942] shadow-sm'
-                    : 'text-[#43474D] hover:text-[#0F2942]'
+                    : 'text-[#475569] hover:text-[#0F2942]'
                 }`}
               >
                 Costos
@@ -572,10 +583,10 @@ export const PresupuestosView: React.FC<PresupuestosViewProps> = ({
               <button
                 type="button"
                 onClick={() => setModoGraficoProyectos('margenes')}
-                className={`rounded-md px-3 py-1.5 text-xs font-semibold transition-colors whitespace-nowrap shrink-0 ${
+                className={`rounded-xl px-3 py-1.5 text-xs font-semibold transition-colors whitespace-nowrap shrink-0 ${
                   modoGraficoProyectos === 'margenes'
                     ? 'bg-white text-[#0F2942] shadow-sm'
-                    : 'text-[#43474D] hover:text-[#0F2942]'
+                    : 'text-[#475569] hover:text-[#0F2942]'
                 }`}
               >
                 Márgenes
@@ -584,11 +595,11 @@ export const PresupuestosView: React.FC<PresupuestosViewProps> = ({
           </div>
 
           {projectChartData.length === 0 ? (
-            <div className="flex-1 flex items-center justify-center py-12 text-xs text-[#43474D]">
+            <div className="flex-1 flex items-center justify-center rounded-xl border border-slate-200/70 bg-[#F8FAFC] py-12 text-xs text-[#475569]">
               No hay proyectos que coincidan con el filtro actual.
             </div>
           ) : (
-            <div className="w-full h-[260px] min-w-0">
+            <div className="w-full h-[270px] min-w-0 rounded-xl border border-slate-200/70 bg-[#F8FAFC] p-3">
               <ResponsiveContainer width="100%" height="100%">
                 <BarChart
                   data={projectChartData}
@@ -683,15 +694,15 @@ export const PresupuestosView: React.FC<PresupuestosViewProps> = ({
         </div>
 
         {/* Right Chart: Category Breakdown (Bars vs Donut) */}
-        <div className="xl:col-span-5 rounded-lg border border-slate-200 bg-white p-5 flex flex-col justify-between min-w-0">
+        <div className="xl:col-span-5 rounded-2xl border border-slate-200/90 bg-white p-5 flex flex-col justify-between min-w-0">
           <div className="flex flex-wrap items-center justify-between gap-2 mb-4">
             <div className="min-w-0">
-              <h2 className="text-sm font-bold text-[#0D1C2F] truncate">
+              <h2 className="text-sm font-bold text-[#0F2942] truncate">
                 {focusedComparison
                   ? `Categorías · ${focusedComparison.codigoContrato}`
                   : 'Desglose por categoría (consolidado)'}
               </h2>
-              <div className="flex items-center gap-2 text-xs text-[#43474D]">
+              <div className="flex items-center gap-2 text-xs text-[#475569]">
                 <span>6 categorías de ejecución</span>
                 {focusedComparison && (
                   <button
@@ -705,14 +716,14 @@ export const PresupuestosView: React.FC<PresupuestosViewProps> = ({
               </div>
             </div>
 
-            <div className="inline-flex rounded-md bg-slate-100 p-1 shrink-0">
+            <div className="inline-flex rounded-2xl border border-slate-200/70 bg-[#F1F5F9] p-1 shrink-0">
               <button
                 type="button"
                 onClick={() => setModoGraficoCategorias('barras')}
-                className={`rounded-md px-2.5 py-1.5 text-xs font-semibold transition-colors whitespace-nowrap shrink-0 ${
+                className={`rounded-xl px-2.5 py-1.5 text-xs font-semibold transition-colors whitespace-nowrap shrink-0 ${
                   modoGraficoCategorias === 'barras'
                     ? 'bg-white text-[#0F2942] shadow-sm'
-                    : 'text-[#43474D] hover:text-[#0F2942]'
+                    : 'text-[#475569] hover:text-[#0F2942]'
                 }`}
               >
                 Plan vs. real
@@ -720,10 +731,10 @@ export const PresupuestosView: React.FC<PresupuestosViewProps> = ({
               <button
                 type="button"
                 onClick={() => setModoGraficoCategorias('distribucion')}
-                className={`rounded-md px-2.5 py-1.5 text-xs font-semibold transition-colors whitespace-nowrap shrink-0 ${
+                className={`rounded-xl px-2.5 py-1.5 text-xs font-semibold transition-colors whitespace-nowrap shrink-0 ${
                   modoGraficoCategorias === 'distribucion'
                     ? 'bg-white text-[#0F2942] shadow-sm'
-                    : 'text-[#43474D] hover:text-[#0F2942]'
+                    : 'text-[#475569] hover:text-[#0F2942]'
                 }`}
               >
                 Distribución
@@ -732,7 +743,7 @@ export const PresupuestosView: React.FC<PresupuestosViewProps> = ({
           </div>
 
           {modoGraficoCategorias === 'barras' ? (
-            <div className="w-full h-[260px] min-w-0">
+            <div className="w-full h-[270px] min-w-0 rounded-xl border border-slate-200/70 bg-[#F8FAFC] p-3">
               <ResponsiveContainer width="100%" height="100%">
                 <BarChart
                   data={categoryChartData}
@@ -789,11 +800,11 @@ export const PresupuestosView: React.FC<PresupuestosViewProps> = ({
               </ResponsiveContainer>
             </div>
           ) : pieData.length === 0 ? (
-            <div className="flex-1 flex items-center justify-center py-12 text-xs text-[#43474D]">
+            <div className="flex-1 flex items-center justify-center rounded-xl border border-slate-200/70 bg-[#F8FAFC] py-12 text-xs text-[#475569]">
               Aún no hay costos ejecutados en estas categorías.
             </div>
           ) : (
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 items-center h-[260px]">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 items-center h-[270px] rounded-xl border border-slate-200/70 bg-[#F8FAFC] p-3">
               <div className="h-[220px] min-w-0">
                 <ResponsiveContainer width="100%" height="100%">
                   <PieChart>
@@ -849,13 +860,13 @@ export const PresupuestosView: React.FC<PresupuestosViewProps> = ({
       </div>
 
       {/* Project Budget Comparison Table */}
-      <div className="rounded-lg border border-slate-200 bg-white overflow-hidden">
-        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 bg-[#F8FAFC] px-5 py-3.5">
+      <div className="rounded-2xl border border-slate-200/90 bg-white overflow-hidden">
+        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200/80 bg-[#F8FAFC] px-5 py-4">
           <div>
-            <h2 className="text-sm font-bold text-[#0D1C2F]">
+            <h2 className="text-sm font-bold text-[#0F2942]">
               Control presupuestario y margen por proyecto
             </h2>
-            <p className="text-xs text-[#43474D]">
+            <p className="text-xs text-[#475569]">
               Comparación de versión vigente al {fechaCalculoIso} frente a costos en vivo de viáticos, rentas y asignaciones.
             </p>
           </div>
@@ -871,14 +882,14 @@ export const PresupuestosView: React.FC<PresupuestosViewProps> = ({
         </div>
 
         {comparacionesFiltradas.length === 0 ? (
-          <div className="p-8 text-center text-xs text-[#43474D]">
+          <div className="p-8 text-center text-xs text-[#475569]">
             No hay presupuestos de proyectos que coincidan con los filtros actuales.
           </div>
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full border-collapse text-left text-xs">
               <thead>
-                <tr className="border-b border-slate-200 bg-white text-[11px] font-semibold text-[#43474D]">
+                <tr className="border-b border-slate-200/80 bg-[#F8FAFC] text-[11px] font-semibold uppercase tracking-wider text-[#475569]">
                   <th className="px-4 py-3">Proyecto / Contrato</th>
                   <th className="px-4 py-3">Versión vigente</th>
                   <th className="px-4 py-3 text-right">Contrato</th>
@@ -889,7 +900,7 @@ export const PresupuestosView: React.FC<PresupuestosViewProps> = ({
                   <th className="px-4 py-3 text-right">Acciones</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-slate-200">
+              <tbody className="divide-y divide-slate-100">
                 {comparacionesFiltradas.map((c) => {
                   const tieneBorrador = borradorPorProyecto.get(c.proyectoId) ?? false;
                   const isFocused = focusedProyectoId === c.proyectoId;
@@ -976,7 +987,7 @@ export const PresupuestosView: React.FC<PresupuestosViewProps> = ({
                         <button
                           type="button"
                           onClick={() => setModalProyectoId(c.proyectoId)}
-                          className="inline-flex items-center gap-1.5 rounded-md border border-slate-300 bg-white px-3 py-1.5 text-xs font-semibold text-[#0F2942] hover:bg-slate-50 whitespace-nowrap shrink-0 min-h-[36px]"
+                          className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-[#0F2942] hover:bg-slate-50 whitespace-nowrap shrink-0 min-h-[36px]"
                         >
                           <Calculator className="h-3.5 w-3.5 text-[#0284C7]" />
                           {canManage
