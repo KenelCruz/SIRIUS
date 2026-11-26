@@ -71,7 +71,10 @@ export interface RepositorioOperacion {
   actualizarCliente(empresaId: string, cliente: Cliente): Promise<Cliente>;
   crearProyecto(
     empresaId: string,
-    datos: Omit<Proyecto, 'id' | 'empresaId' | 'estado' | 'fechaCreacion' | 'version' | 'updatedAt' | 'syncStatus'>
+    datos: Omit<
+      Proyecto,
+      'id' | 'empresaId' | 'estado' | 'fechaCreacion' | 'version' | 'updatedAt' | 'syncStatus'
+    > & { estado?: EstadoServicio; progresoPct?: number }
   ): Promise<Proyecto>;
   actualizarProyecto(empresaId: string, proyecto: Proyecto): Promise<Proyecto>;
   crearVersionPresupuestoProyecto(params: {

@@ -2,6 +2,7 @@ import type {
   Asignacion,
   BitacoraEntrada,
   EstadoServicio,
+  Proyecto,
   RolEmpresa,
   Servicio,
   ServicioTecnico,
@@ -234,3 +235,34 @@ export function calcularEstadoProyecto(
   }
   return maxEstado;
 }
+
+export const PROGRESO_POR_ESTADO: Record<EstadoServicio, number> = {
+  cotizado: 10,
+  aprobado: 25,
+  programado: 40,
+  en_campo: 60,
+  procesando: 75,
+  entregado: 90,
+  cobrado: 100,
+};
+
+export function calcularProgresoProyecto(
+  serviciosProyecto: Array<Pick<Servicio, 'estado'>>,
+  proyectoFallback?: Pick<Proyecto, 'estado' | 'progresoPct'>
+): number {
+  if (serviciosProyecto.length > 0) {
+    const suma = serviciosProyecto.reduce(
+      (acc, s) => acc + (PROGRESO_POR_ESTADO[s.estado] ?? 10),
+      0
+    );
+    return Math.max(0, Math.min(100, Math.round(suma / serviciosProyecto.length)));
+  }
+  if (
+    typeof proyectoFallback?.progresoPct === 'number' &&
+    Number.isFinite(proyectoFallback.progresoPct)
+  ) {
+    return Math.max(0, Math.min(100, Math.round(proyectoFallback.progresoPct)));
+  }
+  return PROGRESO_POR_ESTADO[proyectoFallback?.estado ?? 'cotizado'] ?? 10;
+}
+

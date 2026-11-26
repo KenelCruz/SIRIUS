@@ -1458,7 +1458,7 @@ export class LocalRepositorioOperacion implements RepositorioOperacion {
     const snap = this.obtenerSnapshot(empresaId);
     const nuevo: Cliente = {
       ...datos,
-      id: `cli-${Date.now()}`,
+      id: `cli-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
       empresaId,
       nombre: datos.nombre.trim(),
       rnc: datos.rnc.trim(),
@@ -1493,18 +1493,23 @@ export class LocalRepositorioOperacion implements RepositorioOperacion {
     datos: Omit<
       Proyecto,
       'id' | 'empresaId' | 'estado' | 'fechaCreacion' | 'version' | 'updatedAt' | 'syncStatus'
-    >
+    > & { estado?: EstadoServicio; progresoPct?: number }
   ): Promise<Proyecto> {
     const sesion = this.obtenerSesionRequerida();
     if (!puedeCrearOEditarOperacion(sesion.rolActivo)) {
       throw new Error('No tienes permisos para crear proyectos.');
     }
     const snap = this.obtenerSnapshot(empresaId);
+    const estadoInicial: EstadoServicio = datos.estado ?? 'cotizado';
     const nuevo: Proyecto = {
       ...datos,
-      id: `proy-${Date.now()}`,
+      id: `proy-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
       empresaId,
-      estado: 'cotizado',
+      estado: estadoInicial,
+      progresoPct:
+        typeof datos.progresoPct === 'number' && Number.isFinite(datos.progresoPct)
+          ? Math.max(0, Math.min(100, Math.round(datos.progresoPct)))
+          : undefined,
       fechaCreacion: new Date().toISOString().slice(0, 10),
       version: 1,
       updatedAt: new Date().toISOString(),
@@ -1520,7 +1525,7 @@ export class LocalRepositorioOperacion implements RepositorioOperacion {
     this.registrarEvento(snap, {
       entidadTipo: 'proyecto',
       entidadId: nuevo.id,
-      accion: 'Proyecto creado (cotizado)',
+      accion: `Proyecto creado (${estadoInicial})`,
       detalle: `Proyecto "${nuevo.nombre}" (${nuevo.codigoContrato}) · Presup. viáticos RD$ ${nuevo.presupuestoViaticosRD.toLocaleString('en-US')}.`,
       usuarioId: sesion.usuario.id,
       usuarioNombre: sesion.usuario.nombre,

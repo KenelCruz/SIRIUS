@@ -164,6 +164,62 @@ async function startServer() {
     });
   });
 
+  const RECEIPT_OCR_MODELS = ['gemini-4-hydrogen', 'gemini-3.1-flash-lite'] as const;
+
+  const isTransientGeminiError = (err: unknown): { transient: boolean; status: number; raw: string } => {
+    const raw = err instanceof Error ? err.message : String(err ?? '');
+    const lower = raw.toLowerCase();
+    const is503 =
+      lower.includes('503') ||
+      lower.includes('unavailable') ||
+      lower.includes('high demand') ||
+      lower.includes('overloaded');
+    const is429 =
+      lower.includes('429') ||
+      lower.includes('resource_exhausted') ||
+      lower.includes('quota') ||
+      lower.includes('rate limit');
+    const isNetwork =
+      lower.includes('econnreset') ||
+      lower.includes('etimedout') ||
+      lower.includes('fetch failed') ||
+      lower.includes('network');
+    if (is503) return { transient: true, status: 503, raw };
+    if (is429) return { transient: true, status: 429, raw };
+    if (isNetwork) return { transient: true, status: 503, raw };
+    return { transient: false, status: 500, raw };
+  };
+
+  const formatReceiptErrorMessage = (err: unknown): { status: number; message: string } => {
+    const info = isTransientGeminiError(err);
+    const lower = info.raw.toLowerCase();
+    if (info.status === 503) {
+      return {
+        status: 503,
+        message:
+          'El servicio de análisis IA tiene alta demanda temporal en este momento. Intenta reintentar en unos segundos o completa los datos manualmente.',
+      };
+    }
+    if (info.status === 429) {
+      return {
+        status: 429,
+        message:
+          'Se alcanzó temporalmente el límite de solicitudes del analizador de recibos. Espera unos segundos antes de reintentar o registra el viático manualmente.',
+      };
+    }
+    if (lower.includes('api_key_invalid') || lower.includes('permission_denied') || lower.includes('403')) {
+      return {
+        status: 403,
+        message:
+          'La clave de API de Gemini no es válida o no tiene permisos activos en la configuración del servidor.',
+      };
+    }
+    return {
+      status: 500,
+      message: 'No se pudo analizar la factura automáticamente. Verifica la nitidez de la foto o completa los campos manualmente.',
+    };
+  };
+
   app.post('/api/expenses/analyze-receipt', requireSession, async (req, res) => {
     try {
       const { imageBase64, mimeType, surveyCode } = req.body ?? {};
@@ -209,114 +265,122 @@ async function startServer() {
 
       let responseText: string | undefined;
       let lastErr: unknown;
-      for (let intento = 0; intento < 3; intento += 1) {
-        try {
-          const response = await ai.models.generateContent({
-            model: 'gemini-4-hydrogen',
-            contents: {
-              parts: [
-                {
-                  inlineData: {
-                    mimeType: safeMime,
-                    data: cleanBase64,
-                  },
-                },
-                { text: prompt },
-              ],
-            },
-            config: {
-              systemInstruction:
-                'Eres un asistente contable especializado en viáticos de ingeniería topográfica en República Dominicana. Extrae montos, cargos desglosados, NCF (si aplica) y fecha con exactitud. Devuelve únicamente JSON válido según el esquema.',
-              responseMimeType: 'application/json',
-              responseSchema: {
-                type: Type.OBJECT,
-                properties: {
-                  merchant: {
-                    type: Type.STRING,
-                    description: 'Nombre del establecimiento, estación de combustible, peaje o proveedor.',
-                  },
-                  amountRD: {
-                    type: Type.NUMBER,
-                    description: 'Monto total pagado en pesos dominicanos (RD$).',
-                  },
-                  subtotalRD: {
-                    type: Type.NUMBER,
-                    description: 'Subtotal antes de ITBIS y cargos adicionales en RD$, o 0 si no aparece.',
-                  },
-                  itbisRD: {
-                    type: Type.NUMBER,
-                    description: 'Impuesto ITBIS en RD$, o 0 si no está desglosado.',
-                  },
-                  otrosCargosRD: {
-                    type: Type.NUMBER,
-                    description: 'Suma de cargos adicionales (propina legal 10%, servicio, envío, recargos) en RD$, o 0.',
-                  },
-                  cargos: {
-                    type: Type.ARRAY,
-                    description: 'Lista de cargos o renglones facturados en el comprobante.',
-                    items: {
-                      type: Type.OBJECT,
-                      properties: {
-                        descripcion: {
-                          type: Type.STRING,
-                          description: 'Nombre del cargo o concepto (ej. Gasolina Premium, ITBIS 18%, Propina 10%).',
-                        },
-                        montoRD: {
-                          type: Type.NUMBER,
-                          description: 'Monto de este cargo en RD$.',
-                        },
-                      },
-                      required: ['descripcion', 'montoRD'],
+
+      modelLoop: for (const modelName of RECEIPT_OCR_MODELS) {
+        for (let intento = 0; intento < 2; intento += 1) {
+          try {
+            const response = await ai.models.generateContent({
+              model: modelName,
+              contents: {
+                parts: [
+                  {
+                    inlineData: {
+                      mimeType: safeMime,
+                      data: cleanBase64,
                     },
                   },
-                  ncf: {
-                    type: Type.STRING,
-                    description: 'Número de Comprobante Fiscal (ej. B0100004512) o cadena vacía si no aplica.',
-                  },
-                  requiereNcf: {
-                    type: Type.BOOLEAN,
-                    description: 'true si el comprobante contiene o requiere NCF fiscal; false en caso contrario.',
-                  },
-                  category: {
-                    type: Type.STRING,
-                    description: 'Una de: Combustible, Dieta, Hospedaje, Peaje, Materiales, Otro',
-                  },
-                  dateIso: {
-                    type: Type.STRING,
-                    description: 'Fecha del recibo en formato YYYY-MM-DD.',
-                  },
-                  notes: {
-                    type: Type.STRING,
-                    description: 'Detalle breve de los artículos, cargos o servicio facturado.',
-                  },
-                  confidence: {
-                    type: Type.STRING,
-                    description: 'Nivel de legibilidad: alta, media, o baja.',
-                  },
-                },
-                required: [
-                  'merchant',
-                  'amountRD',
-                  'subtotalRD',
-                  'itbisRD',
-                  'otrosCargosRD',
-                  'cargos',
-                  'ncf',
-                  'requiereNcf',
-                  'category',
-                  'dateIso',
-                  'notes',
-                  'confidence',
+                  { text: prompt },
                 ],
               },
-            },
-          });
-          responseText = response.text;
-          break;
-        } catch (err) {
-          lastErr = err;
-          if (intento < 2) {
-            await new Promise((r) => setTimeout(r, 400 * (intento + 1)));
+              config: {
+                systemInstruction:
+                  'Eres un asistente contable especializado en viáticos de ingeniería topográfica en República Dominicana. Extrae montos, cargos desglosados, NCF (si aplica) y fecha con exactitud. Devuelve únicamente JSON válido según el esquema.',
+                responseMimeType: 'application/json',
+                responseSchema: {
+                  type: Type.OBJECT,
+                  properties: {
+                    merchant: {
+                      type: Type.STRING,
+                      description: 'Nombre del establecimiento, estación de combustible, peaje o proveedor.',
+                    },
+                    amountRD: {
+                      type: Type.NUMBER,
+                      description: 'Monto total pagado en pesos dominicanos (RD$).',
+                    },
+                    subtotalRD: {
+                      type: Type.NUMBER,
+                      description: 'Subtotal antes de ITBIS y cargos adicionales en RD$, o 0 si no aparece.',
+                    },
+                    itbisRD: {
+                      type: Type.NUMBER,
+                      description: 'Impuesto ITBIS en RD$, o 0 si no está desglosado.',
+                    },
+                    otrosCargosRD: {
+                      type: Type.NUMBER,
+                      description: 'Suma de cargos adicionales (propina legal 10%, servicio, envío, recargos) en RD$, o 0.',
+                    },
+                    cargos: {
+                      type: Type.ARRAY,
+                      description: 'Lista de cargos o renglones facturados en el comprobante.',
+                      items: {
+                        type: Type.OBJECT,
+                        properties: {
+                          descripcion: {
+                            type: Type.STRING,
+                            description: 'Nombre del cargo o concepto (ej. Gasolina Premium, ITBIS 18%, Propina 10%).',
+                          },
+                          montoRD: {
+                            type: Type.NUMBER,
+                            description: 'Monto de este cargo en RD$.',
+                          },
+                        },
+                        required: ['descripcion', 'montoRD'],
+                      },
+                    },
+                    ncf: {
+                      type: Type.STRING,
+                      description: 'Número de Comprobante Fiscal (ej. B0100004512) o cadena vacía si no aplica.',
+                    },
+                    requiereNcf: {
+                      type: Type.BOOLEAN,
+                      description: 'true si el comprobante contiene o requiere NCF fiscal; false en caso contrario.',
+                    },
+                    category: {
+                      type: Type.STRING,
+                      description: 'Una de: Combustible, Dieta, Hospedaje, Peaje, Materiales, Otro',
+                    },
+                    dateIso: {
+                      type: Type.STRING,
+                      description: 'Fecha del recibo en formato YYYY-MM-DD.',
+                    },
+                    notes: {
+                      type: Type.STRING,
+                      description: 'Detalle breve de los artículos, cargos o servicio facturado.',
+                    },
+                    confidence: {
+                      type: Type.STRING,
+                      description: 'Nivel de legibilidad: alta, media, o baja.',
+                    },
+                  },
+                  required: [
+                    'merchant',
+                    'amountRD',
+                    'subtotalRD',
+                    'itbisRD',
+                    'otrosCargosRD',
+                    'cargos',
+                    'ncf',
+                    'requiereNcf',
+                    'category',
+                    'dateIso',
+                    'notes',
+                    'confidence',
+                  ],
+                },
+              },
+            });
+            responseText = response.text;
+            break modelLoop;
+          } catch (err) {
+            lastErr = err;
+            const errInfo = isTransientGeminiError(err);
+            if (!errInfo.transient && !errInfo.raw.toLowerCase().includes('not_found')) {
+              break modelLoop;
+            }
+            if (intento === 0) {
+              const jitter = Math.floor(Math.random() * 250);
+              await new Promise((r) => setTimeout(r, 650 + jitter));
+            }
           }
         }
       }
@@ -331,9 +395,9 @@ async function startServer() {
       const extracted = normalizarResultadoAnalisisRecibo(rawParsed);
       return res.json({ ok: true, extracted });
     } catch (err: unknown) {
-      const message = err instanceof Error ? err.message : 'Error analizando el comprobante.';
-      console.error('Receipt analysis error:', message);
-      return res.status(500).json({ error: message });
+      const formatted = formatReceiptErrorMessage(err);
+      console.error('Receipt analysis error:', err instanceof Error ? err.message : err);
+      return res.status(formatted.status).json({ error: formatted.message });
     }
   });
 

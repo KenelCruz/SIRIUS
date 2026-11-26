@@ -8,6 +8,7 @@ import {
   Navigation,
   Plus,
   Receipt,
+  RotateCcw,
   Sparkles,
   Trash2,
   Upload,
@@ -47,6 +48,7 @@ import {
   haversineMeters,
   latLonToUtm19N,
 } from '../utils/geodesy';
+import { compressImageFast } from '../utils/imageOptimize';
 import { MediaThumb } from './MediaThumb';
 
 export type ProyectoSelectorItem = Pick<Proyecto, 'id' | 'nombre' | 'codigoContrato'>;
@@ -113,36 +115,40 @@ const FALLBACK_REGLAS_CAPTURA: ReglasCapturaViaticosTecnico = {
 };
 
 async function compressImageToBase64(file: File): Promise<{ base64: string; mimeType: string }> {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onerror = () => reject(new Error('No se pudo leer la imagen.'));
-    reader.onload = () => {
-      const img = new Image();
-      img.onerror = () => reject(new Error('Formato de imagen inválido.'));
-      img.onload = () => {
-        const maxDim = 1280;
-        let { width, height } = img;
-        if (width > maxDim || height > maxDim) {
-          const ratio = Math.min(maxDim / width, maxDim / height);
-          width = Math.round(width * ratio);
-          height = Math.round(height * ratio);
-        }
-        const canvas = document.createElement('canvas');
-        canvas.width = width;
-        canvas.height = height;
-        const ctx = canvas.getContext('2d');
-        if (!ctx) {
-          resolve({ base64: String(reader.result), mimeType: file.type || 'image/jpeg' });
-          return;
-        }
-        ctx.drawImage(img, 0, 0, width, height);
-        const dataUrl = canvas.toDataURL('image/jpeg', 0.82);
-        resolve({ base64: dataUrl, mimeType: 'image/jpeg' });
-      };
-      img.src = String(reader.result);
-    };
-    reader.readAsDataURL(file);
-  });
+  const { dataUrl, mimeType } = await compressImageFast(file, { maxDim: 1280, quality: 0.8 });
+  return { base64: dataUrl, mimeType };
+}
+
+function formatFriendlyOcrError(rawMessage: string): string {
+  const trimmed = rawMessage.trim();
+  if (!trimmed) {
+    return 'No se pudo analizar el comprobante automáticamente. Puedes reintentar o ingresar los datos manualmente.';
+  }
+  const lower = trimmed.toLowerCase();
+  if (
+    lower.includes('"code":503') ||
+    lower.includes('unavailable') ||
+    lower.includes('high demand') ||
+    lower.includes('overloaded')
+  ) {
+    return 'El servicio de lectura IA está experimentando alta demanda temporal. Pulsa "Reintentar análisis" en unos segundos o completa los campos manualmente.';
+  }
+  if (lower.includes('"code":429') || lower.includes('resource_exhausted') || lower.includes('quota')) {
+    return 'Se alcanzó temporalmente el límite de análisis IA. Espera unos segundos y pulsa "Reintentar análisis".';
+  }
+  if (trimmed.startsWith('{')) {
+    try {
+      const parsed = JSON.parse(trimmed) as { error?: { message?: string } | string; message?: string };
+      if (typeof parsed.error === 'string' && parsed.error) return parsed.error;
+      if (parsed.error && typeof parsed.error === 'object' && parsed.error.message) {
+        return parsed.error.message;
+      }
+      if (parsed.message) return parsed.message;
+    } catch {
+      // keep raw message
+    }
+  }
+  return trimmed;
 }
 
 export const MobileExpenseCaptureModal: React.FC<MobileExpenseCaptureModalProps> = ({
@@ -206,6 +212,10 @@ export const MobileExpenseCaptureModal: React.FC<MobileExpenseCaptureModalProps>
 
   const [receiptPreview, setReceiptPreview] = useState<string | null>(null);
   const [pendingReceiptMime, setPendingReceiptMime] = useState<string | undefined>(undefined);
+  const [lastReceiptPayload, setLastReceiptPayload] = useState<{
+    base64: string;
+    mimeType: string;
+  } | null>(null);
   const [needsOfflineOcr, setNeedsOfflineOcr] = useState(false);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
@@ -262,6 +272,7 @@ export const MobileExpenseCaptureModal: React.FC<MobileExpenseCaptureModalProps>
     setOcrStatusMsg(null);
     setCameraError(null);
     setExtractedAnalysis(null);
+    setLastReceiptPayload(null);
 
     if (editingViatico) {
       setRutaId(editingViatico.rutaId || '');
@@ -414,9 +425,9 @@ export const MobileExpenseCaptureModal: React.FC<MobileExpenseCaptureModalProps>
     setOcrStatusMsg(null);
     setCameraError(null);
     setMethod('OCR Móvil');
+    setLastReceiptPayload({ base64, mimeType });
     setReceiptPreview(base64);
     setPendingReceiptMime(mimeType);
-
     if (!isOnline) {
       setNeedsOfflineOcr(true);
       setExtractedAnalysis(null);
@@ -427,6 +438,7 @@ export const MobileExpenseCaptureModal: React.FC<MobileExpenseCaptureModalProps>
       return;
     }
 
+    setErrorMsg(null);
     setExtractedAnalysis(null);
     setIsAnalyzing(true);
     try {
@@ -471,7 +483,8 @@ export const MobileExpenseCaptureModal: React.FC<MobileExpenseCaptureModalProps>
         `Análisis IA aplicado (${partesResumen.join(' · ') || `confianza ${ex.confidence}`}). Verifica los datos antes de registrar.`
       );
     } catch (err: unknown) {
-      setErrorMsg(err instanceof Error ? err.message : 'Error analizando el comprobante con IA.');
+      const raw = err instanceof Error ? err.message : 'Error analizando el comprobante con IA.';
+      setErrorMsg(formatFriendlyOcrError(raw));
     } finally {
       setIsAnalyzing(false);
     }
@@ -1151,8 +1164,24 @@ export const MobileExpenseCaptureModal: React.FC<MobileExpenseCaptureModalProps>
           )}
 
           {errorMsg && (
-            <div className="rounded-xl border border-rose-200 bg-rose-50 px-3.5 py-2.5 text-xs text-rose-800">
-              {errorMsg}
+            <div className="flex flex-wrap items-center justify-between gap-2.5 rounded-xl border border-rose-200 bg-rose-50 px-3.5 py-2.5 text-xs text-rose-800">
+              <span className="flex-1 min-w-[200px]">{errorMsg}</span>
+              {lastReceiptPayload && isOnline && captureMode === 'ocr' && (
+                <button
+                  type="button"
+                  disabled={isAnalyzing}
+                  onClick={() =>
+                    analyzeReceiptDataUrl(
+                      lastReceiptPayload.base64,
+                      lastReceiptPayload.mimeType
+                    )
+                  }
+                  className="inline-flex items-center gap-1.5 rounded-lg border border-rose-300 bg-white px-2.5 py-1.5 text-[11px] font-semibold text-[#991B1B] hover:bg-rose-100 disabled:opacity-50 whitespace-nowrap shrink-0"
+                >
+                  <RotateCcw className="h-3.5 w-3.5" />
+                  {isAnalyzing ? 'Reintentando...' : 'Reintentar análisis'}
+                </button>
+              )}
             </div>
           )}
 

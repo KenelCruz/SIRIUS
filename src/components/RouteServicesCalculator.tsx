@@ -2,12 +2,15 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import {
+  ArrowLeft,
+  ArrowRight,
   Camera,
   Car,
   Check,
   Compass,
   Download,
   Layers,
+  LocateFixed,
   Map as MapIcon,
   MapPin,
   Mountain,
@@ -40,7 +43,13 @@ import type {
   Vehiculo,
   Viatico,
 } from '../types/domain';
-import { formatRD, formatSantoDomingoAST, TAREA_IN_M2 } from '../utils/geodesy';
+import {
+  formatArea,
+  formatPerimeter,
+  formatRD,
+  formatSantoDomingoAST,
+  TAREA_IN_M2,
+} from '../utils/geodesy';
 import { parseKmzOrKmlFile, type ParsedKmzResult } from '../utils/kmzParser';
 import {
   computeRouteViaticos,
@@ -162,13 +171,18 @@ export const RouteServicesCalculator: React.FC<RouteServicesCalculatorProps> = (
   const mapContainerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<L.Map | null>(null);
   const tileRef = useRef<L.TileLayer | null>(null);
-  const overlayRef = useRef<L.FeatureGroup | null>(null);
+  const routeOverlayRef = useRef<L.FeatureGroup | null>(null);
+  const parcelOverlayRef = useRef<L.FeatureGroup | null>(null);
 
+  const [activeStep, setActiveStep] = useState<'paso1' | 'paso2'>('paso1');
+  const [visualizerFocus, setVisualizerFocus] = useState<'poligono' | 'ruta'>('poligono');
   const [uploadedKmz, setUploadedKmz] = useState<ParsedKmzResult | null>(null);
   const [kmzError, setKmzError] = useState<string | null>(null);
+  const [parcelLocationLabel, setParcelLocationLabel] = useState<string>('');
+  const [isLoadingParcelLocation, setIsLoadingParcelLocation] = useState<boolean>(false);
 
-  // Servicios sumatorios
-  const [selectedServiceIds, setSelectedServiceIds] = useState<string[]>(['rtk', 'deslinde']);
+  // Servicios sumatorios (inicia vacío para que el usuario elija qué cotizar)
+  const [selectedServiceIds, setSelectedServiceIds] = useState<string[]>([]);
   const [corridorKm, setCorridorKm] = useState<number>(1);
   const [terrain, setTerrain] = useState<TerrainType>('Llano');
 
@@ -245,6 +259,11 @@ export const RouteServicesCalculator: React.FC<RouteServicesCalculatorProps> = (
     };
 
   const activeFeatures = uploadedKmz?.features ?? selectedRuta?.features ?? [];
+  const activePerimeterM = useMemo(() => {
+    if (uploadedKmz) return uploadedKmz.totalPerimeterM;
+    if (selectedRuta?.totalPerimeterM) return selectedRuta.totalPerimeterM;
+    return activeFeatures.reduce((sum, f) => sum + (f.perimeterM || 0), 0);
+  }, [uploadedKmz, selectedRuta, activeFeatures]);
 
   useEffect(() => {
     if (!uploadedKmz && selectedRuta) {
@@ -252,6 +271,40 @@ export const RouteServicesCalculator: React.FC<RouteServicesCalculatorProps> = (
       setManualAreaM2(Math.round(selectedRuta.totalAreaM2));
     }
   }, [selectedRuta, uploadedKmz]);
+
+  useEffect(() => {
+    let active = true;
+    setIsLoadingParcelLocation(true);
+    reverseGeocodeOSM(activeCentroid.lat, activeCentroid.lon)
+      .then((geo) => {
+        if (!active) return;
+        const shortStreet = geo.displayAddress
+          ? geo.displayAddress.split(',').slice(0, 2).join(',').trim()
+          : '';
+        const composed = [
+          shortStreet || geo.locality,
+          geo.municipality || geo.province || province,
+        ]
+          .filter(Boolean)
+          .join(' · ');
+        setParcelLocationLabel(
+          composed || `${activeCentroid.lat.toFixed(5)}, ${activeCentroid.lon.toFixed(5)}`
+        );
+      })
+      .catch(() => {
+        if (!active) return;
+        setParcelLocationLabel(
+          `${province} (${activeCentroid.lat.toFixed(5)}, ${activeCentroid.lon.toFixed(5)})`
+        );
+      })
+      .finally(() => {
+        if (active) setIsLoadingParcelLocation(false);
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [activeCentroid.lat, activeCentroid.lon, province]);
 
   useEffect(() => {
     setOriginPoint((prev) =>
@@ -440,14 +493,16 @@ export const RouteServicesCalculator: React.FC<RouteServicesCalculatorProps> = (
     if (!mapContainerRef.current || mapRef.current) return;
 
     const map = L.map(mapContainerRef.current, {
-      center: [originPoint.lat, originPoint.lon],
-      zoom: 11,
+      center: [activeCentroid.lat, activeCentroid.lon],
+      zoom: 16,
       zoomControl: true,
     });
-    const overlay = L.featureGroup().addTo(map);
+    const routeOverlay = L.featureGroup().addTo(map);
+    const parcelOverlay = L.featureGroup().addTo(map);
 
     mapRef.current = map;
-    overlayRef.current = overlay;
+    routeOverlayRef.current = routeOverlay;
+    parcelOverlayRef.current = parcelOverlay;
 
     const timer = setTimeout(() => map.invalidateSize(), 150);
 
@@ -456,7 +511,8 @@ export const RouteServicesCalculator: React.FC<RouteServicesCalculatorProps> = (
       map.remove();
       mapRef.current = null;
       tileRef.current = null;
-      overlayRef.current = null;
+      routeOverlayRef.current = null;
+      parcelOverlayRef.current = null;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -502,121 +558,235 @@ export const RouteServicesCalculator: React.FC<RouteServicesCalculatorProps> = (
     };
   }, [isPickingOriginPin]);
 
-  useEffect(() => {
-    const map = mapRef.current;
-    const overlay = overlayRef.current;
-    if (!map || !overlay) return;
-
-    overlay.clearLayers();
-
-    routes.forEach((r) => {
-      if (r.id === activeRoute?.id) return;
-      L.polyline(r.coordinates, {
-        color: '#475569',
-        weight: 3.5,
-        dashArray: '6 6',
-        opacity: 0.75,
-      })
-        .bindTooltip(`${r.name} (${r.distanceOneWayKm} km)`)
-        .addTo(overlay);
-    });
-
-    if (activeRoute) {
-      L.polyline(activeRoute.coordinates, {
-        color: '#D97706',
-        weight: 5,
-        opacity: 0.95,
-      })
-        .bindTooltip(`${activeRoute.name} · ${effectiveOneWayKm} km ida`)
-        .addTo(overlay);
+  const fitVisualizerToFocus = (
+    map: L.Map,
+    focus: 'poligono' | 'ruta',
+    parcelGroup: L.FeatureGroup,
+    routeGroup: L.FeatureGroup
+  ) => {
+    if (focus === 'poligono') {
+      const pBounds = parcelGroup.getBounds();
+      if (pBounds.isValid()) {
+        const ne = pBounds.getNorthEast();
+        const sw = pBounds.getSouthWest();
+        if (Math.abs(ne.lat - sw.lat) < 1e-6 && Math.abs(ne.lng - sw.lng) < 1e-6) {
+          map.setView([ne.lat, ne.lng], 16);
+        } else {
+          map.fitBounds(pBounds, { padding: [44, 44], maxZoom: 18 });
+        }
+      } else {
+        map.setView([activeCentroid.lat, activeCentroid.lon], 16);
+      }
+      return;
     }
 
-    activeFeatures.forEach((feat) => {
+    const combined = L.featureGroup([...routeGroup.getLayers(), ...parcelGroup.getLayers()]);
+    const rBounds = combined.getBounds();
+    if (rBounds.isValid()) {
+      map.fitBounds(rBounds, { padding: [36, 36], maxZoom: 15 });
+    }
+  };
+
+  useEffect(() => {
+    const map = mapRef.current;
+    const routeOverlay = routeOverlayRef.current;
+    const parcelOverlay = parcelOverlayRef.current;
+    if (!map || !routeOverlay || !parcelOverlay) return;
+
+    routeOverlay.clearLayers();
+    parcelOverlay.clearLayers();
+
+    let hasAreaOrLineFeature = false;
+
+    activeFeatures.forEach((feat, fIdx) => {
       if (feat.geometryType === 'Polygon' && feat.points.length >= 3) {
-        L.polygon(
-          feat.points.map((p) => [p.lat, p.lon] as [number, number]),
-          {
-            color: '#0284C7',
-            weight: 2.5,
-            fillColor: '#0284C7',
-            fillOpacity: 0.25,
-          }
-        )
-          .bindTooltip(feat.name)
-          .addTo(overlay);
-      } else if (feat.geometryType === 'LineString' && feat.points.length >= 2) {
-        L.polyline(
+        hasAreaOrLineFeature = true;
+        const poly = L.polygon(
           feat.points.map((p) => [p.lat, p.lon] as [number, number]),
           {
             color: '#0284C7',
             weight: 3,
-            opacity: 0.9,
+            opacity: 0.95,
+            fillColor: '#0284C7',
+            fillOpacity: visualizerFocus === 'poligono' ? 0.26 : 0.22,
           }
-        )
-          .bindTooltip(feat.name)
-          .addTo(overlay);
+        ).addTo(parcelOverlay);
+
+        poly.bindPopup(
+          `<div style="font-family:Plus Jakarta Sans,sans-serif;font-size:12px;min-width:170px;">
+            <div style="font-weight:700;color:#0F2942;margin-bottom:3px;">${feat.name}</div>
+            <div><strong>Área:</strong> ${formatArea(feat.areaM2 || manualAreaM2, 'm2')} (${formatArea(
+            feat.areaM2 || manualAreaM2,
+            'tareas'
+          )})</div>
+            <div><strong>Perímetro:</strong> ${formatPerimeter(
+              feat.perimeterM || activePerimeterM
+            )}</div>
+          </div>`
+        );
+
+        if (visualizerFocus === 'poligono' && fIdx === 0) {
+          feat.points.forEach((pt, vIdx) => {
+            const first = feat.points[0];
+            const isClosingDuplicate =
+              vIdx === feat.points.length - 1 &&
+              feat.points.length > 3 &&
+              Math.abs(pt.lat - first.lat) < 1e-6 &&
+              Math.abs(pt.lon - first.lon) < 1e-6;
+            if (isClosingDuplicate) return;
+
+            const vertexMarker = L.circleMarker([pt.lat, pt.lon], {
+              radius: 5,
+              color: '#0F2942',
+              weight: 2,
+              fillColor: '#FFFFFF',
+              fillOpacity: 1,
+            }).addTo(parcelOverlay);
+
+            vertexMarker.bindTooltip(`V${vIdx + 1}`, {
+              permanent: feat.points.length <= 16,
+              direction: 'top',
+              offset: [0, -5],
+              className: 'font-mono text-[10px] font-bold',
+            });
+          });
+        }
+      } else if (feat.geometryType === 'LineString' && feat.points.length >= 2) {
+        hasAreaOrLineFeature = true;
+        const line = L.polyline(
+          feat.points.map((p) => [p.lat, p.lon] as [number, number]),
+          {
+            color: '#0284C7',
+            weight: 3.5,
+            opacity: 0.95,
+          }
+        ).addTo(parcelOverlay);
+        line.bindPopup(
+          `<div style="font-size:12px;"><strong>${feat.name}</strong><br/>Longitud: ${formatPerimeter(
+            feat.perimeterM
+          )}</div>`
+        );
+
+        if (visualizerFocus === 'poligono' && fIdx === 0) {
+          feat.points.forEach((pt, vIdx) => {
+            const vertexMarker = L.circleMarker([pt.lat, pt.lon], {
+              radius: 4.5,
+              color: '#0F2942',
+              weight: 2,
+              fillColor: '#FFFFFF',
+              fillOpacity: 1,
+            }).addTo(parcelOverlay);
+            if (feat.points.length <= 16) {
+              vertexMarker.bindTooltip(`V${vIdx + 1}`, {
+                permanent: true,
+                direction: 'top',
+                offset: [0, -5],
+                className: 'font-mono text-[10px] font-bold',
+              });
+            }
+          });
+        }
       } else if (feat.points.length >= 1) {
         feat.points.forEach((pt) => {
           L.circleMarker([pt.lat, pt.lon], {
-            radius: 5,
+            radius: 6,
             color: '#FFFFFF',
-            weight: 1.5,
+            weight: 2,
             fillColor: '#16A34A',
             fillOpacity: 1,
           })
             .bindTooltip(feat.name)
-            .addTo(overlay);
+            .addTo(parcelOverlay);
         });
       }
     });
 
-    const originIcon = L.divIcon({
-      className: '',
-      iconSize: [28, 28],
-      iconAnchor: [14, 14],
-      html: `<div style="width:28px;height:28px;border-radius:9999px;background:#0284C7;border:2.5px solid #FFFFFF;color:#FFFFFF;font-family:ui-monospace,monospace;font-size:11px;font-weight:700;display:flex;align-items:center;justify-content:center;box-shadow:0 2px 6px rgba(15,41,66,0.45);cursor:grab;">A</div>`,
-    });
-
-    const originMarker = L.marker([originPoint.lat, originPoint.lon], {
-      draggable: true,
-      icon: originIcon,
-    })
-      .bindPopup(
-        `<strong>Punto de Partida (${
-          originPoint.source === 'empresa'
-            ? 'Base'
-            : originPoint.source === 'calle'
-            ? 'Calle'
-            : 'Pin mapa'
-        })</strong><br/>${originPoint.label}<br/><span style="font-size:11px;color:#475569;">Arrastra este pin para mover el origen</span>`
-      )
-      .addTo(overlay);
-
-    originMarker.on('dragend', () => {
-      const pos = originMarker.getLatLng();
-      applyPinOrigin(pos.lat, pos.lng);
-    });
-
-    L.circleMarker([activeCentroid.lat, activeCentroid.lon], {
-      radius: 7,
-      color: '#FFFFFF',
-      weight: 2,
-      fillColor: '#D97706',
-      fillOpacity: 1,
-    })
-      .bindPopup(
-        `<strong>Destino:</strong> ${
-          uploadedKmz?.autoMeta.title || selectedRuta?.nombre || 'Parcela'
-        }`
-      )
-      .addTo(overlay);
-
-    const bounds = overlay.getBounds();
-    if (bounds.isValid()) {
-      map.fitBounds(bounds, { padding: [36, 36], maxZoom: 15 });
+    if (visualizerFocus === 'poligono' && !hasAreaOrLineFeature) {
+      L.circleMarker([activeCentroid.lat, activeCentroid.lon], {
+        radius: 7,
+        color: '#FFFFFF',
+        weight: 2,
+        fillColor: '#0284C7',
+        fillOpacity: 1,
+      })
+        .bindPopup(
+          `<strong>Ubicación Parcela:</strong> ${
+            uploadedKmz?.autoMeta.title || selectedRuta?.nombre || 'Parcela'
+          }`
+        )
+        .addTo(parcelOverlay);
     }
+
+    if (visualizerFocus === 'ruta') {
+      routes.forEach((r) => {
+        if (r.id === activeRoute?.id) return;
+        L.polyline(r.coordinates, {
+          color: '#475569',
+          weight: 3.5,
+          dashArray: '6 6',
+          opacity: 0.75,
+        })
+          .bindTooltip(`${r.name} (${r.distanceOneWayKm} km)`)
+          .addTo(routeOverlay);
+      });
+
+      if (activeRoute) {
+        L.polyline(activeRoute.coordinates, {
+          color: '#D97706',
+          weight: 5,
+          opacity: 0.95,
+        })
+          .bindTooltip(`${activeRoute.name} · ${effectiveOneWayKm} km ida`)
+          .addTo(routeOverlay);
+      }
+
+      const originIcon = L.divIcon({
+        className: '',
+        iconSize: [28, 28],
+        iconAnchor: [14, 14],
+        html: `<div style="width:28px;height:28px;border-radius:9999px;background:#0284C7;border:2.5px solid #FFFFFF;color:#FFFFFF;font-family:ui-monospace,monospace;font-size:11px;font-weight:700;display:flex;align-items:center;justify-content:center;box-shadow:0 2px 6px rgba(15,41,66,0.45);cursor:grab;">A</div>`,
+      });
+
+      const originMarker = L.marker([originPoint.lat, originPoint.lon], {
+        draggable: true,
+        icon: originIcon,
+      })
+        .bindPopup(
+          `<strong>Punto de Partida (${
+            originPoint.source === 'empresa'
+              ? 'Base'
+              : originPoint.source === 'calle'
+              ? 'Calle'
+              : 'Pin mapa'
+          })</strong><br/>${originPoint.label}<br/><span style="font-size:11px;color:#475569;">Arrastra este pin para mover el origen</span>`
+        )
+        .addTo(routeOverlay);
+
+      originMarker.on('dragend', () => {
+        const pos = originMarker.getLatLng();
+        applyPinOrigin(pos.lat, pos.lng);
+      });
+
+      L.circleMarker([activeCentroid.lat, activeCentroid.lon], {
+        radius: 6,
+        color: '#FFFFFF',
+        weight: 2,
+        fillColor: '#D97706',
+        fillOpacity: 1,
+      })
+        .bindPopup(
+          `<strong>Destino:</strong> ${
+            uploadedKmz?.autoMeta.title || selectedRuta?.nombre || 'Parcela'
+          }`
+        )
+        .addTo(routeOverlay);
+    }
+
+    parcelOverlay.bringToFront();
+    fitVisualizerToFocus(map, visualizerFocus, parcelOverlay, routeOverlay);
     setTimeout(() => map.invalidateSize(), 100);
   }, [
+    visualizerFocus,
     routes,
     activeRoute,
     activeFeatures,
@@ -625,6 +795,8 @@ export const RouteServicesCalculator: React.FC<RouteServicesCalculatorProps> = (
     uploadedKmz,
     selectedRuta,
     originPoint,
+    manualAreaM2,
+    activePerimeterM,
   ]);
 
   const handleToggleService = (id: string) => {
@@ -658,6 +830,7 @@ export const RouteServicesCalculator: React.FC<RouteServicesCalculatorProps> = (
 
   const handleSelectStreetOrigin = (result: AddressSearchResult) => {
     setIsPickingOriginPin(false);
+    setVisualizerFocus('ruta');
     setOriginPoint({
       lat: result.lat,
       lon: result.lon,
@@ -704,12 +877,28 @@ export const RouteServicesCalculator: React.FC<RouteServicesCalculatorProps> = (
       setUploadedKmz(parsed);
       setProvince(parsed.autoMeta.province);
       setManualAreaM2(Math.round(parsed.totalAreaM2));
+      setVisualizerFocus('poligono');
     } catch (err: unknown) {
       setUploadedKmz(null);
       setKmzError(
         err instanceof Error ? err.message : 'No se pudo leer el archivo KMZ/KML/GeoJSON.'
       );
     }
+  };
+
+  const handleStepChange = (nextStep: 'paso1' | 'paso2') => {
+    setActiveStep(nextStep);
+    setVisualizerFocus(nextStep === 'paso2' ? 'ruta' : 'poligono');
+  };
+
+  const handleRecenterMap = () => {
+    if (!mapRef.current || !parcelOverlayRef.current || !routeOverlayRef.current) return;
+    fitVisualizerToFocus(
+      mapRef.current,
+      visualizerFocus,
+      parcelOverlayRef.current,
+      routeOverlayRef.current
+    );
   };
 
   const handleApplyCalculation = async () => {
@@ -874,800 +1063,994 @@ export const RouteServicesCalculator: React.FC<RouteServicesCalculatorProps> = (
     return <RouteCalculatorSkeleton />;
   }
 
+  const steps: Array<{
+    id: 'paso1' | 'paso2';
+    number: string;
+    title: string;
+    subtitle: string;
+  }> = [
+    {
+      id: 'paso1',
+      number: '1',
+      title: 'Ruta y Servicios',
+      subtitle:
+        selectedServiceIds.length > 0
+          ? `${selectedServiceIds.length} servicio(s) · ${province}`
+          : `Parcela en ${province} · Elige servicios`,
+    },
+    {
+      id: 'paso2',
+      number: '2',
+      title: 'Logística y Guardar',
+      subtitle: `${activeBreakdown.roundTripKm} km · ${formatRD(grandTotalRD, moneda)}`,
+    },
+  ];
+
+  const activeParcelTitle =
+    uploadedKmz?.autoMeta.title ||
+    selectedRuta?.nombre ||
+    'Parcela / Ruta Seleccionada';
+  const activeParcelCode =
+    uploadedKmz?.fileName || selectedRuta?.codigoParcela || 'SIN-KMZ';
+
   return (
-    <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
-      {/* LEFT CONFIGURATION COLUMN */}
-      <div className="lg:col-span-4 space-y-5">
-        <div className="rounded-2xl border border-slate-200/90 bg-white p-5 space-y-3.5">
-          <div className="flex items-center justify-between">
-            <h2 className="text-xs font-bold text-[#0F2942]">Cargar KMZ / KML / GeoJSON</h2>
-            <span className="text-[11px] font-medium text-[#0284C7]">Detección auto</span>
+    <div className="space-y-5">
+      {/* Persistent Summary Bar */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3.5">
+        <div className="rounded-2xl border border-slate-200/90 bg-white p-4">
+          <div className="text-[11px] font-medium text-[#475569]">Área Neta</div>
+          <div className="mt-1 font-mono text-lg font-bold text-[#0F2942] tabular-nums">
+            {manualAreaM2.toLocaleString('en-US')} m²
           </div>
-
-          <div
-            onDragOver={(e) => e.preventDefault()}
-            onDrop={(e) => {
-              e.preventDefault();
-              const f = e.dataTransfer.files?.[0];
-              if (f) handleUploadKmz(f);
-            }}
-            onClick={() => fileInputRef.current?.click()}
-            className="cursor-pointer rounded-xl border border-dashed border-[#0284C7] bg-[#F8FAFC] p-4 text-center hover:bg-[#EFF4FF] transition-colors"
-          >
-            <input
-              ref={fileInputRef}
-              type="file"
-              accept=".kmz,.kml,.geojson,.json"
-              className="hidden"
-              onChange={(e) => {
-                const f = e.target.files?.[0];
-                if (f) handleUploadKmz(f);
-                e.target.value = '';
-              }}
-            />
-            <UploadCloud className="mx-auto h-6 w-6 text-[#0284C7]" />
-            <div className="mt-1.5 text-xs font-semibold text-[#0F2942]">
-              {uploadedKmz ? uploadedKmz.fileName : 'Arrastra tu .KMZ, .KML o .GeoJSON'}
-            </div>
-            <div className="mt-0.5 text-[11px] text-[#475569]">
-              O selecciona una ruta abajo para recalcular viáticos
-            </div>
-          </div>
-
-          {kmzError && (
-            <div className="rounded-xl border border-[#FCA5A5] bg-[#FEE2E2] px-3 py-2 text-[11px] text-[#93000A]">
-              {kmzError}
-            </div>
-          )}
-
-          <div>
-            <label className="block text-[11px] font-semibold text-[#475569] mb-1.5">
-              O calcular sobre ruta registrada:
-            </label>
-            <select
-              value={uploadedKmz ? '__uploaded__' : selectedRuta?.id ?? ''}
-              onChange={(e) => {
-                if (e.target.value !== '__uploaded__') {
-                  setUploadedKmz(null);
-                  onSelectRuta(e.target.value);
-                }
-              }}
-              className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs text-[#0D1C2F] min-h-[40px] focus:border-[#0284C7] focus:outline-none"
-            >
-              {uploadedKmz && (
-                <option value="__uploaded__">Archivo: {uploadedKmz.fileName}</option>
-              )}
-              {rutas.map((r) => {
-                const proy = proyectos.find((p) => p.id === r.proyectoId);
-                return (
-                  <option key={r.id} value={r.id}>
-                    {r.codigoParcela} · {r.provincia} ({proy?.codigoContrato || r.nombre})
-                  </option>
-                );
-              })}
-            </select>
+          <div className="mt-0.5 font-mono text-[11px] text-[#64748B] tabular-nums">
+            {(manualAreaM2 / TAREA_IN_M2).toFixed(2)} tareas · {terrain}
           </div>
         </div>
 
-        {/* Additive Services Multi-Select */}
-        <div className="rounded-2xl border border-slate-200/90 bg-white p-5 space-y-3">
-          <div className="flex items-center justify-between gap-2">
-            <h2 className="text-xs font-bold text-[#0F2942]">Tipo de Levantamiento / Servicio</h2>
-            <span className="font-mono text-[11px] font-semibold text-[#0284C7] tabular-nums">
-              {selectedServiceIds.length} servicio{selectedServiceIds.length === 1 ? '' : 's'}{' '}
-              activo{selectedServiceIds.length === 1 ? '' : 's'}
+        <div className="rounded-2xl border border-slate-200/90 bg-white p-4">
+          <div className="text-[11px] font-medium text-[#475569]">Servicios elegidos</div>
+          <div className="mt-1 font-mono text-lg font-bold text-[#0F2942] tabular-nums">
+            {selectedServiceIds.length}{' '}
+            <span className="text-xs font-semibold text-[#475569]">
+              {selectedServiceIds.length === 1 ? 'servicio' : 'servicios'}
             </span>
           </div>
-          <p className="text-[11px] text-[#475569]">
-            Selección múltiple sumatoria para combinar servicios en la misma ruta.
-          </p>
-
-          <div className="space-y-2 pt-1">
-            {activeServicios.map((svc) => {
-              const checked = selectedServiceIds.includes(svc.codigo);
-              return (
-                <button
-                  key={svc.codigo}
-                  type="button"
-                  onClick={() => handleToggleService(svc.codigo)}
-                  className={`w-full flex items-center justify-between gap-2 rounded-xl border px-3 py-2.5 text-left transition-colors ${
-                    checked
-                      ? 'border-[#0F2942] bg-[#0F2942] text-white'
-                      : 'border-slate-200/80 bg-[#F8FAFC]/60 text-[#0D1C2F] hover:bg-[#F8FAFC]'
-                  }`}
-                >
-                  <div className="flex items-center gap-2.5 min-w-0">
-                    <span
-                      className={`flex h-4 w-4 shrink-0 items-center justify-center rounded-sm border ${
-                        checked
-                          ? 'border-[#38BDF8] bg-[#0284C7] text-white'
-                          : 'border-slate-400 bg-white'
-                      }`}
-                    >
-                      {checked && <Check className="h-3 w-3 stroke-[3]" />}
-                    </span>
-                    <div className="min-w-0">
-                      <div className="text-xs font-bold leading-tight">{svc.nombre}</div>
-                      <div
-                        className={`text-[11px] ${
-                          checked ? 'text-[#CBD5E1]' : 'text-[#43474D]'
-                        }`}
-                      >
-                        {svc.subtitulo}
-                      </div>
-                    </div>
-                  </div>
-                  <span
-                    className={`font-mono text-xs font-bold tabular-nums shrink-0 ${
-                      checked ? 'text-[#38BDF8]' : 'text-[#0F2942]'
-                    }`}
-                  >
-                    + {formatRD(svc.precioBaseRD, moneda).replace('.00', '')}
-                  </span>
-                </button>
-              );
-            })}
-          </div>
-
-          {activeServicios.some(
-            (s) => selectedServiceIds.includes(s.codigo) && s.recargoCorredorPorKmRD > 0
-          ) && (
-            <div className="rounded-xl border border-slate-200/70 bg-[#F8FAFC] p-3 space-y-1.5">
-              <div className="flex items-center justify-between text-[11px]">
-                <span className="font-semibold text-[#0F2942]">Longitud de corredor vial (km)</span>
-                <span className="font-mono text-[#0284C7] tabular-nums">
-                  {formatRD(
-                    activeServicios.find(
-                      (s) =>
-                        selectedServiceIds.includes(s.codigo) && s.recargoCorredorPorKmRD > 0
-                    )?.recargoCorredorPorKmRD ?? 0,
-                    moneda
-                  )}{' '}
-                  / km
-                </span>
-              </div>
-              <input
-                type="number"
-                min={0}
-                step={0.5}
-                value={corridorKm}
-                onChange={(e) => setCorridorKm(Math.max(0, Number(e.target.value)))}
-                className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 font-mono text-xs text-[#0D1C2F] min-h-[38px] focus:border-[#0284C7] focus:outline-none"
-              />
-            </div>
-          )}
-
-          <div className="pt-2 border-t border-slate-200 flex items-center justify-between gap-2">
-            <span className="text-[11px] text-[#475569]">
-              Planos de arquitectura (.DWG / .DXF)
-              {dwgPlan ? ` · ${dwgPlan.fileName}` : ''}
-            </span>
-            <button
-              type="button"
-              onClick={() => setShowDwgSection((prev) => !prev)}
-              className={`inline-flex items-center gap-1.5 rounded-xl border px-3 py-1.5 text-[11px] font-semibold transition-colors whitespace-nowrap shrink-0 ${
-                showDwgSection
-                  ? 'border-[#0284C7] bg-[#EFF6FF] text-[#0284C7]'
-                  : 'border-slate-200 bg-white text-[#0F2942] hover:bg-[#F8FAFC]'
-              }`}
-            >
-              <Compass className="h-3.5 w-3.5" />
-              {showDwgSection ? 'Ocultar visor .DWG' : 'Abrir visor .DWG'}
-            </button>
+          <div className="mt-0.5 font-mono text-[11px] text-[#0284C7] tabular-nums">
+            {formatRD(servicesCalculation.totalServicesRD, moneda)}
           </div>
         </div>
 
-        {/* Topography, Province & Area */}
-        <div className="rounded-2xl border border-slate-200/90 bg-white p-5 space-y-3.5">
-          <div>
-            <div className="text-xs font-bold text-[#0F2942] mb-2">Topografía de Terreno</div>
-            <div className="grid grid-cols-3 gap-2">
-              {(['Llano', 'Ondulado', 'Montañoso'] as const).map((t) => (
-                <button
-                  key={t}
-                  type="button"
-                  onClick={() => setTerrain(t)}
-                  className={`rounded-xl border py-2 text-xs font-semibold transition-colors min-h-[38px] whitespace-nowrap shrink-0 ${
-                    terrain === t
-                      ? 'border-[#0F2942] bg-[#0F2942] text-white'
-                      : 'border-slate-200 bg-white text-[#334155] hover:bg-[#F8FAFC]'
-                  }`}
-                >
-                  {t}
-                </button>
-              ))}
-            </div>
+        <div className="rounded-2xl border border-slate-200/90 bg-white p-4">
+          <div className="text-[11px] font-medium text-[#475569]">Distancia Logística</div>
+          <div className="mt-1 font-mono text-lg font-bold text-[#0F2942] tabular-nums">
+            {effectiveOneWayKm.toFixed(1)} km{' '}
+            <span className="text-xs font-normal text-[#475569]">ida</span>
           </div>
-
-          <div className="grid grid-cols-2 gap-3 text-xs">
-            <div>
-              <label className="block font-semibold text-[#475569] mb-1.5">Provincia</label>
-              <select
-                value={province}
-                onChange={(e) => setProvince(e.target.value)}
-                className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs text-[#0D1C2F] min-h-[40px] focus:border-[#0284C7] focus:outline-none"
-              >
-                {!DOMINICAN_PROVINCES.includes(province) && (
-                  <option value={province}>{province}</option>
-                )}
-                {DOMINICAN_PROVINCES.map((p) => (
-                  <option key={p} value={p}>
-                    {p}
-                  </option>
-                ))}
-              </select>
-            </div>
-            <div>
-              <label className="block font-semibold text-[#475569] mb-1.5">Área (m²)</label>
-              <input
-                type="number"
-                min={100}
-                step={50}
-                value={manualAreaM2}
-                onChange={(e) => setManualAreaM2(Math.max(100, Number(e.target.value)))}
-                className="w-full rounded-xl border border-slate-200 px-3 py-2 font-mono text-xs text-[#0D1C2F] tabular-nums min-h-[40px] focus:border-[#0284C7] focus:outline-none"
-              />
-            </div>
+          <div className="mt-0.5 font-mono text-[11px] text-[#64748B] tabular-nums">
+            {activeBreakdown.roundTripKm} km ida/vuelta · {province}
           </div>
         </div>
 
-        {/* Vehicle & Fuel Consumption */}
-        <div className="rounded-2xl border border-slate-200/90 bg-white p-5 space-y-3.5 text-xs">
-          <div className="flex items-center gap-2 font-bold text-[#0F2942]">
-            <Car className="h-4 w-4 text-[#0284C7]" />
-            <span>Vehículo y Combustible</span>
+        <div className="rounded-2xl bg-gradient-to-br from-[#0F2942] to-[#0284C7] p-4 text-white shadow-sm">
+          <div className="text-[11px] font-medium text-sky-100">Inversión Estimada</div>
+          <div className="mt-1 font-mono text-xl font-bold text-white tabular-nums">
+            {formatRD(grandTotalRD, moneda)}
           </div>
-
-          <div>
-            <label className="block font-semibold text-[#475569] mb-1.5">Unidad seleccionada</label>
-            <select
-              value={vehiculoId}
-              onChange={(e) => handleVehicleChange(e.target.value)}
-              className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs text-[#0D1C2F] min-h-[40px] focus:border-[#0284C7] focus:outline-none"
-            >
-              {vehiculos.length > 0
-                ? vehiculos.map((v) => (
-                    <option key={v.id} value={v.id}>
-                      {v.etiqueta} ({v.placa})
-                    </option>
-                  ))
-                : VEHICLE_CATALOG.map((v) => (
-                    <option key={v.id} value={v.id}>
-                      {v.label}
-                    </option>
-                  ))}
-            </select>
-          </div>
-
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className="block font-semibold text-[#475569] mb-1.5">Precio (RD$/gal)</label>
-              <input
-                type="number"
-                min={50}
-                step={0.5}
-                value={fuelPricePerGalRD}
-                onChange={(e) => setFuelPricePerGalRD(Math.max(1, Number(e.target.value)))}
-                className="w-full rounded-xl border border-slate-200 px-3 py-2 font-mono text-xs text-[#0D1C2F] tabular-nums min-h-[40px] focus:border-[#0284C7] focus:outline-none"
-              />
-            </div>
-            <div>
-              <label className="block font-semibold text-[#475569] mb-1.5">Rendimiento (km/gal)</label>
-              <input
-                type="number"
-                min={5}
-                step={1}
-                value={kmPerGal}
-                onChange={(e) => setKmPerGal(Math.max(5, Number(e.target.value)))}
-                className="w-full rounded-xl border border-slate-200 px-3 py-2 font-mono text-xs text-[#0D1C2F] tabular-nums min-h-[40px] focus:border-[#0284C7] focus:outline-none"
-              />
-            </div>
+          <div className="mt-0.5 text-[11px] text-sky-100/90">
+            Servicios + Viáticos · {moneda}
           </div>
         </div>
       </div>
 
-      {/* RIGHT ROUTE & ADDITIVE ESTIMATION COLUMN */}
-      <div className="lg:col-span-8 space-y-5">
-        <div className="grid grid-cols-1 sm:grid-cols-3 rounded-2xl border border-slate-200/90 bg-white overflow-hidden divide-y sm:divide-y-0 sm:divide-x divide-slate-200">
-          <div className="p-5">
-            <div className="text-xs font-medium text-[#475569]">Área Neta</div>
-            <div className="mt-1.5 font-mono text-xl font-bold text-[#0F2942] tabular-nums">
-              {manualAreaM2.toLocaleString('en-US')} m²
-            </div>
-            <div className="mt-0.5 font-mono text-xs text-[#475569] tabular-nums">
-              {(manualAreaM2 / TAREA_IN_M2).toFixed(2)} tareas
-            </div>
-          </div>
-
-          <div className="p-5">
-            <div className="text-xs font-medium text-[#475569]">Distancia Logística</div>
-            <div className="mt-1.5 font-mono text-xl font-bold text-[#0F2942] tabular-nums">
-              {effectiveOneWayKm.toFixed(1)} km{' '}
-              <span className="text-xs font-normal text-[#475569]">
-                ({activeBreakdown.roundTripKm} km ida y vuelta)
+      {/* Stepper Bar (2 Pasos) */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 rounded-2xl border border-slate-200/90 bg-white p-2">
+        {steps.map((step) => {
+          const isCurrent = activeStep === step.id;
+          return (
+            <button
+              key={step.id}
+              type="button"
+              onClick={() => handleStepChange(step.id)}
+              className={`flex items-center gap-3 rounded-xl px-4 py-3 text-left transition-colors ${
+                isCurrent
+                  ? 'bg-[#0F2942] text-white shadow-sm'
+                  : 'bg-[#F8FAFC] text-[#0F2942] hover:bg-slate-100'
+              }`}
+            >
+              <span
+                className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-lg font-mono text-xs font-bold ${
+                  isCurrent ? 'bg-[#0284C7] text-white' : 'bg-white border border-slate-200 text-[#0F2942]'
+                }`}
+              >
+                {step.number}
               </span>
-            </div>
-            <div className="mt-0.5 text-xs text-[#475569]">{province}</div>
-          </div>
+              <div className="min-w-0">
+                <div className="text-xs font-bold truncate">{step.title}</div>
+                <div
+                  className={`text-[11px] truncate ${
+                    isCurrent ? 'text-sky-100' : 'text-[#475569]'
+                  }`}
+                >
+                  {step.subtitle}
+                </div>
+              </div>
+            </button>
+          );
+        })}
+      </div>
 
-          <div className="p-5 bg-gradient-to-br from-[#0F2942] to-[#0284C7] text-white">
-            <div className="text-xs font-medium text-sky-100">Inversión Estimada</div>
-            <div className="mt-1.5 font-mono text-2xl font-bold text-white tabular-nums">
-              {formatRD(grandTotalRD)}
-            </div>
-            <div className="mt-0.5 text-[11px] text-sky-100">
-              Servicios + Viáticos · Moneda RD$
-            </div>
-          </div>
-        </div>
+      {/* Split Principal: Formulario Guiado (2 Pasos) + Visualizador Geográfico Siempre Visible */}
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 items-start">
+        {/* COLUMNA IZQUIERDA: FORMULARIO EN 2 PASOS */}
+        <div className="lg:col-span-6 space-y-5 min-w-0">
+          {activeStep === 'paso1' ? (
+            <div className="space-y-5">
+              {/* Parcela / Ruta y Parámetros de Terreno */}
+              <div className="rounded-2xl border border-slate-200/90 bg-white p-5 space-y-4">
+                <div className="flex items-center justify-between">
+                  <h2 className="text-sm font-bold text-[#0F2942]">1. Parcela o Ruta</h2>
+                  <span className="text-[11px] font-medium text-[#0284C7]">KMZ o registrada</span>
+                </div>
 
-        <div className="rounded-2xl border border-slate-200/90 bg-white p-5 space-y-4">
-          <div className="flex flex-wrap items-center justify-between gap-2">
-            <div>
-              <h3 className="flex items-center gap-2 text-sm font-bold text-[#0F2942]">
-                <Route className="h-4 w-4 text-[#0284C7]" />
-                Cálculo de Rutas Óptimas y Viáticos (Ida y Vuelta)
-              </h3>
-              <p className="text-xs text-[#475569]">
-                Define el punto de partida por calle o pin en el mapa y compara rutas reales (OSRM), peajes y consumo.
-              </p>
-            </div>
-            <div className="font-mono text-xs font-semibold text-[#0284C7] tabular-nums">
-              {isLoadingRoutes
-                ? 'Calculando ruta vial...'
-                : `Ida y vuelta: ${activeBreakdown.roundTripKm} km · ${
-                    activeRoute?.durationMin ?? 25
-                  } min/vía`}
-            </div>
-          </div>
+                <div
+                  onDragOver={(e) => e.preventDefault()}
+                  onDrop={(e) => {
+                    e.preventDefault();
+                    const f = e.dataTransfer.files?.[0];
+                    if (f) handleUploadKmz(f);
+                  }}
+                  onClick={() => fileInputRef.current?.click()}
+                  className="cursor-pointer rounded-xl border border-dashed border-[#0284C7] bg-[#F8FAFC] p-4 text-center hover:bg-[#EFF6FF] transition-colors"
+                >
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    accept=".kmz,.kml,.geojson,.json"
+                    className="hidden"
+                    onChange={(e) => {
+                      const f = e.target.files?.[0];
+                      if (f) handleUploadKmz(f);
+                      e.target.value = '';
+                    }}
+                  />
+                  <UploadCloud className="mx-auto h-6 w-6 text-[#0284C7]" />
+                  <div className="mt-1.5 text-xs font-semibold text-[#0F2942]">
+                    {uploadedKmz ? uploadedKmz.fileName : 'Arrastra o sube tu .KMZ / .KML / .GeoJSON'}
+                  </div>
+                  <div className="mt-0.5 text-[11px] text-[#475569]">
+                    Actualiza el visualizador, área y provincia al instante
+                  </div>
+                </div>
 
-          {/* Punto de Partida (Calle o Pin en el Mapa) */}
-          <div className="rounded-xl border border-slate-200/70 bg-[#F8FAFC] p-3.5 space-y-2.5">
-            <div className="flex flex-wrap items-center justify-between gap-2 text-xs">
-              <div className="flex items-center gap-2 min-w-0">
-                <span className="inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-md bg-[#0284C7] font-mono text-[11px] font-bold text-white">
-                  A
-                </span>
-                <div className="min-w-0">
-                  <span className="font-bold text-[#0F2942]">Punto de Partida: </span>
-                  <span className="text-[#334155] truncate">{originPoint.label}</span>
-                  <span className="ml-1.5 font-mono text-[10px] font-semibold text-[#0284C7] uppercase">
-                    · {originPoint.source === 'empresa'
-                      ? 'Base'
-                      : originPoint.source === 'calle'
-                      ? 'Calle'
-                      : 'Pin mapa'}
-                  </span>
+                {kmzError && (
+                  <div className="rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-[11px] text-rose-800">
+                    {kmzError}
+                  </div>
+                )}
+
+                <div>
+                  <label className="block text-[11px] font-semibold text-[#475569] mb-1.5">
+                    O selecciona una ruta existente:
+                  </label>
+                  <select
+                    value={uploadedKmz ? '__uploaded__' : selectedRuta?.id ?? ''}
+                    onChange={(e) => {
+                      if (e.target.value !== '__uploaded__') {
+                        setUploadedKmz(null);
+                        setVisualizerFocus('poligono');
+                        onSelectRuta(e.target.value);
+                      }
+                    }}
+                    className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs text-[#0D1C2F] min-h-[42px] focus:border-[#0284C7] focus:outline-none"
+                  >
+                    {uploadedKmz && (
+                      <option value="__uploaded__">Archivo: {uploadedKmz.fileName}</option>
+                    )}
+                    {rutas.map((r) => {
+                      const proy = proyectos.find((p) => p.id === r.proyectoId);
+                      return (
+                        <option key={r.id} value={r.id}>
+                          {r.codigoParcela} · {r.provincia} ({proy?.codigoContrato || r.nombre})
+                        </option>
+                      );
+                    })}
+                  </select>
+                </div>
+
+                <div className="border-t border-slate-100 pt-4 space-y-3.5">
+                  <div>
+                    <div className="text-xs font-bold text-[#0F2942] mb-2">Topografía de Terreno</div>
+                    <div className="grid grid-cols-3 gap-2">
+                      {(['Llano', 'Ondulado', 'Montañoso'] as const).map((t) => (
+                        <button
+                          key={t}
+                          type="button"
+                          onClick={() => setTerrain(t)}
+                          className={`rounded-xl border py-2 text-xs font-semibold transition-colors min-h-[40px] whitespace-nowrap shrink-0 ${
+                            terrain === t
+                              ? 'border-[#0F2942] bg-[#0F2942] text-white'
+                              : 'border-slate-200 bg-white text-[#334155] hover:bg-[#F8FAFC]'
+                          }`}
+                        >
+                          {t}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-3 text-xs">
+                    <div>
+                      <label className="block font-semibold text-[#475569] mb-1.5">Provincia</label>
+                      <select
+                        value={province}
+                        onChange={(e) => setProvince(e.target.value)}
+                        className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs text-[#0D1C2F] min-h-[40px] focus:border-[#0284C7] focus:outline-none"
+                      >
+                        {!DOMINICAN_PROVINCES.includes(province) && (
+                          <option value={province}>{province}</option>
+                        )}
+                        {DOMINICAN_PROVINCES.map((p) => (
+                          <option key={p} value={p}>
+                            {p}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block font-semibold text-[#475569] mb-1.5">Área (m²)</label>
+                      <input
+                        type="number"
+                        min={100}
+                        step={50}
+                        value={manualAreaM2}
+                        onChange={(e) => setManualAreaM2(Math.max(100, Number(e.target.value)))}
+                        className="w-full rounded-xl border border-slate-200 px-3 py-2 font-mono text-xs text-[#0D1C2F] tabular-nums min-h-[40px] focus:border-[#0284C7] focus:outline-none"
+                      />
+                    </div>
+                  </div>
                 </div>
               </div>
 
-              <div className="flex items-center gap-2 shrink-0">
-                <span className="font-mono text-[11px] text-[#43474D] tabular-nums hidden sm:inline">
-                  {originPoint.lat.toFixed(5)}, {originPoint.lon.toFixed(5)}
-                </span>
-                {originPoint.source !== 'empresa' && (
+              {/* Selección de Servicios (comienza sin ninguno preseleccionado) */}
+              <div className="rounded-2xl border border-slate-200/90 bg-white p-5 space-y-4">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <div>
+                    <h2 className="text-sm font-bold text-[#0F2942]">
+                      2. Elige los Servicios a Cotizar
+                    </h2>
+                    <p className="text-xs text-[#475569]">
+                      Selecciona uno o varios servicios para combinarlos en esta ruta.
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    {selectedServiceIds.length > 0 && (
+                      <button
+                        type="button"
+                        onClick={() => setSelectedServiceIds([])}
+                        className="text-[11px] font-semibold text-[#475569] hover:text-[#DC2626] whitespace-nowrap"
+                      >
+                        Limpiar selección
+                      </button>
+                    )}
+                    <span className="font-mono text-xs font-bold text-[#0284C7] tabular-nums">
+                      {selectedServiceIds.length} seleccionado(s)
+                    </span>
+                  </div>
+                </div>
+
+                {selectedServiceIds.length === 0 && (
+                  <div className="rounded-xl border border-sky-200 bg-sky-50/70 px-3.5 py-2.5 text-xs text-[#0F2942]">
+                    Aún no has seleccionado ningún servicio. Marca abajo los trabajos que requiere el cliente.
+                  </div>
+                )}
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                  {activeServicios.map((svc) => {
+                    const checked = selectedServiceIds.includes(svc.codigo);
+                    return (
+                      <button
+                        key={svc.codigo}
+                        type="button"
+                        onClick={() => handleToggleService(svc.codigo)}
+                        className={`flex items-center justify-between gap-2.5 rounded-xl border px-3.5 py-3 text-left transition-colors ${
+                          checked
+                            ? 'border-[#0F2942] bg-[#0F2942] text-white shadow-sm'
+                            : 'border-slate-200/90 bg-[#F8FAFC]/70 text-[#0D1C2F] hover:border-[#0284C7] hover:bg-white'
+                        }`}
+                      >
+                        <div className="flex items-center gap-2.5 min-w-0">
+                          <span
+                            className={`flex h-4 w-4 shrink-0 items-center justify-center rounded-sm border ${
+                              checked
+                                ? 'border-[#38BDF8] bg-[#0284C7] text-white'
+                                : 'border-slate-400 bg-white'
+                            }`}
+                          >
+                            {checked && <Check className="h-3 w-3 stroke-[3]" />}
+                          </span>
+                          <div className="min-w-0">
+                            <div className="text-xs font-bold leading-tight truncate">
+                              {svc.nombre}
+                            </div>
+                            <div
+                              className={`text-[11px] truncate ${
+                                checked ? 'text-[#CBD5E1]' : 'text-[#475569]'
+                              }`}
+                            >
+                              {svc.subtitulo}
+                            </div>
+                          </div>
+                        </div>
+                        <span
+                          className={`font-mono text-xs font-bold tabular-nums shrink-0 ${
+                            checked ? 'text-[#38BDF8]' : 'text-[#0F2942]'
+                          }`}
+                        >
+                          + {formatRD(svc.precioBaseRD, moneda).replace('.00', '')}
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
+
+                {activeServicios.some(
+                  (s) => selectedServiceIds.includes(s.codigo) && s.recargoCorredorPorKmRD > 0
+                ) && (
+                  <div className="rounded-xl border border-slate-200/70 bg-[#F8FAFC] p-3.5 space-y-1.5">
+                    <div className="flex items-center justify-between text-xs">
+                      <span className="font-semibold text-[#0F2942]">
+                        Longitud de corredor vial (km)
+                      </span>
+                      <span className="font-mono text-[#0284C7] font-semibold tabular-nums">
+                        {formatRD(
+                          activeServicios.find(
+                            (s) =>
+                              selectedServiceIds.includes(s.codigo) &&
+                              s.recargoCorredorPorKmRD > 0
+                          )?.recargoCorredorPorKmRD ?? 0,
+                          moneda
+                        )}{' '}
+                        / km
+                      </span>
+                    </div>
+                    <input
+                      type="number"
+                      min={0}
+                      step={0.5}
+                      value={corridorKm}
+                      onChange={(e) => setCorridorKm(Math.max(0, Number(e.target.value)))}
+                      className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 font-mono text-xs text-[#0D1C2F] min-h-[40px] focus:border-[#0284C7] focus:outline-none"
+                    />
+                  </div>
+                )}
+
+                <div className="pt-3 border-t border-slate-100 flex flex-wrap items-center justify-between gap-2">
+                  <span className="text-xs text-[#475569]">
+                    Planos de arquitectura (.DWG / .DXF)
+                    {dwgPlan ? ` · ${dwgPlan.fileName}` : ''}
+                  </span>
                   <button
                     type="button"
-                    onClick={handleResetOriginToBase}
-                    className="inline-flex items-center gap-1 rounded-xl border border-slate-200 bg-white px-2.5 py-1.5 text-[11px] font-semibold text-[#334155] hover:bg-[#EFF4FF] whitespace-nowrap shrink-0"
+                    onClick={() => setShowDwgSection((prev) => !prev)}
+                    className={`inline-flex items-center gap-1.5 rounded-xl border px-3 py-1.5 text-xs font-semibold transition-colors whitespace-nowrap shrink-0 ${
+                      showDwgSection
+                        ? 'border-[#0284C7] bg-[#EFF6FF] text-[#0284C7]'
+                        : 'border-slate-200 bg-white text-[#0F2942] hover:bg-[#F8FAFC]'
+                    }`}
                   >
-                    <RotateCcw className="h-3 w-3" />
-                    Restablecer base
+                    <Compass className="h-3.5 w-3.5" />
+                    {showDwgSection ? 'Ocultar visor .DWG' : 'Adjuntar plano .DWG'}
                   </button>
-                )}
+                </div>
+              </div>
+
+              <div className="flex items-center justify-end gap-3">
+                <button
+                  type="button"
+                  onClick={() => handleStepChange('paso2')}
+                  className="inline-flex items-center gap-2 rounded-xl bg-[#0F2942] px-5 py-2.5 text-xs font-bold text-white hover:bg-[#0284C7] transition-colors min-h-[44px] whitespace-nowrap"
+                >
+                  Continuar a Logística y Guardar
+                  <ArrowRight className="h-4 w-4" />
+                </button>
               </div>
             </div>
+          ) : (
+            <div className="space-y-5">
+              {/* Vehículo y Combustible */}
+              <div className="rounded-2xl border border-slate-200/90 bg-white p-5 space-y-3.5 text-xs">
+                <div className="flex items-center gap-2 font-bold text-[#0F2942]">
+                  <Car className="h-4 w-4 text-[#0284C7]" />
+                  <span>Vehículo y Parámetros de Consumo</span>
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3.5">
+                  <div>
+                    <label className="block font-semibold text-[#475569] mb-1.5">
+                      Unidad seleccionada
+                    </label>
+                    <select
+                      value={vehiculoId}
+                      onChange={(e) => handleVehicleChange(e.target.value)}
+                      className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs text-[#0D1C2F] min-h-[40px] focus:border-[#0284C7] focus:outline-none"
+                    >
+                      {vehiculos.length > 0
+                        ? vehiculos.map((v) => (
+                            <option key={v.id} value={v.id}>
+                              {v.etiqueta} ({v.placa})
+                            </option>
+                          ))
+                        : VEHICLE_CATALOG.map((v) => (
+                            <option key={v.id} value={v.id}>
+                              {v.label}
+                            </option>
+                          ))}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block font-semibold text-[#475569] mb-1.5">
+                      Precio combustible (RD$/gal)
+                    </label>
+                    <input
+                      type="number"
+                      min={50}
+                      step={0.5}
+                      value={fuelPricePerGalRD}
+                      onChange={(e) => setFuelPricePerGalRD(Math.max(1, Number(e.target.value)))}
+                      className="w-full rounded-xl border border-slate-200 px-3 py-2 font-mono text-xs text-[#0D1C2F] tabular-nums min-h-[40px] focus:border-[#0284C7] focus:outline-none"
+                    />
+                  </div>
+                  <div>
+                    <label className="block font-semibold text-[#475569] mb-1.5">
+                      Rendimiento (km/gal)
+                    </label>
+                    <input
+                      type="number"
+                      min={5}
+                      step={1}
+                      value={kmPerGal}
+                      onChange={(e) => setKmPerGal(Math.max(5, Number(e.target.value)))}
+                      className="w-full rounded-xl border border-slate-200 px-3 py-2 font-mono text-xs text-[#0D1C2F] tabular-nums min-h-[40px] focus:border-[#0284C7] focus:outline-none"
+                    />
+                  </div>
+                </div>
+              </div>
 
-            <div className="flex flex-col sm:flex-row gap-2">
-              <form onSubmit={handleSearchOriginStreet} className="flex-1 flex gap-2 min-w-0">
-                <div className="relative flex-1 min-w-0">
-                  <Navigation className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-[#64748B]" />
-                  <input
-                    type="text"
-                    value={originSearchQuery}
-                    onChange={(e) => setOriginSearchQuery(e.target.value)}
-                    placeholder="Buscar calle o sector de salida (ej. Av. 27 de Febrero, Santiago)..."
-                    className="w-full rounded-xl border border-slate-200 bg-white pl-8 pr-7 py-2 text-xs text-[#0D1C2F] placeholder:text-[#94A3B8] min-h-[40px] focus:border-[#0284C7] focus:outline-none"
-                  />
-                  {originSearchQuery && (
+              {/* Rutas OSRM, Punto de Partida y Desglose de Viáticos */}
+              <div className="rounded-2xl border border-slate-200/90 bg-white p-5 space-y-4">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <div>
+                    <h3 className="flex items-center gap-2 text-sm font-bold text-[#0F2942]">
+                      <Route className="h-4 w-4 text-[#0284C7]" />
+                      Rutas Óptimas y Viáticos (Ida y Vuelta)
+                    </h3>
+                    <p className="text-xs text-[#475569]">
+                      Ajusta el punto de partida o fija un pin directamente en el visualizador.
+                    </p>
+                  </div>
+                  <div className="font-mono text-xs font-semibold text-[#0284C7] tabular-nums">
+                    {isLoadingRoutes
+                      ? 'Calculando ruta vial...'
+                      : `${activeBreakdown.roundTripKm} km · ${activeRoute?.durationMin ?? 25} min/vía`}
+                  </div>
+                </div>
+
+                {/* Punto de Partida */}
+                <div className="rounded-xl border border-slate-200/70 bg-[#F8FAFC] p-3.5 space-y-2.5">
+                  <div className="flex flex-wrap items-center justify-between gap-2 text-xs">
+                    <div className="flex items-center gap-2 min-w-0">
+                      <span className="inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-md bg-[#0284C7] font-mono text-[11px] font-bold text-white">
+                        A
+                      </span>
+                      <div className="min-w-0">
+                        <span className="font-bold text-[#0F2942]">Salida: </span>
+                        <span className="text-[#334155] truncate">{originPoint.label}</span>
+                        <span className="ml-1.5 font-mono text-[10px] font-semibold text-[#0284C7] uppercase">
+                          ·{' '}
+                          {originPoint.source === 'empresa'
+                            ? 'Base'
+                            : originPoint.source === 'calle'
+                            ? 'Calle'
+                            : 'Pin mapa'}
+                        </span>
+                      </div>
+                    </div>
+
+                    {originPoint.source !== 'empresa' && (
+                      <button
+                        type="button"
+                        onClick={handleResetOriginToBase}
+                        className="inline-flex items-center gap-1 rounded-xl border border-slate-200 bg-white px-2.5 py-1.5 text-[11px] font-semibold text-[#334155] hover:bg-[#EFF4FF] whitespace-nowrap shrink-0"
+                      >
+                        <RotateCcw className="h-3 w-3" />
+                        Restablecer base
+                      </button>
+                    )}
+                  </div>
+
+                  <div className="flex flex-col sm:flex-row gap-2">
+                    <form onSubmit={handleSearchOriginStreet} className="flex-1 flex gap-2 min-w-0">
+                      <div className="relative flex-1 min-w-0">
+                        <Navigation className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-[#64748B]" />
+                        <input
+                          type="text"
+                          value={originSearchQuery}
+                          onChange={(e) => setOriginSearchQuery(e.target.value)}
+                          placeholder="Buscar calle o sector..."
+                          className="w-full rounded-xl border border-slate-200 bg-white pl-8 pr-7 py-2 text-xs text-[#0D1C2F] placeholder:text-[#94A3B8] min-h-[40px] focus:border-[#0284C7] focus:outline-none"
+                        />
+                        {originSearchQuery && (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setOriginSearchQuery('');
+                              setOriginSearchResults([]);
+                              setOriginSearchError(null);
+                            }}
+                            className="absolute right-2.5 top-1/2 -translate-y-1/2 text-[#64748B] hover:text-[#0F2942]"
+                            aria-label="Limpiar búsqueda de calle"
+                          >
+                            <X className="h-3.5 w-3.5" />
+                          </button>
+                        )}
+                      </div>
+                      <button
+                        type="submit"
+                        disabled={isSearchingOrigin || !originSearchQuery.trim()}
+                        className="inline-flex items-center gap-1.5 rounded-xl bg-[#0F2942] px-3 py-2 text-xs font-semibold text-white hover:bg-[#0284C7] disabled:opacity-50 transition-colors min-h-[40px] whitespace-nowrap shrink-0"
+                      >
+                        <Search className="h-3.5 w-3.5" />
+                        {isSearchingOrigin ? 'Buscando...' : 'Buscar'}
+                      </button>
+                    </form>
+
                     <button
                       type="button"
                       onClick={() => {
-                        setOriginSearchQuery('');
-                        setOriginSearchResults([]);
-                        setOriginSearchError(null);
+                        setIsPickingOriginPin((prev) => {
+                          const next = !prev;
+                          if (next) setVisualizerFocus('ruta');
+                          return next;
+                        });
                       }}
-                      className="absolute right-2.5 top-1/2 -translate-y-1/2 text-[#64748B] hover:text-[#0F2942]"
-                      aria-label="Limpiar búsqueda de calle"
+                      className={`inline-flex items-center justify-center gap-1.5 rounded-xl border px-3 py-2 text-xs font-semibold transition-colors min-h-[40px] whitespace-nowrap shrink-0 ${
+                        isPickingOriginPin
+                          ? 'border-[#B45309] bg-amber-50 text-[#B45309]'
+                          : 'border-[#0284C7] bg-white text-[#0284C7] hover:bg-[#EFF6FF]'
+                      }`}
                     >
-                      <X className="h-3.5 w-3.5" />
+                      <MapPin className="h-3.5 w-3.5" />
+                      {isPickingOriginPin ? 'Cancelar pin' : 'Fijar pin'}
                     </button>
+                  </div>
+
+                  {originSearchError && (
+                    <div className="text-[11px] font-medium text-[#DC2626]">{originSearchError}</div>
+                  )}
+
+                  {originSearchResults.length > 0 && (
+                    <div className="rounded-xl border border-slate-200 bg-white divide-y divide-slate-200 max-h-40 overflow-y-auto">
+                      {originSearchResults.map((res, idx) => (
+                        <button
+                          key={`${res.lat}-${res.lon}-${idx}`}
+                          type="button"
+                          onClick={() => handleSelectStreetOrigin(res)}
+                          className="w-full flex items-center justify-between gap-2 px-3 py-2 text-left text-xs hover:bg-[#EFF6FF] transition-colors"
+                        >
+                          <span className="text-[#0D1C2F] truncate">{res.label}</span>
+                          <span className="font-mono text-[10px] font-semibold text-[#0284C7] uppercase shrink-0">
+                            {res.source}
+                          </span>
+                        </button>
+                      ))}
+                    </div>
                   )}
                 </div>
-                <button
-                  type="submit"
-                  disabled={isSearchingOrigin || !originSearchQuery.trim()}
-                  className="inline-flex items-center gap-1.5 rounded-xl bg-[#0F2942] px-3.5 py-2 text-xs font-semibold text-white hover:bg-[#0284C7] disabled:opacity-50 transition-colors min-h-[40px] whitespace-nowrap shrink-0"
-                >
-                  <Search className="h-3.5 w-3.5" />
-                  {isSearchingOrigin ? 'Buscando...' : 'Buscar calle'}
-                </button>
-              </form>
 
-              <button
-                type="button"
-                onClick={() => setIsPickingOriginPin((prev) => !prev)}
-                className={`inline-flex items-center justify-center gap-1.5 rounded-xl border px-3.5 py-2 text-xs font-semibold transition-colors min-h-[40px] whitespace-nowrap shrink-0 ${
-                  isPickingOriginPin
-                    ? 'border-[#D97706] bg-[#FEF3C7] text-[#92400E]'
-                    : 'border-[#0284C7] bg-white text-[#0284C7] hover:bg-[#EFF6FF]'
-                }`}
-              >
-                <MapPin className="h-3.5 w-3.5" />
-                {isPickingOriginPin ? 'Haz clic en el mapa (Cancelar)' : 'Fijar pin en mapa'}
-              </button>
-            </div>
+                {isLoadingRoutes && routes.length === 0 ? (
+                  <RouteAlternativesSkeleton />
+                ) : (
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    {routeComparison.map(({ route, breakdown }) => {
+                      const isSelected = route.id === activeRoute?.id;
+                      return (
+                        <button
+                          key={route.id}
+                          type="button"
+                          onClick={() => {
+                            setSelectedRouteId(route.id);
+                            setDistanceOverrideKm(null);
+                          }}
+                          className={`rounded-2xl border p-3.5 text-left transition-colors ${
+                            isSelected
+                              ? 'border-2 border-[#0F2942] bg-[#F8FAFC]'
+                              : 'border-slate-200/90 bg-white hover:bg-[#F8FAFC]'
+                          }`}
+                        >
+                          <div className="flex items-center justify-between gap-2">
+                            <span
+                              className={`text-[11px] font-bold ${
+                                route.id === 'economica' ? 'text-[#0284C7]' : 'text-[#6D28D9]'
+                              }`}
+                            >
+                              {route.badge}
+                            </span>
+                            <span className="font-mono text-sm font-bold text-[#0F2942] tabular-nums">
+                              {formatRD(breakdown.totalViaticosRD, moneda)}
+                            </span>
+                          </div>
+                          <div className="mt-1 text-xs font-bold text-[#0D1C2F]">{route.name}</div>
+                          <div className="mt-1 font-mono text-[11px] text-[#334155] tabular-nums">
+                            {route.distanceOneWayKm} km ida · {breakdown.roundTripKm} km i/v
+                          </div>
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
 
-            {originSearchError && (
-              <div className="text-[11px] font-medium text-[#B91C1C]">{originSearchError}</div>
-            )}
+                <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-slate-200/70 bg-[#F8FAFC] px-4 py-3 text-xs">
+                  <div className="flex flex-wrap items-center gap-4">
+                    <label className="inline-flex items-center gap-2 font-medium text-[#0D1C2F] cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={includeTolls}
+                        onChange={(e) => setIncludeTolls(e.target.checked)}
+                        className="rounded-sm accent-[#0F2942]"
+                      />
+                      Incluir peajes
+                    </label>
 
-            {originSearchResults.length > 0 && (
-              <div className="rounded-xl border border-slate-200 bg-white divide-y divide-slate-200 max-h-44 overflow-y-auto">
-                {originSearchResults.map((res, idx) => (
-                  <button
-                    key={`${res.lat}-${res.lon}-${idx}`}
-                    type="button"
-                    onClick={() => handleSelectStreetOrigin(res)}
-                    className="w-full flex items-center justify-between gap-2 px-3 py-2 text-left text-xs hover:bg-[#EFF6FF] transition-colors"
-                  >
-                    <span className="text-[#0D1C2F] truncate">{res.label}</span>
-                    <span className="font-mono text-[10px] font-semibold text-[#0284C7] uppercase shrink-0">
-                      {res.source}
+                    <label className="inline-flex items-center gap-2 font-medium text-[#0D1C2F] cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={includeLodging}
+                        onChange={(e) => setIncludeLodging(e.target.checked)}
+                        className="rounded-sm accent-[#0F2942]"
+                      />
+                      Hospedaje cuadrilla
+                    </label>
+                  </div>
+
+                  <div className="flex items-center gap-2">
+                    <span className="text-[#475569]">Ajuste km ida:</span>
+                    <input
+                      type="number"
+                      min={1}
+                      step={0.5}
+                      value={effectiveOneWayKm}
+                      onChange={(e) => setDistanceOverrideKm(Math.max(1, Number(e.target.value)))}
+                      className="w-20 rounded-xl border border-slate-200 bg-white px-2.5 py-1.5 font-mono text-xs text-[#0D1C2F] tabular-nums focus:border-[#0284C7] focus:outline-none"
+                    />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
+                  <div className="rounded-xl border border-slate-200/70 bg-[#F8FAFC] p-3">
+                    <div className="text-[11px] font-medium text-[#475569]">Combustible</div>
+                    <div className="mt-0.5 font-mono text-xs font-bold text-[#0F2942] tabular-nums">
+                      {formatRD(activeBreakdown.fuelRD, moneda)}
+                    </div>
+                  </div>
+                  <div className="rounded-xl border border-slate-200/70 bg-[#F8FAFC] p-3">
+                    <div className="text-[11px] font-medium text-[#475569]">Peajes</div>
+                    <div className="mt-0.5 font-mono text-xs font-bold text-[#0F2942] tabular-nums">
+                      {formatRD(activeBreakdown.tollsRD, moneda)}
+                    </div>
+                  </div>
+                  <div className="rounded-xl border border-slate-200/70 bg-[#F8FAFC] p-3">
+                    <div className="text-[11px] font-medium text-[#475569]">Dieta</div>
+                    <div className="mt-0.5 font-mono text-xs font-bold text-[#0F2942] tabular-nums">
+                      {formatRD(activeBreakdown.perDiemRD, moneda)}
+                    </div>
+                  </div>
+                  <div className="rounded-xl border border-slate-200/70 bg-[#F8FAFC] p-3">
+                    <div className="text-[11px] font-medium text-[#475569]">Mantenimiento</div>
+                    <div className="mt-0.5 font-mono text-xs font-bold text-[#0F2942] tabular-nums">
+                      {formatRD(activeBreakdown.maintenanceRD, moneda)}
+                    </div>
+                  </div>
+                </div>
+
+                {includeLodging && (
+                  <div className="flex items-center justify-between rounded-xl border border-sky-200 bg-[#EFF6FF] px-4 py-2.5 text-xs">
+                    <span className="font-medium text-[#0F2942]">
+                      Hospedaje / Pernocta ({activeBreakdown.fieldDays} noche(s))
                     </span>
-                  </button>
-                ))}
+                    <span className="font-mono font-bold text-[#0F2942] tabular-nums">
+                      {formatRD(activeBreakdown.lodgingRD, moneda)}
+                    </span>
+                  </div>
+                )}
               </div>
-            )}
-          </div>
 
-          {isLoadingRoutes && routes.length === 0 ? (
-            <RouteAlternativesSkeleton />
-          ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5">
-              {routeComparison.map(({ route, breakdown }) => {
-                const isSelected = route.id === activeRoute?.id;
-                return (
-                  <button
-                    key={route.id}
-                    type="button"
-                    onClick={() => {
-                      setSelectedRouteId(route.id);
-                      setDistanceOverrideKm(null);
-                    }}
-                    className={`rounded-2xl border p-4 text-left transition-colors ${
-                      isSelected
-                        ? 'border-2 border-[#0F2942] bg-[#F8FAFC]'
-                        : 'border-slate-200/90 bg-white hover:bg-[#F8FAFC]'
-                    }`}
-                  >
-                    <div className="flex items-center justify-between gap-2">
-                      <span
-                        className={`text-[11px] font-bold ${
-                          route.id === 'economica' ? 'text-[#0284C7]' : 'text-[#6D28D9]'
-                        }`}
+              {/* Resumen Consolidado y Guardado en Proyecto */}
+              <div className="rounded-2xl border border-slate-200/90 bg-white p-5 space-y-4">
+                <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-200 pb-3.5">
+                  <div>
+                    <h3 className="flex items-center gap-2 text-sm font-bold text-[#0F2942]">
+                      <Layers className="h-4 w-4 text-[#0284C7]" />
+                      Resumen y Guardar Cotización
+                    </h3>
+                    <p className="text-xs text-[#475569]">
+                      {province} · {manualAreaM2.toLocaleString('en-US')} m² · Terreno {terrain}
+                    </p>
+                  </div>
+                  <span className="font-mono text-lg font-bold text-[#0F2942] tabular-nums">
+                    {formatRD(grandTotalRD, moneda)}
+                  </span>
+                </div>
+
+                {servicesCalculation.items.length === 0 ? (
+                  <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-amber-200 bg-amber-50/70 px-3.5 py-2.5 text-xs text-[#B45309]">
+                    <span>Sin servicios seleccionados (solo se cotizan viáticos).</span>
+                    <button
+                      type="button"
+                      onClick={() => setActiveStep('paso1')}
+                      className="rounded-lg border border-amber-300 bg-white px-2.5 py-1 font-semibold text-[#0F2942] hover:bg-amber-50 whitespace-nowrap"
+                    >
+                      Elegir servicios
+                    </button>
+                  </div>
+                ) : (
+                  <div className="rounded-xl border border-slate-200/70 bg-[#F8FAFC] divide-y divide-slate-200/60">
+                    {servicesCalculation.items.map((item) => (
+                      <div
+                        key={item.id}
+                        className="flex items-center justify-between gap-2 px-3.5 py-2 text-xs"
                       >
-                        {route.badge}
+                        <span className="text-[#334155] truncate">
+                          <strong className="text-[#0F2942]">{item.name}</strong>
+                          {item.corridorExtra > 0 ? ` (${corridorKm} km)` : ''}
+                        </span>
+                        <span className="font-mono font-semibold text-[#0D1C2F] tabular-nums shrink-0">
+                          {formatRD(item.adjustedPriceRD, moneda)}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                {selectedRuta && !uploadedKmz && (() => {
+                  const proyDestino = proyectos.find((p) => p.id === selectedRuta.proyectoId);
+                  if (!proyDestino) return null;
+                  return (
+                    <div className="rounded-xl border border-slate-200/70 bg-[#F8FAFC] px-3.5 py-2.5 text-xs flex flex-wrap items-center justify-between gap-2">
+                      <span className="text-[#334155] truncate">
+                        Proyecto:{' '}
+                        <strong className="font-mono text-[#0F2942]">{proyDestino.codigoContrato}</strong>{' '}
+                        — {proyDestino.nombre}
                       </span>
-                      <span className="font-mono text-sm font-bold text-[#0F2942] tabular-nums">
-                        {formatRD(breakdown.totalViaticosRD)}
+                      <span className="font-mono text-[#0284C7] font-semibold tabular-nums shrink-0">
+                        Viáticos: {formatRD(activeBreakdown.totalViaticosRD, moneda)}
                       </span>
                     </div>
-                    <div className="mt-1 text-sm font-bold text-[#0D1C2F]">{route.name}</div>
-                    <div className="text-[11px] text-[#475569]">{route.corridorDesc}</div>
-                    <div className="mt-2 font-mono text-[11px] text-[#334155] tabular-nums">
-                      Ida: {route.distanceOneWayKm} km · Ida y vuelta: {breakdown.roundTripKm} km ·{' '}
-                      {route.tollNote}
-                    </div>
+                  );
+                })()}
+
+                {applyFeedback && (
+                  <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-3.5 py-2.5 text-xs font-medium text-[#15803D]">
+                    {applyFeedback}
+                  </div>
+                )}
+
+                <div className="flex flex-col sm:flex-row flex-wrap gap-2.5">
+                  {canEdit && (
+                    <button
+                      type="button"
+                      disabled={isApplying || (!uploadedKmz && !selectedRuta)}
+                      onClick={handleApplyCalculation}
+                      className="flex-1 inline-flex items-center justify-center gap-2 rounded-xl bg-[#0F2942] px-4 py-2.5 text-xs font-bold text-white hover:bg-[#0284C7] disabled:opacity-50 transition-colors min-h-[44px] whitespace-nowrap shrink-0"
+                    >
+                      <Send className="h-4 w-4" />
+                      {uploadedKmz
+                        ? 'Crear ruta KMZ'
+                        : isApplying
+                        ? 'Aplicando...'
+                        : 'Actualizar ruta y servicios'}
+                    </button>
+                  )}
+
+                  {selectedRuta && !uploadedKmz && (
+                    <button
+                      type="button"
+                      onClick={handleLogAutomaticRouteExpenses}
+                      className="inline-flex items-center justify-center gap-2 rounded-xl bg-[#0284C7] px-4 py-2.5 text-xs font-semibold text-white hover:bg-[#006398] transition-colors min-h-[44px] whitespace-nowrap shrink-0"
+                    >
+                      <Receipt className="h-4 w-4" />
+                      Registrar viáticos
+                    </button>
+                  )}
+
+                  {selectedRuta && !uploadedKmz && onOpenExpenseModal && (
+                    <button
+                      type="button"
+                      onClick={onOpenExpenseModal}
+                      className="inline-flex items-center justify-center gap-2 rounded-xl bg-[#0F2942] px-4 py-2.5 text-xs font-semibold text-white hover:bg-[#0284C7] transition-colors min-h-[44px] whitespace-nowrap shrink-0"
+                    >
+                      <Camera className="h-4 w-4" />
+                      Adjuntar recibo
+                    </button>
+                  )}
+
+                  <button
+                    type="button"
+                    onClick={handleExportEstimateCsv}
+                    className="inline-flex items-center justify-center gap-1.5 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-xs font-semibold text-[#334155] hover:bg-[#F8FAFC] min-h-[44px] whitespace-nowrap shrink-0 transition-colors"
+                  >
+                    <Download className="h-4 w-4" />
+                    Exportar CSV
                   </button>
-                );
-              })}
+                </div>
+              </div>
+
+              <div className="flex items-center justify-between gap-3">
+                <button
+                  type="button"
+                  onClick={() => handleStepChange('paso1')}
+                  className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-xs font-semibold text-[#0F2942] hover:bg-slate-50 min-h-[44px] whitespace-nowrap"
+                >
+                  <ArrowLeft className="h-4 w-4" />
+                  Volver a Ruta y Servicios
+                </button>
+              </div>
             </div>
           )}
+        </div>
 
-          <div className="rounded-2xl border border-slate-200/90 overflow-hidden">
-            <div className="flex flex-wrap items-center justify-between gap-2 bg-[#0F2942] px-4 py-2.5 text-white">
-              <span className="text-xs font-semibold truncate">
-                Trazado de Ruta Seleccionada · {activeRoute?.name || 'Corredor'}
-              </span>
-              <div className="inline-flex rounded-xl bg-[#091A2C] p-0.5">
-                <button
-                  type="button"
-                  onClick={() => setMapStyle('osm')}
-                  className={`inline-flex items-center gap-1 rounded-lg px-2.5 py-1 text-[11px] font-semibold whitespace-nowrap shrink-0 ${
-                    mapStyle === 'osm' ? 'bg-[#0284C7] text-white' : 'text-[#94A3B8]'
-                  }`}
+        {/* COLUMNA DERECHA: VISUALIZADOR GEOGRÁFICO SIEMPRE VISIBLE */}
+        <div className="lg:col-span-6 lg:sticky lg:top-20 space-y-4 min-w-0">
+          <div className="rounded-2xl border border-slate-200/90 bg-white overflow-hidden shadow-sm">
+            <div className="flex flex-wrap items-center justify-between gap-2.5 bg-[#0F2942] px-4 py-3 text-white">
+              <div className="min-w-0 flex-1">
+                <div className="text-[10px] font-mono uppercase tracking-wider text-sky-300">
+                  Visualizador Geográfico en Vivo
+                </div>
+                <div className="text-xs font-bold truncate">{activeParcelTitle}</div>
+                <div className="mt-0.5 flex items-center gap-1 text-[11px] text-sky-100/90 truncate">
+                  <MapPin className="h-3 w-3 text-sky-300 shrink-0" />
+                  <span className="truncate">
+                    {isLoadingParcelLocation
+                      ? `Ubicando en ${province}...`
+                      : parcelLocationLabel || province}
+                  </span>
+                </div>
+              </div>
+              <div className="flex flex-wrap items-center gap-1.5 shrink-0">
+                <div
+                  className="inline-flex rounded-xl bg-[#091A2C] p-0.5 shrink-0"
+                  role="group"
+                  aria-label="Enfoque del mapa"
                 >
-                  <MapIcon className="h-3 w-3" />
-                  Mapa Vial
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setMapStyle('topo')}
-                  className={`inline-flex items-center gap-1 rounded-lg px-2.5 py-1 text-[11px] font-semibold whitespace-nowrap shrink-0 ${
-                    mapStyle === 'topo' ? 'bg-[#0284C7] text-white' : 'text-[#94A3B8]'
-                  }`}
+                  <button
+                    type="button"
+                    onClick={() => setVisualizerFocus('poligono')}
+                    className={`inline-flex items-center gap-1 rounded-lg px-2.5 py-1 text-[11px] font-semibold whitespace-nowrap shrink-0 transition-colors ${
+                      visualizerFocus === 'poligono'
+                        ? 'bg-[#0284C7] text-white'
+                        : 'text-[#94A3B8] hover:text-white'
+                    }`}
+                  >
+                    <Compass className="h-3 w-3" />
+                    Polígono
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setVisualizerFocus('ruta')}
+                    className={`inline-flex items-center gap-1 rounded-lg px-2.5 py-1 text-[11px] font-semibold whitespace-nowrap shrink-0 transition-colors ${
+                      visualizerFocus === 'ruta'
+                        ? 'bg-[#0284C7] text-white'
+                        : 'text-[#94A3B8] hover:text-white'
+                    }`}
+                  >
+                    <Route className="h-3 w-3" />
+                    Ruta
+                  </button>
+                </div>
+
+                <div
+                  className="inline-flex rounded-xl bg-[#091A2C] p-0.5 shrink-0"
+                  role="group"
+                  aria-label="Estilo de mapa"
                 >
-                  <Mountain className="h-3 w-3" />
-                  Topográfico
-                </button>
+                  <button
+                    type="button"
+                    onClick={() => setMapStyle('osm')}
+                    className={`inline-flex items-center gap-1 rounded-lg px-2.5 py-1 text-[11px] font-semibold whitespace-nowrap shrink-0 transition-colors ${
+                      mapStyle === 'osm'
+                        ? 'bg-[#0284C7] text-white'
+                        : 'text-[#94A3B8] hover:text-white'
+                    }`}
+                  >
+                    <MapIcon className="h-3 w-3" />
+                    Vial
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setMapStyle('topo')}
+                    className={`inline-flex items-center gap-1 rounded-lg px-2.5 py-1 text-[11px] font-semibold whitespace-nowrap shrink-0 transition-colors ${
+                      mapStyle === 'topo'
+                        ? 'bg-[#0284C7] text-white'
+                        : 'text-[#94A3B8] hover:text-white'
+                    }`}
+                  >
+                    <Mountain className="h-3 w-3" />
+                    Topo
+                  </button>
+                </div>
               </div>
             </div>
 
             <div className="relative">
-              <div ref={mapContainerRef} className="w-full h-[260px] sm:h-[300px] z-0" />
+              <div ref={mapContainerRef} className="w-full h-[320px] sm:h-[380px] lg:h-[430px] z-0" />
+              <button
+                type="button"
+                onClick={handleRecenterMap}
+                className="absolute top-3 right-3 z-[400] inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white/95 backdrop-blur-sm px-2.5 py-1.5 text-[11px] font-semibold text-[#0F2942] shadow-md hover:bg-sky-50 whitespace-nowrap"
+                title={
+                  visualizerFocus === 'poligono'
+                    ? 'Centrar en el polígono'
+                    : 'Ajustar mapa a la ruta'
+                }
+              >
+                <LocateFixed className="h-3.5 w-3.5 text-[#0284C7]" />
+                {visualizerFocus === 'poligono' ? 'Centrar polígono' : 'Centrar ruta'}
+              </button>
               {isPickingOriginPin && (
                 <div className="absolute top-3 left-1/2 -translate-x-1/2 z-[400] rounded-md border border-[#38BDF8]/60 bg-[#091A2C]/92 backdrop-blur-md px-3.5 py-2 text-xs font-semibold text-[#38BDF8] shadow-lg whitespace-nowrap">
-                  Haz clic en cualquier punto del mapa para fijar el punto de partida (A)
+                  Haz clic en el mapa para fijar el punto de partida (A)
                 </div>
               )}
               <div className="absolute bottom-3 left-3 z-[400] rounded-md bg-[#091A2C]/92 backdrop-blur-md border border-white/15 px-3 py-1.5 font-mono text-[11px] font-semibold text-white shadow-lg tabular-nums">
-                {effectiveOneWayKm.toFixed(1)} km ida · {activeBreakdown.roundTripKm} km ida y vuelta
+                {visualizerFocus === 'poligono'
+                  ? `${activeFeatures.length} geom. · ${formatArea(
+                      manualAreaM2,
+                      'tareas'
+                    )} · ${formatPerimeter(activePerimeterM)}`
+                  : `${effectiveOneWayKm.toFixed(1)} km ida · ${activeBreakdown.roundTripKm} km i/v`}
               </div>
             </div>
 
-            <div className="flex flex-wrap items-center justify-between gap-2 bg-[#0F2942] px-4 py-2 text-[11px] text-[#CBD5E1]">
-              <div className="flex items-center gap-4">
-                <span className="inline-flex items-center gap-1.5">
-                  <span className="h-2.5 w-2.5 rounded-full bg-[#0284C7] border border-white inline-block" />{' '}
-                  Origen (arrastrable)
-                </span>
-                <span className="inline-flex items-center gap-1.5">
-                  <span className="h-1 w-4 bg-[#D97706] inline-block" /> Ruta activa
-                </span>
-                <span className="inline-flex items-center gap-1.5">
-                  <span className="h-1 w-4 border-t-2 border-dashed border-[#94A3B8] inline-block" />{' '}
-                  Ruta alterna
-                </span>
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 border-t border-slate-200/80 bg-[#F8FAFC] px-4 py-3 text-[11px]">
+              <div className="min-w-0">
+                <div className="text-[#64748B]">Parcela / KMZ</div>
+                <div className="font-mono font-bold text-[#0F2942] truncate">{activeParcelCode}</div>
               </div>
-              <span className="font-mono text-[10px]">
-                {activeRoute?.source === 'osrm'
-                  ? 'Red vial OpenStreetMap (OSRM)'
-                  : 'Cálculo geodésico local'}
-              </span>
-            </div>
-          </div>
-
-          <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-slate-200/70 bg-[#F8FAFC] px-4 py-3 text-xs">
-            <div className="flex flex-wrap items-center gap-4">
-              <label className="inline-flex items-center gap-2 font-medium text-[#0D1C2F] cursor-pointer">
-                <input
-                  type="checkbox"
-                  checked={includeTolls}
-                  onChange={(e) => setIncludeTolls(e.target.checked)}
-                  className="rounded-sm accent-[#0F2942]"
-                />
-                Incluir peajes ida y vuelta
-              </label>
-
-              <label className="inline-flex items-center gap-2 font-medium text-[#0D1C2F] cursor-pointer">
-                <input
-                  type="checkbox"
-                  checked={includeLodging}
-                  onChange={(e) => setIncludeLodging(e.target.checked)}
-                  className="rounded-sm accent-[#0F2942]"
-                />
-                Pernocta / hospedaje cuadrilla
-              </label>
-            </div>
-
-            <div className="flex items-center gap-2">
-              <span className="text-[#475569]">Ajustar distancia ida (km):</span>
-              <input
-                type="number"
-                min={1}
-                step={0.5}
-                value={effectiveOneWayKm}
-                onChange={(e) => setDistanceOverrideKm(Math.max(1, Number(e.target.value)))}
-                className="w-20 rounded-xl border border-slate-200 bg-white px-2.5 py-1.5 font-mono text-xs text-[#0D1C2F] tabular-nums focus:border-[#0284C7] focus:outline-none"
-              />
-            </div>
-          </div>
-
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3.5">
-            <div className="rounded-2xl border border-slate-200/70 bg-[#F8FAFC] p-3.5">
-              <div className="text-[11px] font-medium text-[#475569]">Combustible (ida y vuelta)</div>
-              <div className="mt-1 font-mono text-sm font-bold text-[#0F2942] tabular-nums">
-                {formatRD(activeBreakdown.fuelRD)}
-              </div>
-              <div className="mt-0.5 font-mono text-[11px] text-[#475569] tabular-nums">
-                {activeBreakdown.gallonsNeeded} gal · {kmPerGal} km/gal
-              </div>
-            </div>
-
-            <div className="rounded-2xl border border-slate-200/70 bg-[#F8FAFC] p-3.5">
-              <div className="text-[11px] font-medium text-[#475569]">Peajes (ida y vuelta)</div>
-              <div className="mt-1 font-mono text-sm font-bold text-[#0F2942] tabular-nums">
-                {formatRD(activeBreakdown.tollsRD)}
-              </div>
-              <div className="mt-0.5 text-[11px] text-[#475569] truncate">
-                {includeTolls ? activeRoute?.tollNote || 'RD Vial' : 'Excluidos'}
-              </div>
-            </div>
-
-            <div className="rounded-2xl border border-slate-200/70 bg-[#F8FAFC] p-3.5">
-              <div className="text-[11px] font-medium text-[#475569]">Dieta cuadrilla</div>
-              <div className="mt-1 font-mono text-sm font-bold text-[#0F2942] tabular-nums">
-                {formatRD(activeBreakdown.perDiemRD)}
-              </div>
-              <div className="mt-0.5 text-[11px] text-[#475569]">
-                {activeBreakdown.fieldDays} día(s) · {terrain}
-              </div>
-            </div>
-
-            <div className="rounded-2xl border border-slate-200/70 bg-[#F8FAFC] p-3.5">
-              <div className="text-[11px] font-medium text-[#475569]">Mantenimiento unidad</div>
-              <div className="mt-1 font-mono text-sm font-bold text-[#0F2942] tabular-nums">
-                {formatRD(activeBreakdown.maintenanceRD)}
-              </div>
-              <div className="mt-0.5 font-mono text-[11px] text-[#475569] tabular-nums">
-                {activeBreakdown.roundTripKm} km × RD$ {activeVehicle.maintenancePerKmRD}
-              </div>
-            </div>
-          </div>
-
-          {includeLodging && (
-            <div className="flex items-center justify-between rounded-xl border border-sky-200 bg-[#EFF6FF] px-4 py-2.5 text-xs">
-              <span className="font-medium text-[#0F2942]">
-                Hospedaje / Pernocta de cuadrilla ({activeBreakdown.fieldDays} noche(s))
-              </span>
-              <span className="font-mono font-bold text-[#0F2942] tabular-nums">
-                {formatRD(activeBreakdown.lodgingRD)}
-              </span>
-            </div>
-          )}
-        </div>
-
-        {showDwgSection && (
-          <DwgPlanViewer
-            plan={dwgPlan}
-            onPlanLoaded={setDwgPlan}
-            compact
-            title="Planos Arquitectónicos (.DWG / .DXF) · Soporte de Proyecto"
-            subtitle="Carga planos AutoCAD para revisar plantas, capas constructivas y dimensiones junto con la ruta."
-          />
-        )}
-
-        {/* Additive Services Summary & Actions */}
-        <div className="rounded-2xl border border-slate-200/90 bg-white p-5 space-y-3.5">
-          <div className="flex items-center justify-between border-b border-slate-200 pb-3">
-            <h3 className="flex items-center gap-2 text-xs font-bold text-[#0F2942]">
-              <Layers className="h-4 w-4 text-[#0284C7]" />
-              Servicios técnicos seleccionados (sumatoria)
-            </h3>
-            <span className="font-mono text-xs font-bold text-[#0F2942] tabular-nums">
-              {formatRD(servicesCalculation.totalServicesRD)}
-            </span>
-          </div>
-
-          {servicesCalculation.items.length === 0 ? (
-            <p className="text-xs text-[#DC2626]">
-              Selecciona al menos un servicio en el panel izquierdo para sumar honorarios técnicos.
-            </p>
-          ) : (
-            <div className="space-y-1.5 text-xs">
-              {servicesCalculation.items.map((item) => (
-                <div key={item.id} className="flex items-center justify-between gap-2">
-                  <span className="text-[#334155]">
-                    <strong>{item.name}</strong> · {item.subtitle}
-                    {item.corridorExtra > 0 ? ` (${corridorKm} km corredor)` : ''}
-                  </span>
-                  <span className="font-mono font-semibold text-[#0D1C2F] tabular-nums">
-                    {formatRD(item.adjustedPriceRD)}
-                  </span>
+              <div className="min-w-0">
+                <div className="text-[#64748B]">Locación</div>
+                <div
+                  className="font-semibold text-[#0F2942] truncate"
+                  title={parcelLocationLabel || province}
+                >
+                  {parcelLocationLabel || province}
                 </div>
-              ))}
-            </div>
-          )}
-
-          <div className="border-t border-slate-200 pt-3 space-y-1.5 text-xs">
-            <div className="flex justify-between">
-              <span className="text-[#475569]">
-                1. Trabajos de Campo y Gabinete Técnico (factor terreno {terrain})
-              </span>
-              <span className="font-mono font-semibold tabular-nums">
-                {formatRD(servicesCalculation.totalServicesRD)}
-              </span>
-            </div>
-            <div className="flex justify-between">
-              <span className="text-[#475569]">
-                2. Movilización, Ruta y Viáticos ({activeBreakdown.roundTripKm} km ida y vuelta)
-              </span>
-              <span className="font-mono font-semibold tabular-nums">
-                {formatRD(activeBreakdown.totalViaticosRD)}
-              </span>
-            </div>
-            <div className="flex items-baseline justify-between border-t border-slate-200 pt-2.5">
-              <span className="text-sm font-bold text-[#0F2942]">Total Presupuestado:</span>
-              <span className="font-mono text-xl font-bold text-[#0F2942] tabular-nums">
-                {formatRD(grandTotalRD)}
-              </span>
-            </div>
-          </div>
-
-          {selectedRuta && !uploadedKmz && (() => {
-            const proyDestino = proyectos.find((p) => p.id === selectedRuta.proyectoId);
-            if (!proyDestino) return null;
-            return (
-              <div className="rounded-xl border border-slate-200/70 bg-[#F8FAFC] px-3.5 py-2.5 text-[11px] flex flex-wrap items-center justify-between gap-2">
-                <span className="text-[#334155]">
-                  Proyecto vinculado:{' '}
-                  <strong className="font-mono text-[#0F2942]">{proyDestino.codigoContrato}</strong>{' '}
-                  — {proyDestino.nombre}
-                </span>
-                <span className="font-mono text-[#0284C7] font-semibold tabular-nums">
-                  Presup. actual viáticos: {formatRD(proyDestino.presupuestoViaticosRD)}
-                </span>
               </div>
-            );
-          })()}
-
-          {applyFeedback && (
-            <div className="rounded-xl border border-[#86EFAC] bg-[#F0FDF4] px-3.5 py-2.5 text-xs font-medium text-[#15803D]">
-              {applyFeedback}
+              <div className="min-w-0">
+                <div className="text-[#64748B]">Superficie · Perímetro</div>
+                <div className="font-mono font-bold text-[#0284C7] tabular-nums truncate">
+                  {manualAreaM2.toLocaleString('en-US')} m² · {formatPerimeter(activePerimeterM)}
+                </div>
+              </div>
+              <div className="min-w-0">
+                <div className="text-[#64748B]">Lat/Lon · UTM {activeCentroid.zone}</div>
+                <div className="font-mono font-semibold text-[#0F2942] tabular-nums truncate">
+                  {activeCentroid.lat.toFixed(4)}, {activeCentroid.lon.toFixed(4)}
+                </div>
+              </div>
             </div>
-          )}
-
-          <div className="flex flex-col sm:flex-row flex-wrap gap-2.5 pt-2">
-            {canEdit && (
-              <button
-                type="button"
-                disabled={isApplying || (!uploadedKmz && !selectedRuta)}
-                onClick={handleApplyCalculation}
-                className="flex-1 inline-flex items-center justify-center gap-2 rounded-xl bg-[#0F2942] px-4 py-2.5 text-xs font-bold text-white hover:bg-[#0284C7] disabled:opacity-50 transition-colors min-h-[44px] whitespace-nowrap shrink-0"
-              >
-                <Send className="h-4 w-4" />
-                {uploadedKmz
-                  ? 'Crear ruta KMZ'
-                  : isApplying
-                  ? 'Aplicando...'
-                  : 'Actualizar ruta y servicios'}
-              </button>
-            )}
-
-            {selectedRuta && !uploadedKmz && (
-              <button
-                type="button"
-                onClick={handleLogAutomaticRouteExpenses}
-                className="inline-flex items-center justify-center gap-2 rounded-xl bg-[#0284C7] px-4 py-2.5 text-xs font-semibold text-white hover:bg-[#006398] transition-colors min-h-[44px] whitespace-nowrap shrink-0"
-              >
-                <Receipt className="h-4 w-4" />
-                Registrar viáticos
-              </button>
-            )}
-
-            {selectedRuta && !uploadedKmz && onOpenExpenseModal && (
-              <button
-                type="button"
-                onClick={onOpenExpenseModal}
-                className="inline-flex items-center justify-center gap-2 rounded-xl bg-[#0F2942] px-4 py-2.5 text-xs font-semibold text-white hover:bg-[#0284C7] transition-colors min-h-[44px] whitespace-nowrap shrink-0"
-              >
-                <Camera className="h-4 w-4" />
-                Adjuntar recibo
-              </button>
-            )}
-
-            <button
-              type="button"
-              onClick={handleExportEstimateCsv}
-              className="inline-flex items-center justify-center gap-1.5 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-xs font-semibold text-[#334155] hover:bg-[#F8FAFC] min-h-[44px] whitespace-nowrap shrink-0 transition-colors"
-            >
-              <Download className="h-4 w-4" />
-              Exportar CSV
-            </button>
           </div>
+
+          {showDwgSection && (
+            <DwgPlanViewer
+              plan={dwgPlan}
+              onPlanLoaded={setDwgPlan}
+              compact
+              title="Planos Arquitectónicos (.DWG / .DXF) · Soporte de Proyecto"
+              subtitle="Carga planos AutoCAD para revisar plantas, capas constructivas y dimensiones junto con la ruta."
+            />
+          )}
         </div>
       </div>
     </div>
   );
 };
+

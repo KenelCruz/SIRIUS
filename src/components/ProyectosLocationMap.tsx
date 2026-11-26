@@ -13,6 +13,7 @@ import {
 import type { AreaUnit, Cliente, Proyecto, RolEmpresa, Ruta, Servicio } from '../types/domain';
 import { formatArea, formatRD } from '../utils/geodesy';
 import { SANTO_DOMINGO_ORIGIN } from '../utils/routingEngine';
+import { ETIQUETA_ESTADO } from '../domain';
 import { WorkflowBadge } from './WorkflowBadge';
 import type { EstadoServicio } from '../types/domain';
 
@@ -22,6 +23,7 @@ export interface ProyectoUbicacionItem {
   rutasProy: Ruta[];
   srvsProy: Servicio[];
   estadoActual: EstadoServicio;
+  progresoPct: number;
   gastoReal: number;
 }
 
@@ -138,7 +140,12 @@ export const ProyectosLocationMap: React.FC<ProyectosLocationMapProps> = ({
       0
     );
     const pctAvance =
-      totalServicios > 0 ? Math.round((serviciosCompletos / totalServicios) * 100) : 0;
+      itemsFiltrados.length > 0
+        ? Math.round(
+            itemsFiltrados.reduce((acc, i) => acc + i.progresoPct, 0) /
+              itemsFiltrados.length
+          )
+        : 0;
     const pctGeorref =
       itemsFiltrados.length > 0
         ? Math.round((proyectosGeorreferenciados.length / itemsFiltrados.length) * 100)
@@ -314,9 +321,23 @@ export const ProyectosLocationMap: React.FC<ProyectosLocationMapProps> = ({
   const focusProyectoOnMap = (proyectoId: string) => {
     setSelectedProyectoId(proyectoId);
     const geo = proyectosGeorreferenciados.find((p) => p.proyecto.id === proyectoId);
-    if (geo && mapRef.current) {
-      mapRef.current.flyTo([geo.lat, geo.lon], 13, { duration: 0.5 });
+    if (!geo || !mapRef.current) return;
+
+    const coords = geo.rutasProy.flatMap((r) =>
+      r.features.flatMap((f) => f.points.map((pt) => [pt.lat, pt.lon] as [number, number]))
+    );
+    if (coords.length >= 2) {
+      const polyBounds = L.latLngBounds(coords);
+      if (polyBounds.isValid()) {
+        const ne = polyBounds.getNorthEast();
+        const sw = polyBounds.getSouthWest();
+        if (Math.abs(ne.lat - sw.lat) >= 1e-6 || Math.abs(ne.lng - sw.lng) >= 1e-6) {
+          mapRef.current.flyToBounds(polyBounds, { padding: [56, 56], maxZoom: 16, duration: 0.5 });
+          return;
+        }
+      }
     }
+    mapRef.current.flyTo([geo.lat, geo.lon], 14, { duration: 0.5 });
   };
 
   const maxRutasProv = Math.max(1, ...stats.provinciasBarras.map((p) => p.rutasCount));
@@ -467,29 +488,47 @@ export const ProyectosLocationMap: React.FC<ProyectosLocationMapProps> = ({
                     key={item.proyecto.id}
                     type="button"
                     onClick={() => focusProyectoOnMap(item.proyecto.id)}
-                    className={`w-full flex items-center justify-between gap-2 rounded-xl border px-3 py-2 text-left transition-colors ${
+                    className={`w-full rounded-xl border px-3 py-2.5 text-left transition-colors space-y-1.5 ${
                       isSel
                         ? 'border-[#0284C7] bg-[#0F2942] text-white'
                         : 'border-slate-200/80 bg-white text-[#0F2942] hover:bg-sky-50/70'
                     }`}
                   >
-                    <div className="min-w-0">
-                      <div className="text-xs font-bold truncate">{item.proyecto.nombre}</div>
-                      <div
-                        className={`text-[11px] font-mono truncate ${
-                          isSel ? 'text-sky-200' : 'text-[#475569]'
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="min-w-0">
+                        <div className="text-xs font-bold truncate">{item.proyecto.nombre}</div>
+                        <div
+                          className={`text-[11px] font-mono truncate ${
+                            isSel ? 'text-sky-200' : 'text-[#475569]'
+                          }`}
+                        >
+                          {item.proyecto.codigoContrato} · {ETIQUETA_ESTADO[item.estadoActual]} · {prov}
+                        </div>
+                      </div>
+                      <span
+                        className={`font-mono text-[11px] font-bold tabular-nums shrink-0 ${
+                          isSel ? 'text-[#38BDF8]' : 'text-[#0284C7]'
                         }`}
                       >
-                        {item.proyecto.codigoContrato} · {prov}
-                      </div>
+                        {item.progresoPct}%
+                      </span>
                     </div>
-                    <span
-                      className={`font-mono text-[11px] font-semibold shrink-0 ${
-                        isSel ? 'text-[#38BDF8]' : 'text-[#0284C7]'
+                    <div
+                      className={`h-1.5 w-full overflow-hidden rounded-full ${
+                        isSel ? 'bg-white/15' : 'bg-slate-100'
                       }`}
                     >
-                      {item.rutasProy.length}R
-                    </span>
+                      <div
+                        className={`h-full rounded-full transition-all ${
+                          item.progresoPct >= 100
+                            ? 'bg-[#22C55E]'
+                            : isSel
+                            ? 'bg-[#38BDF8]'
+                            : 'bg-[#0284C7]'
+                        }`}
+                        style={{ width: `${item.progresoPct}%` }}
+                      />
+                    </div>
                   </button>
                 );
               })}
@@ -528,6 +567,10 @@ export const ProyectosLocationMap: React.FC<ProyectosLocationMapProps> = ({
                   <span aria-hidden="true" className="text-slate-300">·</span>
                   <WorkflowBadge status={selectedItem.estadoActual} />
                   <span aria-hidden="true" className="text-slate-300">·</span>
+                  <span className="font-mono font-bold text-[#0F2942] tabular-nums">
+                    {selectedItem.progresoPct}% avance
+                  </span>
+                  <span aria-hidden="true" className="text-slate-300">·</span>
                   <span className="inline-flex items-center gap-1 text-[#475569]">
                     <MapPin className="h-3.5 w-3.5 text-[#0284C7]" />
                     {selectedItem.rutasProy[0]?.provincia || 'Sin ubicación'}
@@ -535,6 +578,19 @@ export const ProyectosLocationMap: React.FC<ProyectosLocationMapProps> = ({
                 </div>
                 <div className="text-sm font-bold text-[#0F2942] truncate">
                   {selectedItem.proyecto.nombre}
+                </div>
+                <div className="flex items-center gap-2.5 max-w-xs pt-0.5">
+                  <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-slate-100">
+                    <div
+                      className={`h-full rounded-full ${
+                        selectedItem.progresoPct >= 100 ? 'bg-[#15803D]' : 'bg-[#0284C7]'
+                      }`}
+                      style={{ width: `${selectedItem.progresoPct}%` }}
+                    />
+                  </div>
+                  <span className="font-mono text-[11px] font-semibold text-[#475569] tabular-nums">
+                    {selectedItem.progresoPct}%
+                  </span>
                 </div>
                 <div className="text-xs text-[#475569] truncate">
                   {selectedItem.cliente?.nombre || 'Cliente sin asignar'} ·{' '}

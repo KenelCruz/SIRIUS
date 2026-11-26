@@ -10,6 +10,7 @@ import {
 } from 'lucide-react';
 import type { BitacoraEntrada, SnapshotTecnico } from '../../types/domain';
 import { formatSantoDomingoAST } from '../../utils/geodesy';
+import { compressPhotoDataUrl } from '../../utils/imageOptimize';
 import { MediaThumb } from '../MediaThumb';
 
 interface TecnicoBitacoraModalProps {
@@ -25,35 +26,7 @@ interface TecnicoBitacoraModalProps {
 }
 
 async function compressPhoto(file: File): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onerror = () => reject(new Error('No se pudo leer la fotografía seleccionada.'));
-    reader.onload = () => {
-      const img = new Image();
-      img.onerror = () => reject(new Error('El archivo seleccionado no es una imagen válida.'));
-      img.onload = () => {
-        const maxDim = 1024;
-        let { width, height } = img;
-        if (width > maxDim || height > maxDim) {
-          const ratio = Math.min(maxDim / width, maxDim / height);
-          width = Math.round(width * ratio);
-          height = Math.round(height * ratio);
-        }
-        const canvas = document.createElement('canvas');
-        canvas.width = width;
-        canvas.height = height;
-        const ctx = canvas.getContext('2d');
-        if (!ctx) {
-          resolve(String(reader.result));
-          return;
-        }
-        ctx.drawImage(img, 0, 0, width, height);
-        resolve(canvas.toDataURL('image/jpeg', 0.78));
-      };
-      img.src = String(reader.result);
-    };
-    reader.readAsDataURL(file);
-  });
+  return compressPhotoDataUrl(file, 1024, 0.78);
 }
 
 export const TecnicoBitacoraModal: React.FC<TecnicoBitacoraModalProps> = ({

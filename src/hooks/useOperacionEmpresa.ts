@@ -372,7 +372,7 @@ export function useOperacionEmpresa(isOnline: boolean) {
         datos: Omit<
           Proyecto,
           'id' | 'empresaId' | 'estado' | 'fechaCreacion' | 'version' | 'updatedAt' | 'syncStatus'
-        >
+        > & { estado?: EstadoServicio; progresoPct?: number }
       ) => {
         const res = await repositorioOperacion.crearProyecto(empresaId, datos);
         await refrescar();

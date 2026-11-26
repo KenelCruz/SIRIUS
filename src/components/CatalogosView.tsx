@@ -52,6 +52,7 @@ import type {
   Viatico,
 } from '../types/domain';
 import { formatRD } from '../utils/geodesy';
+import { compressImageFast } from '../utils/imageOptimize';
 import { MediaThumb } from './MediaThumb';
 import { ResourceConflictModal } from './ResourceConflictModal';
 import { CatalogosViewSkeleton } from './Skeletons';
@@ -329,21 +330,20 @@ export const CatalogosView: React.FC<CatalogosViewProps> = ({
     }
   };
 
-  const handleRentaFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleRentaFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) {
       setRentaComprobante(undefined);
       setRentaComprobanteNombre('');
       return;
     }
-    const reader = new FileReader();
-    reader.onload = () => {
-      if (typeof reader.result === 'string') {
-        setRentaComprobante(reader.result);
-        setRentaComprobanteNombre(file.name);
-      }
-    };
-    reader.readAsDataURL(file);
+    try {
+      const { dataUrl } = await compressImageFast(file, { maxDim: 1280, quality: 0.8 });
+      setRentaComprobante(dataUrl);
+      setRentaComprobanteNombre(file.name);
+    } catch {
+      setError('No se pudo procesar el comprobante seleccionado.');
+    }
   };
 
   const resetRentaForm = () => {

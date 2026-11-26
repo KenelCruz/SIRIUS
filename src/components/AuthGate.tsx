@@ -167,6 +167,8 @@ export const AuthGate: React.FC<AuthGateProps> = ({
           <img
             src={HERO_IMAGE_PATH}
             alt=""
+            decoding="async"
+            loading="lazy"
             referrerPolicy="no-referrer"
             onError={() => setHeroImgFailed(true)}
             className="h-full w-full object-cover opacity-35 scale-105 blur-[2px]"
@@ -192,6 +194,9 @@ export const AuthGate: React.FC<AuthGateProps> = ({
                   <img
                     src={HERO_IMAGE_PATH}
                     alt="Terreno topográfico y linderos catastrales al amanecer"
+                    loading="eager"
+                    decoding="async"
+                    fetchPriority="high"
                     referrerPolicy="no-referrer"
                     onError={() => setHeroImgFailed(true)}
                     className="absolute inset-0 h-full w-full object-cover"
@@ -328,6 +333,9 @@ export const AuthGate: React.FC<AuthGateProps> = ({
                 <img
                   src={HERO_IMAGE_PATH}
                   alt="Terreno topográfico y linderos catastrales al amanecer"
+                  loading="eager"
+                  decoding="async"
+                  fetchPriority="high"
                   referrerPolicy="no-referrer"
                   onError={() => setHeroImgFailed(true)}
                   className="absolute inset-0 h-full w-full object-cover"

@@ -1735,12 +1735,18 @@ export default function App() {
                 moneda={snapshot.empresa.moneda}
                 onChangeAreaUnit={setAreaUnit}
                 onCrearCliente={async (datos) => {
-                  await actions.crearCliente(datos);
+                  const creado = await actions.crearCliente(datos);
                   showToast(`Cliente "${datos.nombre}" registrado.`);
+                  return creado;
                 }}
                 onCrearProyecto={async (datos) => {
-                  await actions.crearProyecto(datos);
-                  showToast(`Proyecto "${datos.nombre}" creado en estado Cotizado.`);
+                  const creado = await actions.crearProyecto(datos);
+                  showToast(`Proyecto "${datos.nombre}" creado.`);
+                  return creado;
+                }}
+                onActualizarProyecto={async (proyecto) => {
+                  await actions.actualizarProyecto(proyecto);
+                  showToast(`Proyecto "${proyecto.nombre}" actualizado.`);
                 }}
                 onCrearVersionPresupuesto={async (params) => {
                   const creado = await actions.crearVersionPresupuestoProyecto(params);

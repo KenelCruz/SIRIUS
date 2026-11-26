@@ -318,6 +318,7 @@ export interface Proyecto {
   presupuestoViaticosRD: number;
   valorContratoRD: number;
   estado: EstadoServicio;
+  progresoPct?: number;
   fechaCreacion: string;
   notas?: string;
   version: number;

@@ -14,11 +14,13 @@ import {
 } from 'recharts';
 import {
   AlertTriangle,
+  ArrowUpRight,
   Calculator,
   Download,
   Search,
   TrendingDown,
   TrendingUp,
+  X,
 } from 'lucide-react';
 import {
   CATEGORIAS_PRESUPUESTO,
@@ -246,6 +248,9 @@ export const PresupuestosView: React.FC<PresupuestosViewProps> = ({
   );
   const [focusedProyectoId, setFocusedProyectoId] = useState<string | 'ALL'>('ALL');
   const [modalProyectoId, setModalProyectoId] = useState<string | null>(null);
+  const [kpiModalKey, setKpiModalKey] = useState<
+    'contrato' | 'planificado' | 'ejecutado' | 'margen' | null
+  >(null);
 
   const reporte = useMemo(
     () =>
@@ -479,20 +484,34 @@ export const PresupuestosView: React.FC<PresupuestosViewProps> = ({
         </div>
       </div>
 
-      {/* 4-Column KPI Strip */}
+      {/* 4-Column Interactive KPI Strip */}
       <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
-        <div className="rounded-2xl bg-gradient-to-br from-[#0F2942] to-[#0284C7] p-5 text-white shadow-sm">
-          <div className="text-xs font-medium text-sky-100">Valor contratado</div>
+        <button
+          type="button"
+          onClick={() => setKpiModalKey('contrato')}
+          className="group text-left rounded-2xl bg-gradient-to-br from-[#0F2942] to-[#0284C7] p-5 text-white shadow-sm hover:shadow-md transition-all focus:outline-none focus:ring-2 focus:ring-[#38BDF8]"
+        >
+          <div className="flex items-center justify-between gap-2 text-xs font-medium text-sky-100">
+            <span>Valor contratado</span>
+            <ArrowUpRight className="h-4 w-4 text-sky-200 transition-transform group-hover:translate-x-0.5 group-hover:-translate-y-0.5" />
+          </div>
           <div className="mt-1.5 font-mono text-xl font-bold text-white tabular-nums">
             {formatRD(totalesFiltrados.valorContratoRD, moneda)}
           </div>
           <div className="mt-1 text-[11px] text-sky-100/90 tabular-nums">
-            {comparacionesFiltradas.length} proyecto(s) en vista
+            {comparacionesFiltradas.length} proyecto(s) · Ver desglose
           </div>
-        </div>
+        </button>
 
-        <div className="rounded-2xl border border-slate-200/90 bg-white p-5">
-          <div className="text-xs font-medium text-[#475569]">Costo planificado</div>
+        <button
+          type="button"
+          onClick={() => setKpiModalKey('planificado')}
+          className="group text-left rounded-2xl border border-slate-200/90 bg-white p-5 hover:border-[#0284C7] hover:shadow-sm transition-all focus:outline-none focus:ring-2 focus:ring-[#0284C7]"
+        >
+          <div className="flex items-center justify-between gap-2 text-xs font-medium text-[#475569]">
+            <span>Costo planificado</span>
+            <ArrowUpRight className="h-4 w-4 text-slate-400 group-hover:text-[#0284C7] transition-colors" />
+          </div>
           <div className="mt-1.5 font-mono text-xl font-bold text-[#0F2942] tabular-nums">
             {formatRD(totalesFiltrados.totalPlanificadoRD, moneda)}
           </div>
@@ -502,10 +521,17 @@ export const PresupuestosView: React.FC<PresupuestosViewProps> = ({
               ? `${totalesFiltrados.margenPlanificadoPct}%`
               : 'N/D'}
           </div>
-        </div>
+        </button>
 
-        <div className="rounded-2xl border border-slate-200/90 bg-white p-5">
-          <div className="text-xs font-medium text-[#475569]">Costo ejecutado en vivo</div>
+        <button
+          type="button"
+          onClick={() => setKpiModalKey('ejecutado')}
+          className="group text-left rounded-2xl border border-slate-200/90 bg-white p-5 hover:border-[#0284C7] hover:shadow-sm transition-all focus:outline-none focus:ring-2 focus:ring-[#0284C7]"
+        >
+          <div className="flex items-center justify-between gap-2 text-xs font-medium text-[#475569]">
+            <span>Costo ejecutado en vivo</span>
+            <ArrowUpRight className="h-4 w-4 text-slate-400 group-hover:text-[#0284C7] transition-colors" />
+          </div>
           <div
             className={`mt-1.5 font-mono text-xl font-bold tabular-nums ${
               totalesFiltrados.totalEjecutadoRD > totalesFiltrados.totalPlanificadoRD
@@ -526,16 +552,23 @@ export const PresupuestosView: React.FC<PresupuestosViewProps> = ({
                 )}%`
               : 'N/D'}
           </div>
-        </div>
+        </button>
 
-        <div className="rounded-2xl border border-slate-200/90 bg-white p-5">
+        <button
+          type="button"
+          onClick={() => setKpiModalKey('margen')}
+          className="group text-left rounded-2xl border border-slate-200/90 bg-white p-5 hover:border-[#0284C7] hover:shadow-sm transition-all focus:outline-none focus:ring-2 focus:ring-[#0284C7]"
+        >
           <div className="flex items-center justify-between text-xs font-medium text-[#475569]">
             <span>Margen real consolidado</span>
-            {totalesFiltrados.margenRealRD < 0 ? (
-              <TrendingDown className="h-4 w-4 text-[#DC2626]" />
-            ) : (
-              <TrendingUp className="h-4 w-4 text-[#15803D]" />
-            )}
+            <div className="flex items-center gap-1.5">
+              {totalesFiltrados.margenRealRD < 0 ? (
+                <TrendingDown className="h-4 w-4 text-[#DC2626]" />
+              ) : (
+                <TrendingUp className="h-4 w-4 text-[#15803D]" />
+              )}
+              <ArrowUpRight className="h-4 w-4 text-slate-400 group-hover:text-[#0284C7] transition-colors" />
+            </div>
           </div>
           <div
             className={`mt-1.5 font-mono text-xl font-bold tabular-nums ${
@@ -549,7 +582,7 @@ export const PresupuestosView: React.FC<PresupuestosViewProps> = ({
               ? `${totalesFiltrados.margenRealPct}% sobre contratos`
               : 'Sin valor contractual'}
           </div>
-        </div>
+        </button>
       </div>
 
       {/* 2 Interactive Charts Row */}
@@ -1005,6 +1038,199 @@ export const PresupuestosView: React.FC<PresupuestosViewProps> = ({
           </div>
         )}
       </div>
+
+      {kpiModalKey && (() => {
+        const meta = {
+          contrato: {
+            titulo: 'Referencia de Valor Contratado',
+            subtitulo:
+              'Suma de los montos contractuales de los proyectos en la vista actual.',
+            total: formatRD(totalesFiltrados.valorContratoRD, moneda),
+            metricLabel: 'Contrato',
+            rows: [...comparacionesFiltradas].sort((a, b) => b.valorContratoRD - a.valorContratoRD),
+          },
+          planificado: {
+            titulo: 'Referencia de Costo Planificado',
+            subtitulo:
+              'Presupuesto operativo asignado en versiones aprobadas o borradores vigentes.',
+            total: formatRD(totalesFiltrados.totalPlanificadoRD, moneda),
+            metricLabel: 'Planificado',
+            rows: [...comparacionesFiltradas].sort(
+              (a, b) => b.totalPlanificadoRD - a.totalPlanificadoRD
+            ),
+          },
+          ejecutado: {
+            titulo: 'Referencia de Costo Ejecutado en Vivo',
+            subtitulo:
+              'Gasto real acumulado a la fecha de corte (viáticos, nómina, flota, rentas y GNSS).',
+            total: formatRD(totalesFiltrados.totalEjecutadoRD, moneda),
+            metricLabel: 'Ejecutado',
+            rows: [...comparacionesFiltradas].sort(
+              (a, b) => b.totalEjecutadoRD - a.totalEjecutadoRD
+            ),
+          },
+          margen: {
+            titulo: 'Referencia de Margen Real Consolidado',
+            subtitulo:
+              'Diferencia entre valor contratado y costo ejecutado en vivo por proyecto.',
+            total: formatRD(totalesFiltrados.margenRealRD, moneda),
+            metricLabel: 'Margen real',
+            rows: [...comparacionesFiltradas].sort((a, b) => a.margenRealRD - b.margenRealRD),
+          },
+        }[kpiModalKey];
+
+        return (
+          <div
+            className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 backdrop-blur-xs p-4"
+            role="dialog"
+            aria-modal="true"
+            aria-label={meta.titulo}
+            onClick={() => setKpiModalKey(null)}
+          >
+            <div
+              className="w-full max-w-3xl max-h-[85vh] flex flex-col rounded-2xl border border-slate-200 bg-white shadow-2xl overflow-hidden"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="flex items-start justify-between gap-4 border-b border-slate-200 bg-[#F8FAFC] px-6 py-4">
+                <div>
+                  <h3 className="text-base font-bold text-[#0F2942]">{meta.titulo}</h3>
+                  <p className="mt-0.5 text-xs text-[#475569]">{meta.subtitulo}</p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setKpiModalKey(null)}
+                  className="rounded-xl border border-slate-200 bg-white p-2 text-[#475569] hover:text-[#0F2942] hover:bg-slate-50 shrink-0"
+                  aria-label="Cerrar referencia"
+                >
+                  <X className="h-4 w-4" />
+                </button>
+              </div>
+
+              <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 px-6 py-3.5 bg-white">
+                <div className="flex items-baseline gap-2.5">
+                  <span className="text-xs font-medium text-[#475569]">Total consolidado:</span>
+                  <span className="font-mono text-lg font-bold text-[#0F2942] tabular-nums">
+                    {meta.total}
+                  </span>
+                </div>
+                {(kpiModalKey === 'ejecutado' || kpiModalKey === 'margen') &&
+                  totalesFiltrados.excedidosCount > 0 && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setSoloExcedidos(true);
+                        setKpiModalKey(null);
+                      }}
+                      className="inline-flex items-center gap-1.5 rounded-xl border border-rose-200 bg-rose-50 px-3 py-1.5 text-xs font-semibold text-[#DC2626] hover:bg-rose-100 whitespace-nowrap"
+                    >
+                      <AlertTriangle className="h-3.5 w-3.5" />
+                      Filtrar {totalesFiltrados.excedidosCount} excedido(s)
+                    </button>
+                  )}
+              </div>
+
+              <div className="flex-1 overflow-y-auto px-6 py-4">
+                {meta.rows.length === 0 ? (
+                  <p className="text-center text-xs text-[#475569] py-8">
+                    No hay proyectos que coincidan con los filtros actuales.
+                  </p>
+                ) : (
+                  <div className="divide-y divide-slate-100">
+                    {meta.rows.map((c) => {
+                      const pctUso =
+                        c.totalPlanificadoRD > 0
+                          ? Number(((c.totalEjecutadoRD / c.totalPlanificadoRD) * 100).toFixed(1))
+                          : 0;
+                      const pctPlanSobreContrato =
+                        c.valorContratoRD > 0
+                          ? Number(((c.totalPlanificadoRD / c.valorContratoRD) * 100).toFixed(1))
+                          : null;
+                      const estadoLabel = c.estadoPresupuesto
+                        ? ETIQUETAS_ESTADO_PRESUPUESTO[c.estadoPresupuesto]
+                        : 'Base';
+                      let metricValue = formatRD(c.valorContratoRD, moneda);
+                      let metricClass = 'text-[#0F2942]';
+                      let secondaryNote =
+                        pctPlanSobreContrato !== null
+                          ? `${pctPlanSobreContrato}% del contrato planificado`
+                          : 'Sin valor contractual';
+
+                      if (kpiModalKey === 'planificado') {
+                        metricValue = formatRD(c.totalPlanificadoRD, moneda);
+                        secondaryNote =
+                          c.margenPlanificadoPct !== null
+                            ? `Margen plan: ${c.margenPlanificadoPct}% · ${estadoLabel}`
+                            : estadoLabel;
+                      } else if (kpiModalKey === 'ejecutado') {
+                        metricValue = formatRD(c.totalEjecutadoRD, moneda);
+                        metricClass = c.excedidoTotal ? 'text-[#DC2626]' : 'text-[#0284C7]';
+                        secondaryNote = `${pctUso}% de ${formatRD(c.totalPlanificadoRD, moneda)} planificado`;
+                      } else if (kpiModalKey === 'margen') {
+                        metricValue = formatRD(c.margenRealRD, moneda);
+                        metricClass = c.margenRealRD < 0 ? 'text-[#DC2626]' : 'text-[#15803D]';
+                        secondaryNote =
+                          c.margenRealPct !== null
+                            ? `${c.margenRealPct}% sobre contrato (${formatRD(c.valorContratoRD, moneda)})`
+                            : 'Sin contrato asignado';
+                      }
+
+                      return (
+                        <div
+                          key={c.proyectoId}
+                          className="flex flex-wrap items-center justify-between gap-3 py-3"
+                        >
+                          <div className="min-w-0 flex-1">
+                            <div className="flex items-center gap-2">
+                              <span className="font-mono text-[11px] font-bold text-[#0284C7]">
+                                {c.codigoContrato}
+                              </span>
+                              {c.excedidoTotal && (
+                                <span className="text-[10px] font-semibold text-[#DC2626]">
+                                  · Excedido
+                                </span>
+                              )}
+                            </div>
+                            <div className="text-xs font-semibold text-[#0F2942] truncate">
+                              {c.nombreProyecto}
+                            </div>
+                            <div className="text-[11px] text-[#475569] tabular-nums">
+                              {secondaryNote}
+                            </div>
+                          </div>
+
+                          <div className="flex items-center gap-3 shrink-0">
+                            <div className="text-right">
+                              <div className="text-[10px] font-medium text-[#64748B]">
+                                {meta.metricLabel}
+                              </div>
+                              <div
+                                className={`font-mono text-sm font-bold tabular-nums ${metricClass}`}
+                              >
+                                {metricValue}
+                              </div>
+                            </div>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setKpiModalKey(null);
+                                setModalProyectoId(c.proyectoId);
+                              }}
+                              className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-[#0F2942] hover:border-[#0284C7] hover:text-[#0284C7] whitespace-nowrap"
+                            >
+                              <Calculator className="h-3.5 w-3.5" />
+                              {canManage ? 'Gestionar' : 'Ver detalle'}
+                            </button>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        );
+      })()}
 
       <PresupuestoProyectoModal
         isOpen={Boolean(proyectoModal)}

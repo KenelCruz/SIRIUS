@@ -19,6 +19,7 @@ export const MediaThumb: React.FC<MediaThumbProps> = ({
   removeLabel = 'Quitar imagen',
 }) => {
   const [hasError, setHasError] = useState(false);
+  const [isLoaded, setIsLoaded] = useState(false);
   const [isLightboxOpen, setIsLightboxOpen] = useState(false);
 
   return (
@@ -40,12 +41,23 @@ export const MediaThumb: React.FC<MediaThumbProps> = ({
             className="relative block h-full w-full text-left focus-visible:outline-none"
             aria-label={`Ampliar ${alt}`}
           >
+            {!isLoaded && (
+              <div
+                aria-hidden="true"
+                className="absolute inset-0 animate-pulse bg-slate-800"
+              />
+            )}
             <img
               src={src}
               alt={alt}
+              loading="lazy"
+              decoding="async"
               referrerPolicy="no-referrer"
+              onLoad={() => setIsLoaded(true)}
               onError={() => setHasError(true)}
-              className="h-full w-full object-cover transition-transform duration-200 group-hover:scale-105 motion-reduce:transform-none"
+              className={`h-full w-full object-cover transition-all duration-300 group-hover:scale-105 motion-reduce:transform-none ${
+                isLoaded ? 'opacity-100' : 'opacity-0'
+              }`}
             />
             <div
               aria-hidden="true"
@@ -88,6 +100,7 @@ export const MediaThumb: React.FC<MediaThumbProps> = ({
               <img
                 src={src}
                 alt={alt}
+                decoding="async"
                 referrerPolicy="no-referrer"
                 className="max-h-[78vh] w-full object-contain"
               />

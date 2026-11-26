@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useMemo, useRef, useState } from 'react';
 import {
   ArrowLeft,
   ArrowUpRight,
@@ -7,6 +7,8 @@ import {
   CheckCircle2,
   ClipboardList,
   DollarSign,
+  Download,
+  FileSpreadsheet,
   FolderKanban,
   FolderPlus,
   LayoutGrid,
@@ -19,6 +21,7 @@ import {
   Receipt,
   Route as RouteIcon,
   Search,
+  UploadCloud,
   UserPlus,
   Users,
   X,
@@ -28,6 +31,7 @@ import {
   calcularEjecutadoProyectoDesdeFuentes,
   calcularEstadoProyecto,
   calcularGastoPorProyecto,
+  calcularProgresoProyecto,
   compararPresupuestoProyecto,
   crearConfiguracionInicialEmpresa,
   ESTADOS_SERVICIO,
@@ -36,6 +40,7 @@ import {
   obtenerFactoresTerrenoVigentes,
   obtenerPresupuestoVigenteProyecto,
   obtenerServiciosVigentes,
+  PROGRESO_POR_ESTADO,
   puedeCrearOEditarOperacion,
   puedeRegistrarBitacoraEnServicio,
   type ComparacionPresupuestoProyecto,
@@ -63,7 +68,13 @@ import type {
   Vehiculo,
   Viatico,
 } from '../types/domain';
+import {
+  downloadProjectsExcelTemplate,
+  parseProjectsFromExcelBuffer,
+  type ParsedExcelProjectRow,
+} from '../utils/excelProjects';
 import { formatArea, formatPerimeter, formatRD } from '../utils/geodesy';
+import { compressPhotoDataUrl } from '../utils/imageOptimize';
 import { MediaThumb } from './MediaThumb';
 import { PresupuestoProyectoModal } from './PresupuestoProyectoModal';
 import { ProyectosLocationMap } from './ProyectosLocationMap';
@@ -95,13 +106,14 @@ interface ProyectosViewProps {
   factoresTerreno?: TerrenoFactorVersion | null;
   moneda?: string;
   onChangeAreaUnit: (u: AreaUnit) => void;
-  onCrearCliente: (datos: Omit<Cliente, 'id' | 'empresaId'>) => Promise<void>;
+  onCrearCliente: (datos: Omit<Cliente, 'id' | 'empresaId'>) => Promise<Cliente | void>;
   onCrearProyecto: (
     datos: Omit<
       Proyecto,
       'id' | 'empresaId' | 'estado' | 'fechaCreacion' | 'version' | 'updatedAt' | 'syncStatus'
-    >
-  ) => Promise<void>;
+    > & { estado?: EstadoServicio; progresoPct?: number }
+  ) => Promise<Proyecto | void>;
+  onActualizarProyecto?: (proyecto: Proyecto) => Promise<void>;
   onCrearVersionPresupuesto?: (params: {
     proyectoId: string;
     vigenciaDesde: string;
@@ -179,35 +191,7 @@ function getInitials(nombre: string): string {
 }
 
 async function compressPhoto(file: File): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onerror = () => reject(new Error('No se pudo leer la foto.'));
-    reader.onload = () => {
-      const img = new Image();
-      img.onerror = () => reject(new Error('Formato de imagen inválido.'));
-      img.onload = () => {
-        const maxDim = 960;
-        let { width, height } = img;
-        if (width > maxDim || height > maxDim) {
-          const ratio = Math.min(maxDim / width, maxDim / height);
-          width = Math.round(width * ratio);
-          height = Math.round(height * ratio);
-        }
-        const canvas = document.createElement('canvas');
-        canvas.width = width;
-        canvas.height = height;
-        const ctx = canvas.getContext('2d');
-        if (!ctx) {
-          resolve(String(reader.result));
-          return;
-        }
-        ctx.drawImage(img, 0, 0, width, height);
-        resolve(canvas.toDataURL('image/jpeg', 0.78));
-      };
-      img.src = String(reader.result);
-    };
-    reader.readAsDataURL(file);
-  });
+  return compressPhotoDataUrl(file, 960, 0.78);
 }
 
 export const ProyectosView: React.FC<ProyectosViewProps> = ({
@@ -236,6 +220,7 @@ export const ProyectosView: React.FC<ProyectosViewProps> = ({
   onChangeAreaUnit,
   onCrearCliente,
   onCrearProyecto,
+  onActualizarProyecto,
   onCrearVersionPresupuesto,
   onEditarBorradorPresupuesto,
   onTransicionarPresupuesto,
@@ -250,6 +235,7 @@ export const ProyectosView: React.FC<ProyectosViewProps> = ({
 }) => {
   const canEdit = puedeCrearOEditarOperacion(rol);
   const canViewFinances = rol === 'admin' || rol === 'coordinador';
+  const excelInputRef = useRef<HTMLInputElement>(null);
   const [presupuestoModalProyectoId, setPresupuestoModalProyectoId] = useState<string | null>(null);
   const serviciosActivos = useMemo(
     () => serviciosCatalogo.filter((s) => s.activo),
@@ -264,6 +250,16 @@ export const ProyectosView: React.FC<ProyectosViewProps> = ({
   const [estadoFiltro, setEstadoFiltro] = useState<EstadoServicio | 'ALL'>('ALL');
   const [actionError, setActionError] = useState<string | null>(null);
   const [failedCovers, setFailedCovers] = useState<Record<string, boolean>>({});
+  const [loadedCovers, setLoadedCovers] = useState<Record<string, boolean>>({});
+
+  // Modal Importar Excel
+  const [showExcelModal, setShowExcelModal] = useState(false);
+  const [excelFileName, setExcelFileName] = useState('');
+  const [excelRows, setExcelRows] = useState<ParsedExcelProjectRow[]>([]);
+  const [excelWarnings, setExcelWarnings] = useState<string[]>([]);
+  const [excelError, setExcelError] = useState<string | null>(null);
+  const [isImportingExcel, setIsImportingExcel] = useState(false);
+  const [excelImportBanner, setExcelImportBanner] = useState<string | null>(null);
 
   // Modales F2 Cliente / Proyecto
   const [showClienteModal, setShowClienteModal] = useState(false);
@@ -319,6 +315,7 @@ export const ProyectosView: React.FC<ProyectosViewProps> = ({
         const rutasProy = rutas.filter((r) => r.proyectoId === p.id);
         const srvsProy = servicios.filter((s) => rutasProy.some((r) => r.id === s.rutaId));
         const estadoActual = calcularEstadoProyecto(srvsProy, p.estado);
+        const progresoPct = calcularProgresoProyecto(srvsProy, p);
         const gastoReal = gastosPorProyecto[p.id]?.totalEjecutadoRD || 0;
         const asigsProy = asignaciones.filter((a) =>
           rutasProy.some((r) => r.id === a.rutaId)
@@ -358,6 +355,7 @@ export const ProyectosView: React.FC<ProyectosViewProps> = ({
           asigsProy,
           cuadrillasProy,
           estadoActual,
+          progresoPct,
           gastoReal,
           comparacionPresupuesto,
         };
@@ -493,6 +491,96 @@ export const ProyectosView: React.FC<ProyectosViewProps> = ({
       setShowProyectoModal(false);
     } catch (err: unknown) {
       setModalError(err instanceof Error ? err.message : 'No se pudo crear el proyecto.');
+    }
+  };
+
+  const handleSelectExcelFile = async (file: File) => {
+    setExcelError(null);
+    setExcelWarnings([]);
+    setExcelRows([]);
+    setExcelFileName(file.name);
+    try {
+      const buffer = await file.arrayBuffer();
+      const parsed = parseProjectsFromExcelBuffer(buffer);
+      setExcelRows(parsed.rows);
+      setExcelWarnings(parsed.warnings);
+    } catch (err: unknown) {
+      setExcelError(
+        err instanceof Error ? err.message : 'No se pudo procesar el archivo de Excel.'
+      );
+    }
+  };
+
+  const handleConfirmExcelImport = async () => {
+    const validRows = excelRows.filter((r) => r.isValid);
+    if (validRows.length === 0) return;
+
+    setIsImportingExcel(true);
+    setExcelError(null);
+    try {
+      const clientesCache = [...clientes];
+      let creados = 0;
+
+      for (const row of validRows) {
+        let clienteId = clientesCache[0]?.id || '';
+        const normName = row.clienteNombre.toLowerCase();
+        const normRnc = row.clienteRnc.toLowerCase();
+
+        if (normName || normRnc) {
+          const match = clientesCache.find(
+            (c) =>
+              (normRnc && c.rnc.toLowerCase() === normRnc) ||
+              (normName && c.nombre.toLowerCase() === normName)
+          );
+          if (match) {
+            clienteId = match.id;
+          } else {
+            const nuevoCliente = await onCrearCliente({
+              nombre: row.clienteNombre || `Cliente ${row.codigoContrato}`,
+              rnc: row.clienteRnc || 'N/A',
+              contacto: row.clienteNombre || 'Contacto principal',
+            });
+            if (nuevoCliente && 'id' in nuevoCliente) {
+              clientesCache.push(nuevoCliente);
+              clienteId = nuevoCliente.id;
+            }
+          }
+        } else if (!clienteId) {
+          const fallbackCliente = await onCrearCliente({
+            nombre: 'Cliente General',
+            rnc: 'N/A',
+            contacto: 'Administración',
+          });
+          if (fallbackCliente && 'id' in fallbackCliente) {
+            clientesCache.push(fallbackCliente);
+            clienteId = fallbackCliente.id;
+          }
+        }
+
+        await onCrearProyecto({
+          clienteId,
+          nombre: row.nombre,
+          codigoContrato: row.codigoContrato,
+          presupuestoViaticosRD: row.presupuestoViaticosRD,
+          valorContratoRD: row.valorContratoRD,
+          estado: row.estado,
+          progresoPct: row.progresoPct,
+          notas: row.notas,
+        });
+        creados += 1;
+      }
+
+      setShowExcelModal(false);
+      setExcelRows([]);
+      setExcelWarnings([]);
+      setExcelFileName('');
+      setExcelImportBanner(`Se importaron ${creados} proyecto(s) desde Excel correctamente.`);
+    } catch (err: unknown) {
+      setExcelError(
+        err instanceof Error ? err.message : 'Error al guardar los proyectos importados.'
+      );
+    } finally {
+      setIsImportingExcel(false);
     }
   };
 
@@ -799,6 +887,20 @@ export const ProyectosView: React.FC<ProyectosViewProps> = ({
         </div>
       )}
 
+      {excelImportBanner && (
+        <div className="flex items-center justify-between gap-3 rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-xs font-semibold text-[#15803D]">
+          <span>{excelImportBanner}</span>
+          <button
+            type="button"
+            onClick={() => setExcelImportBanner(null)}
+            className="rounded-lg p-1 hover:bg-emerald-100"
+            aria-label="Cerrar aviso"
+          >
+            <X className="h-3.5 w-3.5" />
+          </button>
+        </div>
+      )}
+
       {/* VISTA DEDICADA: DETALLE DE PROYECTO */}
       {selectedProyectoItem ? (
         (() => {
@@ -809,6 +911,7 @@ export const ProyectosView: React.FC<ProyectosViewProps> = ({
             srvsProy,
             asigsProy,
             estadoActual,
+            progresoPct,
             gastoReal,
             comparacionPresupuesto,
           } = selectedProyectoItem;
@@ -889,6 +992,8 @@ export const ProyectosView: React.FC<ProyectosViewProps> = ({
                     <img
                       src={coverSrc}
                       alt={proyecto.nombre}
+                      loading="eager"
+                      decoding="async"
                       referrerPolicy="no-referrer"
                       onError={() =>
                         setFailedCovers((prev) => ({ ...prev, [coverSrc]: true }))
@@ -913,12 +1018,90 @@ export const ProyectosView: React.FC<ProyectosViewProps> = ({
                         {proyecto.nombre}
                       </h2>
                     </div>
-                    <WorkflowBadge status={estadoActual} />
+                    <div className="flex flex-col sm:items-end gap-1.5 shrink-0">
+                      <WorkflowBadge status={estadoActual} />
+                      <span className="font-mono text-xs font-bold text-sky-200 tabular-nums">
+                        {progresoPct}% completado
+                      </span>
+                    </div>
                   </div>
                 </div>
 
-                {/* Info del cliente + notas + KPIs */}
+                {/* Info del cliente + progreso + notas + KPIs */}
                 <div className="p-5 sm:p-6 space-y-5">
+                  <div className="rounded-xl border border-slate-200/80 bg-[#F8FAFC] p-4 space-y-2.5">
+                    <div className="flex flex-wrap items-center justify-between gap-2 text-xs">
+                      <div className="flex items-center gap-2">
+                        <span className="font-semibold text-[#0F2942]">Estatus y Progreso General</span>
+                        <WorkflowBadge status={estadoActual} />
+                      </div>
+                      <span className="font-mono text-sm font-bold text-[#0F2942] tabular-nums">
+                        {progresoPct}%
+                      </span>
+                    </div>
+                    <div className="h-2.5 w-full overflow-hidden rounded-full bg-slate-200">
+                      <div
+                        className={`h-full rounded-full transition-all duration-300 ${
+                          progresoPct >= 100 ? 'bg-[#15803D]' : 'bg-[#0284C7]'
+                        }`}
+                        style={{ width: `${progresoPct}%` }}
+                      />
+                    </div>
+                    {canEdit && onActualizarProyecto && (
+                      srvsProy.length === 0 ? (
+                        <div className="flex flex-wrap items-center justify-between gap-3 pt-1 text-xs">
+                          <span className="text-[#475569]">
+                            Ajuste manual de estatus/avance (sin servicios registrados aún):
+                          </span>
+                          <div className="flex flex-wrap items-center gap-2">
+                            <select
+                              value={proyecto.estado}
+                              onChange={(e) => {
+                                const nextEstado = e.target.value as EstadoServicio;
+                                void onActualizarProyecto({
+                                  ...proyecto,
+                                  estado: nextEstado,
+                                  progresoPct: PROGRESO_POR_ESTADO[nextEstado],
+                                });
+                              }}
+                              aria-label="Cambiar estatus del proyecto"
+                              className="rounded-xl border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-semibold text-[#0F2942]"
+                            >
+                              {ESTADOS_SERVICIO.map((st) => (
+                                <option key={st} value={st}>
+                                  {ETIQUETA_ESTADO[st]}
+                                </option>
+                              ))}
+                            </select>
+                            <div className="flex items-center gap-1.5">
+                              <input
+                                type="number"
+                                min={0}
+                                max={100}
+                                step={5}
+                                value={progresoPct}
+                                onChange={(e) => {
+                                  const val = Math.max(0, Math.min(100, Number(e.target.value) || 0));
+                                  void onActualizarProyecto({
+                                    ...proyecto,
+                                    progresoPct: val,
+                                  });
+                                }}
+                                aria-label="Porcentaje de progreso"
+                                className="w-20 rounded-xl border border-slate-200 bg-white px-2.5 py-1.5 font-mono text-xs font-bold text-[#0F2942] tabular-nums"
+                              />
+                              <span className="font-mono text-xs text-[#475569]">%</span>
+                            </div>
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="text-[11px] text-[#64748B]">
+                          Calculado automáticamente según el avance de {srvsProy.length} servicio(s) activo(s).
+                        </div>
+                      )
+                    )}
+                  </div>
+
                   <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 border-b border-slate-100 pb-4 text-xs">
                     <div className="space-y-0.5">
                       <div className="text-[11px] font-semibold text-[#475569]">Cliente contratante</div>
@@ -1305,6 +1488,20 @@ export const ProyectosView: React.FC<ProyectosViewProps> = ({
                 <>
                   <button
                     type="button"
+                    onClick={() => {
+                      setExcelError(null);
+                      setExcelWarnings([]);
+                      setExcelRows([]);
+                      setExcelFileName('');
+                      setShowExcelModal(true);
+                    }}
+                    className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3.5 py-2 text-xs font-semibold text-[#0F2942] hover:bg-slate-50 whitespace-nowrap shrink-0 min-h-[42px]"
+                  >
+                    <FileSpreadsheet className="h-3.5 w-3.5 text-[#15803D]" />
+                    Importar Excel
+                  </button>
+                  <button
+                    type="button"
                     onClick={() => onAbrirNuevaRutaKmz(proyectosVisibles[0]?.proyecto.id)}
                     className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3.5 py-2 text-xs font-semibold text-[#0F2942] hover:bg-slate-50 whitespace-nowrap shrink-0 min-h-[42px]"
                   >
@@ -1501,9 +1698,11 @@ export const ProyectosView: React.FC<ProyectosViewProps> = ({
                         rutasProy,
                         cuadrillasProy,
                         estadoActual,
+                        progresoPct,
                       } = item;
                       const coverSrc =
                         PROJECT_COVER_IMAGES[idx % PROJECT_COVER_IMAGES.length];
+                      const isCoverLoaded = Boolean(loadedCovers[coverSrc]);
                       const totalAreaM2 = rutasProy.reduce(
                         (acc, r) => acc + r.totalAreaM2,
                         0
@@ -1525,20 +1724,36 @@ export const ProyectosView: React.FC<ProyectosViewProps> = ({
                           }}
                           className="group rounded-2xl border border-slate-200/90 bg-white overflow-hidden cursor-pointer hover:border-[#0284C7] hover:shadow-md transition-all flex flex-col justify-between"
                         >
-                          {/* Cabecera visual fotográfica */}
+                          {/* Cabecera visual fotográfica optimizada */}
                           <div className="relative h-28 bg-[#0F2942] overflow-hidden">
+                            {!isCoverLoaded && !failedCovers[coverSrc] && (
+                              <div
+                                aria-hidden="true"
+                                className="absolute inset-0 animate-pulse bg-gradient-to-br from-[#0F2942] to-[#1E3A5F]"
+                              />
+                            )}
                             {!failedCovers[coverSrc] && (
                               <img
                                 src={coverSrc}
                                 alt={proyecto.nombre}
+                                loading="lazy"
+                                decoding="async"
                                 referrerPolicy="no-referrer"
+                                onLoad={() =>
+                                  setLoadedCovers((prev) => ({
+                                    ...prev,
+                                    [coverSrc]: true,
+                                  }))
+                                }
                                 onError={() =>
                                   setFailedCovers((prev) => ({
                                     ...prev,
                                     [coverSrc]: true,
                                   }))
                                 }
-                                className="h-full w-full object-cover group-hover:scale-105 transition-transform duration-300"
+                                className={`h-full w-full object-cover group-hover:scale-105 transition-all duration-300 ${
+                                  isCoverLoaded ? 'opacity-100' : 'opacity-0'
+                                }`}
                               />
                             )}
                             <div
@@ -1569,16 +1784,15 @@ export const ProyectosView: React.FC<ProyectosViewProps> = ({
                           {/* Cuerpo superpuesto limpio estilo tarjeta de flujo */}
                           <div className="-mt-4 relative rounded-t-2xl bg-white p-5 flex-1 flex flex-col justify-between space-y-3">
                             <div className="space-y-1.5">
-                              <div className="flex items-center gap-1.5 text-[11px] text-[#475569] truncate">
-                                <span className="font-mono font-bold text-[#0284C7]">
-                                  {proyecto.codigoContrato}
-                                </span>
-                                <span aria-hidden="true">·</span>
-                                <span className="font-semibold text-[#0F2942]">
-                                  {ETIQUETA_ESTADO[estadoActual]}
-                                </span>
-                                <span aria-hidden="true">·</span>
-                                <span className="truncate">{provPrincipal}</span>
+                              <div className="flex items-center justify-between gap-2">
+                                <div className="flex items-center gap-1.5 text-[11px] text-[#475569] min-w-0 truncate">
+                                  <span className="font-mono font-bold text-[#0284C7] shrink-0">
+                                    {proyecto.codigoContrato}
+                                  </span>
+                                  <span aria-hidden="true">·</span>
+                                  <span className="truncate">{provPrincipal}</span>
+                                </div>
+                                <WorkflowBadge status={estadoActual} />
                               </div>
                               <h4 className="text-base font-bold tracking-tight text-[#0F2942] line-clamp-1 group-hover:text-[#0284C7] transition-colors">
                                 {proyecto.nombre}
@@ -1586,6 +1800,24 @@ export const ProyectosView: React.FC<ProyectosViewProps> = ({
                               <p className="text-xs text-[#475569] truncate">
                                 {cliente ? cliente.nombre : 'Cliente sin asignar'}
                               </p>
+                            </div>
+
+                            {/* Barra de progreso del proyecto */}
+                            <div className="space-y-1">
+                              <div className="flex items-center justify-between text-[11px]">
+                                <span className="font-medium text-[#475569]">Progreso</span>
+                                <span className="font-mono font-bold text-[#0F2942] tabular-nums">
+                                  {progresoPct}%
+                                </span>
+                              </div>
+                              <div className="h-1.5 w-full overflow-hidden rounded-full bg-slate-100">
+                                <div
+                                  className={`h-full rounded-full transition-all duration-300 ${
+                                    progresoPct >= 100 ? 'bg-[#15803D]' : 'bg-[#0284C7]'
+                                  }`}
+                                  style={{ width: `${progresoPct}%` }}
+                                />
+                              </div>
                             </div>
 
                             <div className="flex items-center justify-between gap-2 border-t border-slate-100 pt-3">
@@ -1645,6 +1877,7 @@ export const ProyectosView: React.FC<ProyectosViewProps> = ({
                   cliente,
                   srvsProy,
                   estadoActual,
+                  progresoPct,
                   gastoReal,
                   comparacionPresupuesto,
                 } = item;
@@ -1658,7 +1891,7 @@ export const ProyectosView: React.FC<ProyectosViewProps> = ({
                   >
                     <div className="border-b border-slate-200/80 bg-[#F8FAFC] px-5 py-4 space-y-3">
                       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                        <div className="min-w-0 space-y-1">
+                        <div className="min-w-0 space-y-1.5">
                           <div className="flex flex-wrap items-center gap-2 text-xs">
                             <span className="font-mono font-bold text-[#0284C7]">
                               {proyecto.codigoContrato}
@@ -1667,6 +1900,12 @@ export const ProyectosView: React.FC<ProyectosViewProps> = ({
                               ·
                             </span>
                             <WorkflowBadge status={estadoActual} />
+                            <span aria-hidden="true" className="text-slate-300">
+                              ·
+                            </span>
+                            <span className="font-mono font-bold text-[#0F2942] tabular-nums">
+                              {progresoPct}% progreso
+                            </span>
                             <span aria-hidden="true" className="text-slate-300">
                               ·
                             </span>
@@ -1679,6 +1918,19 @@ export const ProyectosView: React.FC<ProyectosViewProps> = ({
                           <h3 className="text-base font-bold tracking-tight text-[#0F2942] text-balance">
                             {proyecto.nombre}
                           </h3>
+                          <div className="flex items-center gap-2.5 max-w-sm">
+                            <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-slate-200">
+                              <div
+                                className={`h-full rounded-full transition-all duration-300 ${
+                                  progresoPct >= 100 ? 'bg-[#15803D]' : 'bg-[#0284C7]'
+                                }`}
+                                style={{ width: `${progresoPct}%` }}
+                              />
+                            </div>
+                            <span className="font-mono text-[11px] font-semibold text-[#475569] tabular-nums">
+                              {progresoPct}%
+                            </span>
+                          </div>
                         </div>
 
                         <div className="flex flex-wrap items-center gap-2 shrink-0">
@@ -1859,6 +2111,202 @@ export const ProyectosView: React.FC<ProyectosViewProps> = ({
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL IMPORTAR PROYECTOS DESDE EXCEL */}
+      {showExcelModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-[#0F2942]/65 backdrop-blur-[2px] p-4">
+          <div className="w-full max-w-4xl rounded-2xl border border-slate-200 bg-white shadow-2xl max-h-[90vh] flex flex-col">
+            <div className="flex items-center justify-between border-b border-slate-200 px-5 py-4">
+              <div className="flex items-center gap-2.5">
+                <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-emerald-50 text-[#15803D]">
+                  <FileSpreadsheet className="h-4 w-4" />
+                </div>
+                <div>
+                  <h3 className="text-sm font-bold text-[#0F2942]">
+                    Importar Proyectos desde Excel
+                  </h3>
+                  <p className="text-[11px] text-[#475569]">
+                    Carga archivos .xlsx, .xls o .csv con estatus, avance %, clientes y montos.
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowExcelModal(false)}
+                className="rounded-xl p-1.5 text-[#475569] hover:bg-slate-100"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+
+            <div className="overflow-y-auto p-5 space-y-4 flex-1 text-xs">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 rounded-xl border border-slate-200/80 bg-[#F8FAFC] p-3.5">
+                <div className="space-y-0.5">
+                  <div className="font-semibold text-[#0F2942]">
+                    ¿Necesitas la estructura recomendada?
+                  </div>
+                  <div className="text-[11px] text-[#475569]">
+                    Columnas aceptadas: Código Contrato, Nombre, Cliente, RNC, Valor Contrato, Viáticos, Estado y Progreso (%).
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => downloadProjectsExcelTemplate()}
+                  className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3.5 py-2 font-semibold text-[#0F2942] hover:bg-slate-50 whitespace-nowrap shrink-0 min-h-[40px]"
+                >
+                  <Download className="h-3.5 w-3.5 text-[#0284C7]" />
+                  Descargar plantilla .xlsx
+                </button>
+              </div>
+
+              <div
+                onDragOver={(e) => e.preventDefault()}
+                onDrop={(e) => {
+                  e.preventDefault();
+                  const f = e.dataTransfer.files?.[0];
+                  if (f) void handleSelectExcelFile(f);
+                }}
+                onClick={() => excelInputRef.current?.click()}
+                className="cursor-pointer rounded-2xl border-2 border-dashed border-[#0284C7]/70 bg-[#F8FAFC] p-6 text-center hover:bg-[#EFF6FF] transition-colors"
+              >
+                <input
+                  ref={excelInputRef}
+                  type="file"
+                  accept=".xlsx,.xls,.csv"
+                  className="hidden"
+                  onChange={(e) => {
+                    const f = e.target.files?.[0];
+                    if (f) void handleSelectExcelFile(f);
+                    e.target.value = '';
+                  }}
+                />
+                <UploadCloud className="mx-auto h-7 w-7 text-[#0284C7]" />
+                <div className="mt-2 font-bold text-[#0F2942]">
+                  {excelFileName || 'Haz clic o arrastra tu archivo Excel (.xlsx, .xls, .csv)'}
+                </div>
+                <div className="mt-0.5 text-[11px] text-[#475569]">
+                  Los clientes nuevos se registran automáticamente si no existen en tu catálogo.
+                </div>
+              </div>
+
+              {excelError && (
+                <div className="rounded-xl border border-[#FCA5A5] bg-[#FEE2E2] px-3.5 py-2.5 text-xs font-medium text-[#93000A]">
+                  {excelError}
+                </div>
+              )}
+
+              {excelWarnings.length > 0 && (
+                <div className="rounded-xl border border-amber-200 bg-amber-50 px-3.5 py-2.5 text-[11px] text-[#B45309] space-y-1">
+                  <div className="font-bold">Ajustes detectados en la hoja:</div>
+                  {excelWarnings.slice(0, 5).map((w, idx) => (
+                    <div key={idx}>• {w}</div>
+                  ))}
+                  {excelWarnings.length > 5 && (
+                    <div>• y {excelWarnings.length - 5} aviso(s) adicional(es).</div>
+                  )}
+                </div>
+              )}
+
+              {excelRows.length > 0 && (
+                <div className="space-y-2">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <span className="font-bold text-[#0F2942]">
+                      Vista previa ({excelRows.filter((r) => r.isValid).length} válido(s) de{' '}
+                      {excelRows.length})
+                    </span>
+                    <span className="text-[11px] text-[#475569]">
+                      Verifica contrato, estatus y % de avance antes de confirmar.
+                    </span>
+                  </div>
+
+                  <div className="overflow-x-auto rounded-xl border border-slate-200">
+                    <table className="w-full text-left border-collapse text-xs">
+                      <thead>
+                        <tr className="border-b border-slate-200 bg-[#F8FAFC] text-[11px] font-semibold text-[#475569]">
+                          <th className="px-3 py-2">Fila</th>
+                          <th className="px-3 py-2">Contrato</th>
+                          <th className="px-3 py-2">Proyecto</th>
+                          <th className="px-3 py-2">Cliente</th>
+                          <th className="px-3 py-2 text-right">Contrato RD$</th>
+                          <th className="px-3 py-2 text-right">Viáticos RD$</th>
+                          <th className="px-3 py-2">Estado</th>
+                          <th className="px-3 py-2 text-right">Progreso</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-100">
+                        {excelRows.map((row) => (
+                          <tr
+                            key={row.rowNumber}
+                            className={row.isValid ? 'bg-white' : 'bg-rose-50/70'}
+                          >
+                            <td className="px-3 py-2 font-mono text-[#64748B] tabular-nums">
+                              {row.rowNumber}
+                            </td>
+                            <td className="px-3 py-2 font-mono font-semibold text-[#0284C7] whitespace-nowrap">
+                              {row.codigoContrato}
+                            </td>
+                            <td className="px-3 py-2 font-semibold text-[#0F2942]">
+                              <div>{row.nombre || '—'}</div>
+                              {row.errors.length > 0 && (
+                                <div className="text-[11px] font-normal text-[#DC2626]">
+                                  {row.errors.join(' ')}
+                                </div>
+                              )}
+                            </td>
+                            <td className="px-3 py-2 text-[#334155]">
+                              {row.clienteNombre || 'Cliente General'}
+                              {row.clienteRnc ? (
+                                <span className="ml-1 font-mono text-[10px] text-[#64748B]">
+                                  ({row.clienteRnc})
+                                </span>
+                              ) : null}
+                            </td>
+                            <td className="px-3 py-2 text-right font-mono tabular-nums">
+                              {formatRD(row.valorContratoRD, moneda).replace('.00', '')}
+                            </td>
+                            <td className="px-3 py-2 text-right font-mono tabular-nums">
+                              {formatRD(row.presupuestoViaticosRD, moneda).replace('.00', '')}
+                            </td>
+                            <td className="px-3 py-2 whitespace-nowrap">
+                              <WorkflowBadge status={row.estado} />
+                            </td>
+                            <td className="px-3 py-2 text-right font-mono font-bold text-[#0F2942] tabular-nums">
+                              {row.progresoPct}%
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            <div className="flex flex-wrap items-center justify-end gap-2.5 border-t border-slate-200 px-5 py-3.5 text-xs">
+              <button
+                type="button"
+                onClick={() => setShowExcelModal(false)}
+                className="rounded-xl border border-slate-200 px-4 py-2 font-semibold text-[#334155] hover:bg-slate-50 min-h-[42px]"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                disabled={
+                  isImportingExcel || excelRows.filter((r) => r.isValid).length === 0
+                }
+                onClick={() => void handleConfirmExcelImport()}
+                className="inline-flex items-center gap-2 rounded-xl bg-[#0F2942] px-4 py-2 font-bold text-white hover:bg-[#0284C7] disabled:opacity-50 min-h-[42px] whitespace-nowrap transition-colors"
+              >
+                <FileSpreadsheet className="h-4 w-4" />
+                {isImportingExcel
+                  ? 'Importando...'
+                  : `Importar ${excelRows.filter((r) => r.isValid).length} proyecto(s)`}
+              </button>
+            </div>
           </div>
         </div>
       )}

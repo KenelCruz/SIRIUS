@@ -126,7 +126,7 @@ const ETIQUETA_ESTADO_VIATICO: Record<EstadoAprobacionViatico, string> = {
 
 const CATEGORIAS_CHART: Array<{ key: CategoriaViatico; label: string }> = [
   { key: 'Combustible', label: 'Combust.' },
-  { key: 'Comida', label: 'Comida' },
+  { key: 'Dieta', label: 'Dieta' },
   { key: 'Hospedaje', label: 'Hospedaje' },
   { key: 'Peaje', label: 'Peaje' },
   { key: 'Materiales', label: 'Materiales' },
