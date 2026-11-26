@@ -35,6 +35,7 @@ import { DwgPlanViewer } from './components/DwgPlanViewer';
 import { KmzImportModal } from './components/KmzImportModal';
 import { KmzOsmViewer } from './components/KmzOsmViewer';
 import { MobileExpenseCaptureModal } from './components/MobileExpenseCaptureModal';
+import { NotificationCenterButton } from './components/NotificationCenterButton';
 import { OfflineSyncBanner } from './components/OfflineSyncBanner';
 import { OnboardingWizardModal } from './components/OnboardingWizardModal';
 import { PresupuestosView } from './components/PresupuestosView';
@@ -54,7 +55,11 @@ import { TecnicoViaticosView } from './components/tecnico/TecnicoViaticosView';
 import { TutorialVisualModal } from './components/TutorialVisualModal';
 import { ViaticosView } from './components/ViaticosView';
 import {
+  cargarAlertasLeidas,
   detectarConflictosAsignacion,
+  generarAlertasOperativasAdmin,
+  generarAlertasOperativasTecnico,
+  guardarAlertasLeidas,
   obtenerRutasAsignadasAUsuario,
   ocultarTarjetaOnboarding,
   puedeCrearOEditarOperacion,
@@ -63,6 +68,7 @@ import {
   reiniciarOnboarding,
   resolverPersonalYCargoUsuario,
   seleccionarPasoOnboarding,
+  type AlertaOperativa,
 } from './domain';
 import { useOnlineStatus } from './hooks/useOnlineStatus';
 import { useOperacionEmpresa } from './hooks/useOperacionEmpresa';
@@ -134,6 +140,8 @@ export default function App() {
   } = useOperacionEmpresa(isOnline);
 
   const [adminTab, setAdminTab] = useState<AdminTab>('hoy');
+  const [auditoriaInitialMode, setAuditoriaInitialMode] = useState<'bitacora' | 'alertas'>('bitacora');
+  const [alertasLeidasIds, setAlertasLeidasIds] = useState<Set<string>>(() => new Set());
   const [tecnicoTab, setTecnicoTab] = useState<TecnicoTab>('hoy');
   const [tecnicoRutaDetalleId, setTecnicoRutaDetalleId] = useState<string>('');
   const [configSeccionInicial, setConfigSeccionInicial] = useState<SeccionConfiguracion | undefined>(
@@ -357,6 +365,8 @@ export default function App() {
       setPendingKmzAsig(null);
       setKmzAsigConflictos([]);
       setConfigSeccionInicial(undefined);
+      setAuditoriaInitialMode('bitacora');
+      setAlertasLeidasIds(new Set());
       setIsOnboardingOpen(false);
       setIsTutorialOpen(false);
       setTecnicoSuccessBanner(null);
@@ -394,6 +404,57 @@ export default function App() {
       asignaciones: snap.asignaciones,
     });
   }, [sesion, proyeccion]);
+
+  useEffect(() => {
+    if (!sesion || !proyeccion) {
+      setAlertasLeidasIds(new Set());
+      return;
+    }
+    setAlertasLeidasIds(cargarAlertasLeidas(proyeccion.snapshot.empresa.id, sesion.usuario.id));
+  }, [sesion?.usuario.id, proyeccion?.snapshot.empresa.id]);
+
+  const alertasOperativas: AlertaOperativa[] = useMemo(() => {
+    if (!sesion || !proyeccion) return [];
+    if (proyeccion.rol === 'tecnico') {
+      return generarAlertasOperativasTecnico({
+        snapshot: proyeccion.snapshot,
+        usuarioId: sesion.usuario.id,
+        pendingCount: pendingCounts.total,
+        hasConflict,
+      });
+    }
+    return generarAlertasOperativasAdmin({
+      snapshot: proyeccion.snapshot,
+      pendingCount: pendingCounts.total,
+      hasConflict,
+    });
+  }, [sesion, proyeccion, pendingCounts.total, hasConflict]);
+
+  const alertasNoLeidasCount = useMemo(
+    () => alertasOperativas.filter((a) => !alertasLeidasIds.has(a.id)).length,
+    [alertasOperativas, alertasLeidasIds]
+  );
+
+  const handleMarcarAlertaLeida = (alertaId: string) => {
+    if (!sesion || !proyeccion) return;
+    setAlertasLeidasIds((prev) => {
+      if (prev.has(alertaId)) return prev;
+      const next = new Set(prev);
+      next.add(alertaId);
+      guardarAlertasLeidas(proyeccion.snapshot.empresa.id, sesion.usuario.id, next);
+      return next;
+    });
+  };
+
+  const handleMarcarTodasAlertasLeidas = () => {
+    if (!sesion || !proyeccion) return;
+    setAlertasLeidasIds((prev) => {
+      const next = new Set(prev);
+      for (const a of alertasOperativas) next.add(a.id);
+      guardarAlertasLeidas(proyeccion.snapshot.empresa.id, sesion.usuario.id, next);
+      return next;
+    });
+  };
 
   // Mostrar AuthGate si no hay sesión o si debe elegir empresa
   if (!sesion || requiereElegirEmpresa) {
@@ -766,6 +827,18 @@ export default function App() {
                 </div>
 
                 <PWAInstallButton />
+
+                <NotificationCenterButton
+                  alertas={alertasOperativas}
+                  leidasIds={alertasLeidasIds}
+                  onMarcarLeida={handleMarcarAlertaLeida}
+                  onMarcarTodasLeidas={handleMarcarTodasAlertasLeidas}
+                  onEjecutarAccion={(alerta) => {
+                    if (alerta.tabDestinoTecnico) {
+                      setTecnicoTab(alerta.tabDestinoTecnico);
+                    }
+                  }}
+                />
 
                 <button
                   type="button"
@@ -1374,16 +1447,22 @@ export default function App() {
               {navItems.map((item) => {
                 const Icon = item.icon;
                 const active = adminTab === item.id;
+                const showAlertBadge = item.id === 'auditoria' && alertasNoLeidasCount > 0;
                 return (
                   <button
                     key={item.id}
                     type="button"
-                    onClick={() => setAdminTab(item.id)}
+                    onClick={() => {
+                      if (item.id === 'auditoria') {
+                        setAuditoriaInitialMode('bitacora');
+                      }
+                      setAdminTab(item.id);
+                    }}
                     title={isSidebarExpanded ? undefined : item.label}
                     aria-label={item.label}
                     className={`flex items-center rounded-xl transition-colors whitespace-nowrap ${
                       isSidebarExpanded
-                        ? 'h-10 w-full justify-start gap-3 px-3 text-xs font-semibold'
+                        ? 'h-10 w-full justify-between px-3 text-xs font-semibold'
                         : 'h-10 w-10 justify-center'
                     } ${
                       active
@@ -1391,8 +1470,21 @@ export default function App() {
                         : 'text-[#64748B] hover:bg-white hover:text-[#0F2942]'
                     }`}
                   >
-                    <Icon className="h-[18px] w-[18px] shrink-0" />
-                    {isSidebarExpanded && <span className="truncate">{item.label}</span>}
+                    <span className="flex items-center gap-3 min-w-0">
+                      <Icon className="h-[18px] w-[18px] shrink-0" />
+                      {isSidebarExpanded && <span className="truncate">{item.label}</span>}
+                    </span>
+                    {isSidebarExpanded && showAlertBadge && (
+                      <span
+                        className={`font-mono text-[10px] font-bold tabular-nums px-1.5 py-0.5 rounded-md ${
+                          active
+                            ? 'bg-white/20 text-white'
+                            : 'bg-rose-50 text-[#DC2626]'
+                        }`}
+                      >
+                        {alertasNoLeidasCount}
+                      </span>
+                    )}
                   </button>
                 );
               })}
@@ -1510,6 +1602,29 @@ export default function App() {
               </div>
 
               <PWAInstallButton />
+
+              <NotificationCenterButton
+                alertas={alertasOperativas}
+                leidasIds={alertasLeidasIds}
+                onMarcarLeida={handleMarcarAlertaLeida}
+                onMarcarTodasLeidas={handleMarcarTodasAlertasLeidas}
+                onEjecutarAccion={(alerta) => {
+                  if (alerta.tabDestinoAdmin === 'auditoria') {
+                    setAuditoriaInitialMode('alertas');
+                  }
+                  if (alerta.tabDestinoAdmin) {
+                    setAdminTab(alerta.tabDestinoAdmin);
+                  }
+                }}
+                onVerCentroAlertas={
+                  canAudit
+                    ? () => {
+                        setAuditoriaInitialMode('alertas');
+                        setAdminTab('auditoria');
+                      }
+                    : undefined
+                }
+              />
 
               <button
                 type="button"
@@ -2163,7 +2278,16 @@ export default function App() {
             )}
 
             {adminTab === 'auditoria' && canAudit && (
-              <AuditoriaView historial={snapshot.historial} isLoading={isLoadingSnapshot} />
+              <AuditoriaView
+                historial={snapshot.historial}
+                isLoading={isLoadingSnapshot}
+                alertas={alertasOperativas}
+                alertasLeidasIds={alertasLeidasIds}
+                onMarcarAlertaLeida={handleMarcarAlertaLeida}
+                onMarcarTodasAlertasLeidas={handleMarcarTodasAlertasLeidas}
+                onIrAModulo={(tab) => setAdminTab(tab)}
+                initialViewMode={auditoriaInitialMode}
+              />
             )}
 
             {adminTab === 'configuracion' && canViewConfig && configuracion && (

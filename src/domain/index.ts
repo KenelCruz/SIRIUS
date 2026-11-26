@@ -9,3 +9,5 @@ export * from './onboarding';
 export * from './rendimiento';
 export * from './rentas';
 export * from './presupuesto';
+export * from './alertas';
+
